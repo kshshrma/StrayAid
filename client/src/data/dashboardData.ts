@@ -3,6 +3,9 @@ import {
   MapPin,
   Users,
   Heart,
+  Home,
+  Map,
+  User,
 } from "lucide-react";
 
 export const dashboardStats = [
@@ -48,12 +51,7 @@ export const rescueRequests = [
     time: "9 min ago",
   },
 ];
-import {
-  Home,
-  Map,
-  Users,
-  User,
-} from "lucide-react";
+
 
 export const navigationItems = [
   {
