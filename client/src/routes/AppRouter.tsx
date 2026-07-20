@@ -5,7 +5,9 @@ import Map from "../pages/Map";
 import Report from "../pages/Report";
 import Community from "../pages/Community";
 import Profile from "../pages/Profile";
-
+import TestConnection from "../pages/TestConnection";
+import Register from "../features/auth/Register";
+import Login from "../features/auth/Login";
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -16,15 +18,16 @@ export default function AppRouter() {
 
         <Route path="/report" element={<Report />} />
 
-        <Route
-          path="/community"
-          element={<Community />}
-        />
+        <Route path="/community" element={<Community />} />
+
+        <Route path="/profile" element={<Profile />} />
 
         <Route
-          path="/profile"
-          element={<Profile />}
+          path="/test"
+          element={<TestConnection />}
         />
+        <Route path="/register" element={<Register />} />
+<Route path="/login" element={<Login />} />+
       </Routes>
     </BrowserRouter>
   );
