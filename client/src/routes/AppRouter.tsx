@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Dashboard from "../pages/Dashboard";
 import Map from "../pages/Map";
-import Report from "../pages/Report";
+import ReportPage from "../features/report/ReportPage";
 import Community from "../pages/Community";
 import Profile from "../pages/Profile";
 import TestConnection from "../pages/TestConnection";
@@ -16,7 +16,7 @@ export default function AppRouter() {
 
         <Route path="/map" element={<Map />} />
 
-        <Route path="/report" element={<Report />} />
+        <Route path="/report" element={<ReportPage />} />
 
         <Route path="/community" element={<Community />} />
 
