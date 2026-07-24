@@ -32,7 +32,7 @@ export default function ReportPage() {
           setLongitude={setLongitude}
         />
 
-        <SubmitReport />
+        <SubmitReport image={image} />
       </div>
     </div>
   );
