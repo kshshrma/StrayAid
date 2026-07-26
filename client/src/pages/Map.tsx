@@ -1,9 +1,9 @@
+import RescueMap from "../features/map/RescueMap";
+
 export default function Map() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <h1 className="text-4xl font-bold">
-        Live Rescue Map
-      </h1>
+    <div style={{ height: "100vh", width: "100%" }}>
+      <RescueMap />
     </div>
   );
 }
