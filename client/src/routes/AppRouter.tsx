@@ -9,6 +9,7 @@ import TestConnection from "../pages/TestConnection";
 import Register from "../features/auth/Register";
 import Login from "../features/auth/Login";
 import ReportsFeed from "../features/report/ReportsFeed";
+import ReportDetails from "../features/report/ReportDetails";
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -31,6 +32,7 @@ export default function AppRouter() {
 <Route path="/login" element={<Login />} />
 
 <Route path="/reports" element={<ReportsFeed />} />
+<Route path="/reports/:id" element={<ReportDetails />} />
       </Routes>
     </BrowserRouter>
   );

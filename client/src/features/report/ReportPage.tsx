@@ -32,7 +32,11 @@ export default function ReportPage() {
           setLongitude={setLongitude}
         />
 
-        <SubmitReport image={image} />
+        <SubmitReport
+  image={image}
+  latitude={latitude}
+  longitude={longitude}
+/>
       </div>
     </div>
   );

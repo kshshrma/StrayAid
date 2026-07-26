@@ -1,30 +1,43 @@
 import { uploadImage } from "../../services/storage/uploadImage";
+import { saveReport } from "../../services/report/saveReport";
 
 interface SubmitReportProps {
-  image: File | null;
+  image: File |null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
-export default function SubmitReport({ image }: SubmitReportProps) {
+export default function SubmitReport({
+  image,
+  latitude,
+  longitude,
+}: SubmitReportProps) {
   async function handleSubmit() {
-    console.log("Button clicked");
-
     if (!image) {
       alert("Please select an image.");
       return;
     }
 
-    console.log("Before upload");
+    if (latitude === null || longitude === null) {
+      alert("Location not available.");
+      return;
+    }
 
     try {
+      // Upload image
       const imageUrl = await uploadImage(image);
 
-      console.log("After upload");
-      console.log("Image URL:", imageUrl);
+      // Save report to database
+      await saveReport({
+        image_url: imageUrl,
+        latitude,
+        longitude,
+      });
 
-      alert("Upload successful!");
+      alert("Report submitted successfully!");
     } catch (error: any) {
-      console.error("Upload failed:", error);
-      alert(error?.message || "Upload failed");
+      console.error(error);
+      alert(error?.message || "Failed to submit report.");
     }
   }
 
