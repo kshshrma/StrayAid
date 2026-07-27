@@ -14,9 +14,8 @@ export default function Dashboard() {
   return (
     <>
       <DashboardLayout>
-        <div className="space-y-6 pb-28">
+        <div className="space-y-6 pb-28 pb-24">
           <DashboardHeader />
-
           <HeroCard />
 
           <section className="grid grid-cols-2 gap-4">

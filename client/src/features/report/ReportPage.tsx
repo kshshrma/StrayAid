@@ -11,7 +11,7 @@ export default function ReportPage() {
   const [longitude, setLongitude] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6">
+    <div className="min-h-screen bg-slate-100 px-4 py-6 pb-24">
       <div className="mx-auto max-w-md space-y-6">
         <div>
           <h1 className="text-3xl font-bold">🐾 Report Animal</h1>

@@ -19,31 +19,29 @@ export default function ReportDetails() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadReport();
-  }, []);
+    async function loadReport() {
+      if (!id) return;
 
-  async function loadReport() {
-    if (!id) return;
-
-    try {
-      const data = await getReportById(id);
-      setReport(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
+      try {
+        const data = await getReportById(id);
+        setReport(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
     }
-  }
+
+    loadReport();
+  }, [id]);
 
   async function handleAccept() {
     if (!report) return;
 
     try {
       const updated = await acceptReport(report.id);
-
       setReport(updated);
-
-      alert("Rescue Accepted!");
+      alert("Rescue accepted successfully!");
     } catch (error) {
       console.error(error);
       alert("Failed to accept rescue.");
@@ -68,55 +66,54 @@ export default function ReportDetails() {
 
   return (
     <div className="min-h-screen bg-slate-100 p-5">
-      <div className="mx-auto max-w-md rounded-2xl bg-white p-5 shadow">
-
+      <div className="mx-auto max-w-md rounded-2xl bg-white p-5 shadow-lg">
         <img
           src={report.image_url}
           alt="Animal"
           className="mb-5 h-72 w-full rounded-xl object-cover"
         />
 
-        <h2 className="mb-4 text-2xl font-bold">
-          Animal Rescue Report
+        <h2 className="mb-5 text-2xl font-bold">
+          🐾 Animal Rescue Report
         </h2>
 
-        <p>
-          <strong>Status:</strong>{" "}
+        <p className="mb-2">
+          <strong>📍 Latitude:</strong> {report.latitude}
+        </p>
+
+        <p className="mb-2">
+          <strong>📍 Longitude:</strong> {report.longitude}
+        </p>
+
+        <p className="mb-4">
+          <strong>🚨 Status:</strong>{" "}
           <span
             className={
               report.status === "Accepted"
-                ? "text-green-600"
-                : "text-orange-600"
+                ? "text-green-600 font-semibold"
+                : "text-orange-600 font-semibold"
             }
           >
             {report.status}
           </span>
         </p>
 
-        <p>
-          <strong>Latitude:</strong> {report.latitude}
-        </p>
-
-        <p>
-          <strong>Longitude:</strong> {report.longitude}
-        </p>
-
-        <p>
-          <strong>Created:</strong>{" "}
+        <p className="mb-6 text-gray-500">
+          Reported on{" "}
           {new Date(report.created_at).toLocaleString()}
         </p>
 
         {report.status === "Pending" ? (
           <button
             onClick={handleAccept}
-            className="mt-6 w-full rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-700"
+            className="w-full rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-700"
           >
-            Accept Rescue
+            ✅ Accept Rescue
           </button>
         ) : (
           <button
             disabled
-            className="mt-6 w-full rounded-xl bg-gray-400 py-3 font-semibold text-white"
+            className="w-full rounded-xl bg-gray-400 py-3 font-semibold text-white"
           >
             Rescue Accepted
           </button>

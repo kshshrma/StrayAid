@@ -59,7 +59,7 @@ export default function ReportsFeed() {
                 to={`/reports/${report.id}`}
                 className="block"
               >
-                <div className="rounded-2xl bg-white p-4 shadow transition hover:shadow-lg hover:scale-[1.02]">
+                <div className="rounded-2xl bg-white p-4 shadow transition hover:shadow-lg hover:scale-[1.02] pb-24">
                   <img
                     src={report.image_url}
                     alt="Animal"
