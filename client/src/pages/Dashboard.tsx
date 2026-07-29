@@ -4,8 +4,6 @@ import HeroCard from "../components/dashboard/HeroCard";
 import StatCard from "../components/dashboard/StatCard";
 import MapPreview from "../components/dashboard/MapPreview";
 import RescueRequests from "../components/dashboard/RescueRequests";
-
-import BottomNavigation from "../components/navigation/BottomNavigation";
 import FloatingReportButton from "../components/navigation/FloatingReportButton";
 
 import { dashboardStats } from "../data/dashboardData";
@@ -36,8 +34,6 @@ export default function Dashboard() {
       </DashboardLayout>
 
       <FloatingReportButton />
-
-      <BottomNavigation />
     </>
   );
 }
