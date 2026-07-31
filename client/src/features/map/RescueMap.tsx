@@ -6,7 +6,23 @@ import {
   TileLayer,
 } from "react-leaflet";
 import { Link } from "react-router-dom";
+import L from "leaflet";
+
 import { getReports } from "../../services/report/getReports";
+import { subscribeReports } from "../../services/report/subscribeReports";
+
+// Fix Leaflet marker icons
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
+
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
 
 interface Report {
   id: string;
@@ -19,79 +35,89 @@ interface Report {
 export default function RescueMap() {
   const [reports, setReports] = useState<Report[]>([]);
 
+ async function loadReports() {
+  try {
+    const data = await getReports();
+
+    console.table(
+      data?.map((r) => ({
+        id: r.id,
+        created_at: r.created_at,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        status: r.status,
+      }))
+    );
+
+    setReports(data || []);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
   useEffect(() => {
-    async function loadReports() {
-      try {
-        const data = await getReports();
-
-        console.log("Reports:", data);
-
-        setReports(data || []);
-      } catch (error) {
-        console.error("Error loading reports:", error);
-      }
-    }
-
     loadReports();
-  }, []);
 
-  console.log("State:", reports);
+    const channel = subscribeReports(() => {
+      loadReports();
+    });
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, []);
 
   return (
     <div style={{ height: "100vh", width: "100%" }}>
-      <div
-        style={{
-          position: "absolute",
-          top: "10px",
-          left: "10px",
-          zIndex: 1000,
-          background: "white",
-          padding: "10px",
-          borderRadius: "8px",
-          fontWeight: "bold",
-        }}
-      >
-        Reports Loaded: {reports.length}
-      </div>
-
       <MapContainer
-        center={[28.6139, 77.209]}
-        zoom={11}
+        center={[28.6139, 77.2090]}
+        zoom={13}
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
+          attribution="© OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {reports.map((report) => (
-          <Marker
-            key={report.id}
-            position={[report.latitude, report.longitude]}
-          >
-            <Popup>
-              <div>
-                <h3>Animal Rescue</h3>
+        {reports.map((report, index) => {
+            console.log(
+           `Report ${index + 1}:`,
+            report.id,
+            report.latitude,
+            report.longitude
+         );
+          // Temporary offset so markers at the same location don't overlap
+          const lat = report.latitude + index * 0.00005;
+          const lng = report.longitude + index * 0.00005;
 
-                <p>
-                  <strong>Status:</strong> {report.status}
-                </p>
+          return (
+            <Marker
+              key={report.id}
+              position={[lat, lng]}
+            >
+             <Popup>
+  <div className="space-y-2">
+    <p><strong>ID:</strong> {report.id}</p>
 
-                <p>
-                  <strong>Latitude:</strong> {report.latitude}
-                </p>
+    <p><strong>Created:</strong></p>
+    <p>{new Date(report.created_at).toLocaleString()}</p>
 
-                <p>
-                  <strong>Longitude:</strong> {report.longitude}
-                </p>
+    <p><strong>Latitude:</strong> {report.latitude}</p>
+    <p><strong>Longitude:</strong> {report.longitude}</p>
 
-                <Link to={`/reports/${report.id}`}>
-                  View Report
-                </Link>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+    <p>
+      <strong>Status:</strong>{" "}
+      {report.status}
+    </p>
+
+    <Link to={`/reports/${report.id}`}>
+      View Report
+    </Link>
+  </div>
+</Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
     </div>
   );
