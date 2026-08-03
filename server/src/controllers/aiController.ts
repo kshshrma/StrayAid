@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { model } from "../services/gemini";
+import { ai } from "../services/gemini";
 import { downloadImageAsBase64 } from "../utils/downloadImage";
 
 export async function analyzeAnimal(
@@ -16,7 +16,6 @@ export async function analyzeAnimal(
       });
     }
 
-    // Download image from Supabase
     const { base64, mimeType } =
       await downloadImageAsBase64(imageUrl);
 
@@ -57,22 +56,31 @@ ai_advice:
 Maximum 2 short sentences.
 `;
 
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          mimeType,
-          data: base64,
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: prompt,
+            },
+            {
+              inlineData: {
+                data: base64,
+                mimeType,
+              },
+            },
+          ],
         },
-      },
-    ]);
-
-    const response = result.response;
+      ],
+    });
 
     res.json({
       success: true,
-      result: response.text(),
+      result: response.text,
     });
+
   } catch (error: any) {
     console.error(error);
 
