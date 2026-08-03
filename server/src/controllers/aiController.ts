@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { ai } from "../services/gemini";
+import { model } from "../services/gemini";
 import { downloadImageAsBase64 } from "../utils/downloadImage";
 
 export async function analyzeAnimal(
@@ -23,7 +23,7 @@ export async function analyzeAnimal(
     const prompt = `
 You are an expert veterinarian.
 
-Analyze the uploaded animal image.
+Analyze this animal image.
 
 Return ONLY valid JSON.
 
@@ -34,10 +34,13 @@ Return ONLY valid JSON.
   "ai_advice": ""
 }
 
-Rules:
-
 animal_type:
-Dog, Cat, Cow, Bird, Monkey or Other
+Dog
+Cat
+Cow
+Bird
+Monkey
+Other
 
 severity:
 Low
@@ -54,38 +57,28 @@ ai_advice:
 Maximum 2 short sentences.
 `;
 
-    const response =
-      await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: prompt,
-              },
-              {
-                inlineData: {
-                  mimeType,
-                  data: base64,
-                },
-              },
-            ],
-          },
-        ],
-      });
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          mimeType,
+          data: base64,
+        },
+      },
+    ]);
+
+    const response = result.response;
 
     res.json({
       success: true,
-      result: response.text,
+      result: response.text(),
     });
-
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
 
     res.status(500).json({
       success: false,
-      message: "AI Analysis Failed",
+      message: error.message,
     });
   }
 }
