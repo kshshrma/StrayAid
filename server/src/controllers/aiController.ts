@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import { model } from "../services/gemini";
+import { ai } from "../services/gemini";
+import { downloadImageAsBase64 } from "../utils/downloadImage";
 
 export async function analyzeAnimal(
   req: Request,
@@ -15,15 +16,16 @@ export async function analyzeAnimal(
       });
     }
 
+    // Download image from Supabase
+    const { base64, mimeType } =
+      await downloadImageAsBase64(imageUrl);
+
     const prompt = `
 You are an expert veterinarian.
 
-The following is an image URL of an animal.
+Analyze the uploaded animal image.
 
-Image URL:
-${imageUrl}
-
-Guess the animal and return ONLY valid JSON.
+Return ONLY valid JSON.
 
 {
   "animal_type": "",
@@ -31,23 +33,59 @@ Guess the animal and return ONLY valid JSON.
   "priority": "",
   "ai_advice": ""
 }
+
+Rules:
+
+animal_type:
+Dog, Cat, Cow, Bird, Monkey or Other
+
+severity:
+Low
+Medium
+High
+Critical
+
+priority:
+Normal
+Urgent
+Emergency
+
+ai_advice:
+Maximum 2 short sentences.
 `;
 
-    const result = await model.generateContent(prompt);
-
-    const response = await result.response;
+    const response =
+      await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: prompt,
+              },
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64,
+                },
+              },
+            ],
+          },
+        ],
+      });
 
     res.json({
       success: true,
-      result: response.text(),
+      result: response.text,
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error(error);
 
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: "AI Analysis Failed",
     });
   }
 }
