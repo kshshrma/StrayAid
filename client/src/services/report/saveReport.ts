@@ -7,6 +7,7 @@ interface ReportData {
 }
 
 export async function saveReport(report: ReportData) {
+  // Save report
   const { data, error } = await supabase
     .from("reports")
     .insert([
@@ -17,11 +18,30 @@ export async function saveReport(report: ReportData) {
         status: "Pending",
       },
     ])
-    .select();
+    .select()
+    .single();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
-  return data;
+  console.log("Calling AI Backend...");
+
+  const response = await fetch("http://localhost:5000/api/ai/analyze", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      reportId: data.id,
+      imageUrl: data.image_url,
+    }),
+  });
+
+  const aiResult = await response.json();
+
+  console.log("AI Result:", aiResult);
+
+  return {
+    report: data,
+    ai: aiResult.ai,
+  };
 }

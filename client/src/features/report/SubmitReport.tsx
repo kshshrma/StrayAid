@@ -2,7 +2,7 @@ import { uploadImage } from "../../services/storage/uploadImage";
 import { saveReport } from "../../services/report/saveReport";
 
 interface SubmitReportProps {
-  image: File |null;
+  image: File | null;
   latitude: number | null;
   longitude: number | null;
 }
@@ -27,14 +27,28 @@ export default function SubmitReport({
       // Upload image
       const imageUrl = await uploadImage(image);
 
-      // Save report to database
-      await saveReport({
+      // Save report + run AI
+      const result = await saveReport({
         image_url: imageUrl,
         latitude,
         longitude,
       });
 
-      alert("Report submitted successfully!");
+      alert(
+        `✅ Report Submitted Successfully!
+
+Animal: ${result.ai.animal_type}
+
+Severity: ${result.ai.severity}
+
+Priority: ${result.ai.priority}
+
+AI Advice:
+${result.ai.ai_advice}`
+      );
+
+      console.log("Saved Report:", result.report);
+      console.log("AI Analysis:", result.ai);
     } catch (error: any) {
       console.error(error);
       alert(error?.message || "Failed to submit report.");

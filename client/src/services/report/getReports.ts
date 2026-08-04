@@ -6,9 +6,7 @@ export async function getReports() {
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data;
 }
