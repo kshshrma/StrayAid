@@ -10,6 +10,11 @@ interface Report {
   longitude: number;
   status: string;
   created_at: string;
+
+  animal_type: string;
+  severity: string;
+  priority: string;
+  ai_advice: string;
 }
 
 export default function ReportDetails() {
@@ -64,9 +69,26 @@ export default function ReportDetails() {
     );
   }
 
+  const severityColor =
+    report.severity === "Critical"
+      ? "text-red-600"
+      : report.severity === "High"
+      ? "text-orange-600"
+      : report.severity === "Medium"
+      ? "text-yellow-600"
+      : "text-green-600";
+
+  const priorityColor =
+    report.priority === "Emergency"
+      ? "text-red-600"
+      : report.priority === "Urgent"
+      ? "text-orange-600"
+      : "text-green-600";
+
   return (
     <div className="min-h-screen bg-slate-100 p-5">
       <div className="mx-auto max-w-md rounded-2xl bg-white p-5 shadow-lg">
+
         <img
           src={report.image_url}
           alt="Animal"
@@ -76,6 +98,35 @@ export default function ReportDetails() {
         <h2 className="mb-5 text-2xl font-bold">
           🐾 Animal Rescue Report
         </h2>
+
+        <hr className="my-4" />
+
+        <h3 className="mb-4 text-xl font-bold text-blue-700">
+          🤖 AI Analysis
+        </h3>
+
+        <p className="mb-3">
+          <strong>Animal:</strong>{" "}
+          {report.animal_type || "Analyzing..."}
+        </p>
+
+        <p className={`mb-3 font-semibold ${severityColor}`}>
+          Severity: {report.severity || "Pending"}
+        </p>
+
+        <p className={`mb-3 font-semibold ${priorityColor}`}>
+          Priority: {report.priority || "Pending"}
+        </p>
+
+        <div className="mb-5 rounded-xl bg-slate-100 p-4">
+          <strong>AI Advice</strong>
+
+          <p className="mt-2 text-gray-700">
+            {report.ai_advice || "AI analysis in progress..."}
+          </p>
+        </div>
+
+        <hr className="my-4" />
 
         <p className="mb-2">
           <strong>📍 Latitude:</strong> {report.latitude}
