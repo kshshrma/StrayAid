@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ai } from "../services/gemini";
 import { downloadImageAsBase64 } from "../utils/downloadImage";
+import { supabase } from "../services/supabase";
 
 export async function analyzeAnimal(
   req: Request,
@@ -12,6 +13,13 @@ export async function analyzeAnimal(
     console.log(req.body);
 
     const { reportId, imageUrl } = req.body;
+
+    if (!reportId) {
+      return res.status(400).json({
+        success: false,
+        message: "Report ID is required",
+      });
+    }
 
     if (!imageUrl) {
       return res.status(400).json({
@@ -32,7 +40,7 @@ export async function analyzeAnimal(
     const prompt = `
 You are an expert veterinarian.
 
-Analyze the uploaded animal image.
+Analyze the uploaded animal image carefully.
 
 Return ONLY valid JSON.
 
@@ -71,7 +79,7 @@ Maximum 2 short sentences.
     console.log("🚀 Sending image to Gemini...");
 
     const response = await ai.models.generateContent({
-      model: "models/gemini-3.5-flash",
+      model: "gemini-flash-latest",
       contents: [
         {
           role: "user",
@@ -91,21 +99,44 @@ Maximum 2 short sentences.
     });
 
     console.log("✅ Gemini Response Received");
-    console.log(response);
 
     const result = response.text;
 
-    console.log("AI Result:");
+    console.log("Raw AI Response:");
     console.log(result);
 
-    // We'll save to Supabase later
-    if (reportId) {
-      console.log("Report ID:", reportId);
+    // Remove markdown if Gemini wraps JSON in ```json ... ```
+    const cleaned = result
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const aiResult = JSON.parse(cleaned);
+
+    console.log("Parsed AI Result:");
+    console.log(aiResult);
+
+    console.log("💾 Updating Supabase...");
+
+    const { error } = await supabase
+      .from("reports")
+      .update({
+        animal_type: aiResult.animal_type,
+        severity: aiResult.severity,
+        priority: aiResult.priority,
+        ai_advice: aiResult.ai_advice,
+      })
+      .eq("id", reportId);
+
+    if (error) {
+      throw error;
     }
+
+    console.log("✅ Report Updated Successfully");
 
     return res.json({
       success: true,
-      result,
+      ai: aiResult,
     });
 
   } catch (error: any) {
@@ -116,7 +147,7 @@ Maximum 2 short sentences.
 
     return res.status(500).json({
       success: false,
-      message: error?.message || "AI Analysis Failed",
+      message: error.message || "AI Analysis Failed",
     });
   }
 }
