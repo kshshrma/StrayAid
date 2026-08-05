@@ -29,9 +29,17 @@ L.Icon.Default.mergeOptions({
 interface Report {
   id: string;
   image_url: string;
+
   latitude: number;
   longitude: number;
+
   status: string;
+
+  animal_type: string;
+  severity: string;
+  priority: string;
+  ai_advice: string;
+
   created_at: string;
 }
 
