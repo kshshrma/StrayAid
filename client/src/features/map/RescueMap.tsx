@@ -6,6 +6,12 @@ import {
   TileLayer,
   useMap,
 } from "react-leaflet";
+import {
+  criticalMarker,
+  highMarker,
+  mediumMarker,
+  lowMarker,
+} from "./icons/markerIcons";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import { Link } from "react-router-dom";
 import L from "leaflet";
@@ -42,7 +48,21 @@ interface Report {
 
   created_at: string;
 }
+function markerBySeverity(severity: string) {
+  switch (severity) {
+    case "Critical":
+      return criticalMarker;
 
+    case "High":
+      return highMarker;
+
+    case "Medium":
+      return mediumMarker;
+
+    default:
+      return lowMarker;
+  }
+}
 function ChangeMapView({
   center,
 }: {
