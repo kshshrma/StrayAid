@@ -6,12 +6,6 @@ import {
   TileLayer,
   useMap,
 } from "react-leaflet";
-import {
-  criticalMarker,
-  highMarker,
-  mediumMarker,
-  lowMarker,
-} from "./icons/markerIcons";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import { Link } from "react-router-dom";
 import L from "leaflet";
@@ -19,7 +13,14 @@ import L from "leaflet";
 import { getReports } from "../../services/report/getReports";
 import { subscribeReports } from "../../services/report/subscribeReports";
 
-// Leaflet marker icons
+import {
+  criticalMarker,
+  highMarker,
+  mediumMarker,
+  lowMarker,
+} from "./icons/markerIcons";
+
+// Default Leaflet Icons
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -34,6 +35,7 @@ L.Icon.Default.mergeOptions({
 
 interface Report {
   id: string;
+
   image_url: string;
 
   latitude: number;
@@ -48,21 +50,7 @@ interface Report {
 
   created_at: string;
 }
-function markerBySeverity(severity: string) {
-  switch (severity) {
-    case "Critical":
-      return criticalMarker;
 
-    case "High":
-      return highMarker;
-
-    case "Medium":
-      return mediumMarker;
-
-    default:
-      return lowMarker;
-  }
-}
 function ChangeMapView({
   center,
 }: {
@@ -103,19 +91,29 @@ export default function RescueMap() {
 
   const center = useMemo<[number, number]>(() => {
     if (reports.length > 0) {
-      return [reports[0].latitude, reports[0].longitude];
+      return [
+        reports[0].latitude,
+        reports[0].longitude,
+      ];
     }
 
-    // Default: New Delhi
-    return [28.6139, 77.2090];
+    return [28.6139, 77.209];
   }, [reports]);
 
-  function statusBadge(status: string) {
-    if (status === "Accepted") {
-      return "bg-green-600";
-    }
+  function markerBySeverity(severity: string) {
+    switch (severity) {
+      case "Critical":
+        return criticalMarker;
 
-    return "bg-orange-500";
+      case "High":
+        return highMarker;
+
+      case "Medium":
+        return mediumMarker;
+
+      default:
+        return lowMarker;
+    }
   }
 
   function severityBadge(severity: string) {
@@ -147,12 +145,21 @@ export default function RescueMap() {
     }
   }
 
+  function statusBadge(status: string) {
+    return status === "Accepted"
+      ? "bg-green-600"
+      : "bg-orange-500";
+  }
+
   return (
     <div style={{ height: "100vh", width: "100%" }}>
       <MapContainer
         center={center}
         zoom={16}
-        style={{ height: "100%", width: "100%" }}
+        style={{
+          height: "100%",
+          width: "100%",
+        }}
       >
         <ChangeMapView center={center} />
 
@@ -165,7 +172,13 @@ export default function RescueMap() {
           {reports.map((report) => (
             <Marker
               key={report.id}
-              position={[report.latitude, report.longitude]}
+              position={[
+                report.latitude,
+                report.longitude,
+              ]}
+              icon={markerBySeverity(
+                report.severity
+              )}
             >
               <Popup>
                 <div className="w-64 space-y-4">
@@ -176,11 +189,17 @@ export default function RescueMap() {
                     className="h-40 w-full rounded-xl object-cover"
                   />
 
-                  <h2 className="text-xl font-bold">
-                    🐾 {report.animal_type || "Unknown Animal"}
-                  </h2>
+                  <div>
 
-                  <div className="flex gap-2 flex-wrap">
+                    <h2 className="text-xl font-bold">
+                      🐾{" "}
+                      {report.animal_type ||
+                        "Unknown Animal"}
+                    </h2>
+
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
 
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${severityBadge(
@@ -217,7 +236,7 @@ export default function RescueMap() {
                     <strong>Status:</strong>
 
                     <span
-                      className={`ml-2 rounded-full px-2 py-1 text-xs font-semibold text-white ${statusBadge(
+                      className={`ml-2 rounded-full px-3 py-1 text-xs font-semibold text-white ${statusBadge(
                         report.status
                       )}`}
                     >
@@ -227,16 +246,20 @@ export default function RescueMap() {
                   </div>
 
                   <div className="text-sm text-gray-500">
+
                     Reported
+
                     <br />
+
                     {new Date(
                       report.created_at
                     ).toLocaleString()}
+
                   </div>
 
                   <Link
                     to={`/reports/${report.id}`}
-                    className="block rounded-xl bg-green-600 py-2 text-center font-semibold text-white hover:bg-green-700"
+                    className="block rounded-xl bg-green-600 py-2 text-center font-semibold text-white transition hover:bg-green-700"
                   >
                     View Full Report
                   </Link>
