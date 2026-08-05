@@ -51,7 +51,7 @@ function ChangeMapView({
   const map = useMap();
 
   useEffect(() => {
-    map.flyTo(center, 18);
+    map.flyTo(center, 16);
   }, [center, map]);
 
   return null;
@@ -63,17 +63,6 @@ export default function RescueMap() {
   async function loadReports() {
     try {
       const data = await getReports();
-
-      console.table(
-        data?.map((r) => ({
-          id: r.id,
-          status: r.status,
-          latitude: r.latitude,
-          longitude: r.longitude,
-          created_at: r.created_at,
-        }))
-      );
-
       setReports(data || []);
     } catch (error) {
       console.error(error);
@@ -97,14 +86,52 @@ export default function RescueMap() {
       return [reports[0].latitude, reports[0].longitude];
     }
 
-    return [28.6139, 77.209];
+    // Default: New Delhi
+    return [28.6139, 77.2090];
   }, [reports]);
+
+  function statusBadge(status: string) {
+    if (status === "Accepted") {
+      return "bg-green-600";
+    }
+
+    return "bg-orange-500";
+  }
+
+  function severityBadge(severity: string) {
+    switch (severity) {
+      case "Critical":
+        return "bg-red-600";
+
+      case "High":
+        return "bg-orange-500";
+
+      case "Medium":
+        return "bg-yellow-500";
+
+      default:
+        return "bg-green-600";
+    }
+  }
+
+  function priorityBadge(priority: string) {
+    switch (priority) {
+      case "Emergency":
+        return "bg-red-600";
+
+      case "Urgent":
+        return "bg-orange-500";
+
+      default:
+        return "bg-blue-600";
+    }
+  }
 
   return (
     <div style={{ height: "100vh", width: "100%" }}>
       <MapContainer
         center={center}
-        zoom={18}
+        zoom={16}
         style={{ height: "100%", width: "100%" }}
       >
         <ChangeMapView center={center} />
@@ -119,65 +146,81 @@ export default function RescueMap() {
             <Marker
               key={report.id}
               position={[report.latitude, report.longitude]}
-              eventHandlers={{
-                click: () => {
-                  console.log(
-                    "Clicked:",
-                    report.id,
-                    report.created_at
-                  );
-                },
-              }}
             >
               <Popup>
-                <div className="w-60 space-y-3">
+                <div className="w-64 space-y-4">
+
                   <img
                     src={report.image_url}
                     alt="Animal"
-                    className="h-32 w-full rounded-lg object-cover"
+                    className="h-40 w-full rounded-xl object-cover"
                   />
 
-                  <h2 className="text-lg font-bold">
-                    🐾 Animal Rescue
+                  <h2 className="text-xl font-bold">
+                    🐾 {report.animal_type || "Unknown Animal"}
                   </h2>
 
-                  <p>
-                    <strong>Status:</strong>{" "}
+                  <div className="flex gap-2 flex-wrap">
+
                     <span
-                      className={
-                        report.status === "Accepted"
-                          ? "text-green-600 font-semibold"
-                          : "text-orange-600 font-semibold"
-                      }
+                      className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${severityBadge(
+                        report.severity
+                      )}`}
+                    >
+                      {report.severity}
+                    </span>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold text-white ${priorityBadge(
+                        report.priority
+                      )}`}
+                    >
+                      {report.priority}
+                    </span>
+
+                  </div>
+
+                  <div className="rounded-lg bg-slate-100 p-3">
+
+                    <h3 className="font-semibold">
+                      🤖 AI Advice
+                    </h3>
+
+                    <p className="mt-2 text-sm text-gray-700">
+                      {report.ai_advice}
+                    </p>
+
+                  </div>
+
+                  <div>
+
+                    <strong>Status:</strong>
+
+                    <span
+                      className={`ml-2 rounded-full px-2 py-1 text-xs font-semibold text-white ${statusBadge(
+                        report.status
+                      )}`}
                     >
                       {report.status}
                     </span>
-                  </p>
 
-                  <p>
-                    <strong>Reported:</strong>
+                  </div>
+
+                  <div className="text-sm text-gray-500">
+                    Reported
                     <br />
                     {new Date(
                       report.created_at
                     ).toLocaleString()}
-                  </p>
-
-                  <p>
-                    <strong>Latitude:</strong>{" "}
-                    {report.latitude}
-                  </p>
-
-                  <p>
-                    <strong>Longitude:</strong>{" "}
-                    {report.longitude}
-                  </p>
+                  </div>
 
                   <Link
                     to={`/reports/${report.id}`}
-                    className="text-blue-600 underline"
+                    className="block rounded-xl bg-green-600 py-2 text-center font-semibold text-white hover:bg-green-700"
                   >
-                    View Report
+                    View Full Report
                   </Link>
+
                 </div>
               </Popup>
             </Marker>
