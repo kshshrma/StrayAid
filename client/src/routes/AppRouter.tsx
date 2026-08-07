@@ -27,7 +27,7 @@ export default function AppRouter() {
         <Route path="/login" element={<Login />} />
         <Route path="/reports" element={<ReportsFeed />} />
         <Route path="/reports/:id" element={<ReportDetails />} />
-        <Route path="/guardian" element={<Guardian />} />
+        {/* <Route path="/guardian" element={<Guardian />} /> */}
       </Routes>
 
       <BottomNav />
