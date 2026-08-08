@@ -62,12 +62,13 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-slate-100 p-5 pb-28">
 
-      {/* Guardian section */}
       {!loading && (
-        <GuardianStatus guardian={guardian} />
+        <GuardianStatus
+          guardian={guardian}
+          onGuardianUpdated={setGuardian}
+        />
       )}
 
-      {/* Existing profile */}
       <ProfileForm />
 
     </div>
