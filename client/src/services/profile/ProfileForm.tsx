@@ -128,6 +128,7 @@ export default function ProfileForm() {
   return (
     <div className="mx-auto w-full max-w-xl">
       <div className="rounded-3xl bg-white p-6 shadow-lg">
+
         {/* Header */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-4xl">
@@ -147,6 +148,7 @@ export default function ProfileForm() {
           onSubmit={handleSubmit}
           className="space-y-5"
         >
+
           {/* Full Name */}
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-700">
@@ -198,7 +200,7 @@ export default function ProfileForm() {
             />
           </div>
 
-          {/* Role */}
+          {/* Account Type */}
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-700">
               Account Type
@@ -213,7 +215,7 @@ export default function ProfileForm() {
             </p>
           </div>
 
-          {/* Save */}
+          {/* Save Button */}
           <button
             type="submit"
             disabled={saving}
@@ -225,6 +227,7 @@ export default function ProfileForm() {
               ? "Update Profile"
               : "Create Profile"}
           </button>
+
         </form>
       </div>
     </div>
