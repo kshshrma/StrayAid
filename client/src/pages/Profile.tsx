@@ -1,9 +1,9 @@
+import ProfileForm from "../features/profile/ProfileForm";
+
 export default function Profile() {
   return (
-    <div className="flex min-h-screen items-center justify-center pb-24">
-      <h1 className="text-4xl font-bold">
-        Profile
-      </h1>
+    <div className="min-h-screen bg-slate-100 px-5 py-8 pb-28">
+      <ProfileForm />
     </div>
   );
 }
