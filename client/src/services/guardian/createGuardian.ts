@@ -1,32 +1,39 @@
 import { supabase } from "../../lib/supabase";
-
-interface GuardianInput {
-  user_id: string;
-  name: string;
-  phone: string;
-  city: string;
-  available: boolean;
-  profile_image?: string | null;
-  bio?: string | null;
-  experience?: string | null;
-}
+import type {
+  CreateGuardianData,
+  Guardian,
+} from "../../types/guardian";
 
 export async function createGuardian(
-  guardian: GuardianInput
-) {
-  const { data, error } = await supabase
+  data: CreateGuardianData
+): Promise<Guardian> {
+  const {
+    data: guardian,
+    error,
+  } = await supabase
     .from("guardians")
-    .insert([
-      {
-        ...guardian,
-      },
-    ])
+    .insert({
+      user_id: data.user_id,
+
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+
+      available: data.available ?? true,
+
+      bio: data.bio ?? null,
+      experience: data.experience ?? null,
+    })
     .select()
     .single();
 
   if (error) {
+    console.error(
+      "Failed to create guardian:",
+      error
+    );
+
     throw error;
   }
 
-  return data;
+  return guardian;
 }
