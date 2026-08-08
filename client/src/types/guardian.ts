@@ -1,33 +1,33 @@
 export interface Guardian {
   id: string;
-
   user_id: string;
 
-  name: string;
-
-  phone: string;
-
-  city: string;
-
   latitude: number | null;
-
   longitude: number | null;
 
   available: boolean;
 
-  profile_image: string | null;
+  created_at: string;
+  updated_at: string;
 
   total_rescues: number;
 
   bio: string | null;
-
   experience: string | null;
 
+  last_active: string | null;
+
   is_verified: boolean;
+}
 
-  last_active: string;
+export interface CreateGuardianData {
+  user_id: string;
 
-  created_at: string;
+  latitude?: number | null;
+  longitude?: number | null;
 
-  updated_at: string;
+  available?: boolean;
+
+  bio?: string | null;
+  experience?: string | null;
 }
