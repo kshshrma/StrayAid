@@ -8,6 +8,8 @@ interface GuardianStatusProps {
   guardian: {
     id: string;
     user_id: string;
+    latitude: number | null;
+    longitude: number | null;
     is_verified: boolean;
     available: boolean;
     total_rescues: number;
@@ -25,8 +27,9 @@ export default function GuardianStatus({
   const navigate = useNavigate();
 
   const [updating, setUpdating] = useState(false);
+  const [locationLoading, setLocationLoading] =
+    useState(false);
 
-  // Not a Guardian
   if (!guardian) {
     return (
       <div className="mb-5 rounded-3xl bg-white p-5 shadow-sm">
@@ -70,17 +73,14 @@ export default function GuardianStatus({
         return;
       }
 
-      const newAvailability = !guardian.available;
-
       const updatedGuardian = await updateGuardian(
         session.user.id,
         {
-          available: newAvailability,
+          available: !guardian.available,
         }
       );
 
       onGuardianUpdated?.(updatedGuardian);
-
     } catch (error: any) {
       console.error(
         "Failed to update Guardian availability:",
@@ -94,6 +94,87 @@ export default function GuardianStatus({
     } finally {
       setUpdating(false);
     }
+  }
+
+  function updateLocation() {
+    if (!navigator.geolocation) {
+      alert(
+        "Location is not supported by your browser."
+      );
+      return;
+    }
+
+    setLocationLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (!session?.user) {
+            alert("Please login again.");
+            navigate("/login");
+            return;
+          }
+
+          const latitude =
+            position.coords.latitude;
+
+          const longitude =
+            position.coords.longitude;
+
+          const updatedGuardian =
+            await updateGuardian(
+              session.user.id,
+              {
+                latitude,
+                longitude,
+                last_active:
+                  new Date().toISOString(),
+              }
+            );
+
+          onGuardianUpdated?.(
+            updatedGuardian
+          );
+
+          alert(
+            "Guardian location updated successfully!"
+          );
+        } catch (error: any) {
+          console.error(
+            "Failed to update location:",
+            error
+          );
+
+          alert(
+            error?.message ||
+              "Unable to update location."
+          );
+        } finally {
+          setLocationLoading(false);
+        }
+      },
+      (error) => {
+        console.error(
+          "Location error:",
+          error
+        );
+
+        setLocationLoading(false);
+
+        alert(
+          "Unable to get your location. Please allow location access."
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
   }
 
   return (
@@ -175,15 +256,14 @@ export default function GuardianStatus({
           </p>
 
           <p className="mt-1 truncate text-sm font-semibold text-gray-900">
-            {guardian.experience || "Not added"}
+            {guardian.experience ||
+              "Not added"}
           </p>
         </div>
-
       </div>
 
       {/* Availability control */}
       <div className="mt-5 rounded-2xl border border-gray-100 p-4">
-
         <div className="flex items-center justify-between gap-4">
 
           <div>
@@ -192,8 +272,8 @@ export default function GuardianStatus({
             </h3>
 
             <p className="mt-1 text-sm text-gray-500">
-              Turn this off when you don't want to
-              receive rescue requests.
+              Turn this off when you don't want
+              to receive rescue requests.
             </p>
           </div>
 
@@ -201,7 +281,6 @@ export default function GuardianStatus({
             type="button"
             onClick={toggleAvailability}
             disabled={updating}
-            aria-label="Toggle Guardian availability"
             className={`relative h-7 w-12 shrink-0 rounded-full transition ${
               guardian.available
                 ? "bg-green-600"
@@ -220,7 +299,6 @@ export default function GuardianStatus({
               }`}
             />
           </button>
-
         </div>
 
         <p
@@ -236,10 +314,48 @@ export default function GuardianStatus({
             ? "You are currently available"
             : "You are currently unavailable"}
         </p>
-
       </div>
 
-      {/* Verification notice */}
+      {/* Location */}
+      <div className="mt-5 rounded-2xl border border-gray-100 p-4">
+
+        <div>
+          <h3 className="font-semibold text-gray-800">
+            📍 Guardian Location
+          </h3>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Keep your location updated so StrayAid
+            can find nearby rescue requests.
+          </p>
+        </div>
+
+        {guardian.latitude !== null &&
+          guardian.longitude !== null && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
+              <p>
+                Latitude: {guardian.latitude}
+              </p>
+
+              <p>
+                Longitude: {guardian.longitude}
+              </p>
+            </div>
+          )}
+
+        <button
+          type="button"
+          onClick={updateLocation}
+          disabled={locationLoading}
+          className="mt-4 w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+        >
+          {locationLoading
+            ? "Updating Location..."
+            : "📍 Update My Location"}
+        </button>
+      </div>
+
+      {/* Verification */}
       {!guardian.is_verified && (
         <div className="mt-4 rounded-2xl bg-yellow-50 p-4 text-sm text-yellow-800">
           <p className="font-semibold">
@@ -247,9 +363,10 @@ export default function GuardianStatus({
           </p>
 
           <p className="mt-1">
-            Your Guardian profile has been submitted.
-            Verification will be completed before you
-            receive rescue assignments.
+            Your Guardian profile has been
+            submitted. Verification will be
+            completed before you receive rescue
+            assignments.
           </p>
         </div>
       )}

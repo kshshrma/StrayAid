@@ -6,6 +6,7 @@ interface GuardianUpdate {
   longitude?: number | null;
   bio?: string | null;
   experience?: string | null;
+  last_active?: string | null;
 }
 
 export async function updateGuardian(
