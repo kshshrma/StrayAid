@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import { supabase } from "../../lib/supabase";
+
 import { createProfile } from "../../services/profile/createProfile";
 import { getProfile } from "../../services/profile/getProfile";
 import { updateProfile } from "../../services/profile/updateProfile";
 
 export default function ProfileForm() {
+  const navigate = useNavigate();
+
   const [userId, setUserId] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState("");
@@ -20,32 +25,44 @@ export default function ProfileForm() {
       try {
         setLoading(true);
 
-        // Get currently logged-in user
+        // Get current authentication session
         const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-        if (userError) {
-          throw userError;
+        if (sessionError) {
+          throw sessionError;
         }
 
-        if (!user) {
-          throw new Error("You are not logged in.");
+        // No logged-in user
+        if (!session?.user) {
+          console.log("No active session. Redirecting to login...");
+
+          navigate("/login");
+
+          return;
         }
 
-        // Save user ID
+        const user = session.user;
+
+        console.log("Logged-in user:", user.id);
+
         setUserId(user.id);
 
-        // Get profile from database
+        // Get profile from Supabase
         const profile = await getProfile(user.id);
 
         if (profile) {
+          console.log("Profile found:", profile);
+
           setProfileExists(true);
 
           setFullName(profile.full_name ?? "");
           setPhone(profile.phone ?? "");
           setCity(profile.city ?? "");
+        } else {
+          console.log("No profile found. Creating new profile.");
         }
       } catch (error) {
         console.error("Failed to load profile:", error);
@@ -55,7 +72,7 @@ export default function ProfileForm() {
     }
 
     loadProfile();
-  }, []);
+  }, [navigate]);
 
   async function handleSubmit(
     event: React.FormEvent<HTMLFormElement>
@@ -63,11 +80,11 @@ export default function ProfileForm() {
     event.preventDefault();
 
     if (!userId) {
-      alert("User not found. Please login again.");
+      alert("Please login first.");
+      navigate("/login");
       return;
     }
 
-    // Basic validation
     if (!fullName.trim()) {
       alert("Please enter your full name.");
       return;
@@ -86,7 +103,6 @@ export default function ProfileForm() {
     try {
       setSaving(true);
 
-      // Existing profile → UPDATE
       if (profileExists) {
         await updateProfile(userId, {
           full_name: fullName.trim(),
@@ -95,10 +111,7 @@ export default function ProfileForm() {
         });
 
         alert("Profile updated successfully!");
-      }
-
-      // No profile → CREATE
-      else {
+      } else {
         await createProfile({
           id: userId,
           full_name: fullName.trim(),
@@ -123,7 +136,6 @@ export default function ProfileForm() {
     }
   }
 
-  // Loading screen
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -138,7 +150,7 @@ export default function ProfileForm() {
     <div className="mx-auto w-full max-w-xl">
       <div className="rounded-3xl bg-white p-6 shadow-lg">
 
-        {/* Profile Header */}
+        {/* Header */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-4xl">
             👤
@@ -224,7 +236,7 @@ export default function ProfileForm() {
             </p>
           </div>
 
-          {/* Save Button */}
+          {/* Save */}
           <button
             type="submit"
             disabled={saving}
