@@ -6,7 +6,7 @@ import cors from "cors";
 
 import aiRoutes from "./routes/ai";
 import { ai } from "./services/gemini";
-
+import rescueRoutes from "./routes/rescue";
 const app = express();
 
 app.use(cors());
@@ -14,7 +14,10 @@ app.use(express.json());
 
 // Existing AI routes
 app.use("/api/ai", aiRoutes);
-
+app.use(
+  "/api/rescue",
+  rescueRoutes
+);
 // Home Route
 app.get("/", (_, res) => {
   res.send("🚀 StrayAid Backend Running");
