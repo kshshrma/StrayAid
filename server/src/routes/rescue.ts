@@ -5,6 +5,8 @@ import {
   updateAssignment,
 } from "../controllers/rescueController";
 
+import { requireAuth } from "../middleware/auth";
+
 const router = Router();
 
 /**
@@ -27,9 +29,12 @@ router.post(
 
 /**
  * Accept or reject rescue assignment
+ *
+ * Authentication required
  */
 router.patch(
   "/assignments/:id",
+  requireAuth,
   updateAssignment
 );
 

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { supabase } from "../services/supabase";
-
+import { AuthenticatedRequest } from "../middleware/auth";
 /**
  * Create a new rescue assignment
  */
@@ -125,12 +125,19 @@ export async function createAssignment(
  * - rejected
  */
 export async function updateAssignment(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
     const { id } = req.params;
     const { status } = req.body;
+
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User is not authenticated",
+      });
+    }
 
     if (!id) {
       return res.status(400).json({
@@ -147,25 +154,49 @@ export async function updateAssignment(
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Status must be accepted or rejected",
+        message: "Status must be accepted or rejected",
+      });
+    }
+
+    // Find Guardian belonging to logged-in user
+    const {
+      data: guardian,
+      error: guardianError,
+    } = await supabase
+      .from("guardians")
+      .select("id")
+      .eq("user_id", req.userId)
+      .single();
+
+    if (guardianError || !guardian) {
+      return res.status(403).json({
+        success: false,
+        message: "Guardian profile not found",
       });
     }
 
     // Find assignment
     const {
       data: assignment,
-      error: findError,
+      error: assignmentError,
     } = await supabase
       .from("rescue_assignments")
       .select("*")
       .eq("id", id)
       .single();
 
-    if (findError || !assignment) {
+    if (assignmentError || !assignment) {
       return res.status(404).json({
         success: false,
         message: "Rescue assignment not found",
+      });
+    }
+
+    // Make sure this assignment belongs to this Guardian
+    if (assignment.guardian_id !== guardian.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not assigned to this rescue",
       });
     }
 
@@ -173,8 +204,7 @@ export async function updateAssignment(
     if (assignment.status !== "pending") {
       return res.status(400).json({
         success: false,
-        message:
-          `Assignment is already ${assignment.status}`,
+        message: `Assignment is already ${assignment.status}`,
       });
     }
 
