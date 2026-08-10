@@ -7,6 +7,9 @@ import {
 
 const router = Router();
 
+/**
+ * Test rescue API
+ */
 router.get("/", (_req, res) => {
   res.json({
     success: true,
@@ -14,11 +17,17 @@ router.get("/", (_req, res) => {
   });
 });
 
+/**
+ * Create rescue assignment
+ */
 router.post(
   "/assignments",
   createAssignment
 );
 
+/**
+ * Accept or reject rescue assignment
+ */
 router.patch(
   "/assignments/:id",
   updateAssignment
