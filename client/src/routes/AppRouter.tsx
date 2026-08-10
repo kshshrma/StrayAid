@@ -16,6 +16,7 @@ import ReportsFeed from "../features/report/ReportsFeed";
 import ReportDetails from "../features/report/ReportDetails";
 
 import GuardianForm from "../features/guardian/GuardianForm";
+import TestAuth from "../pages/TestAuth";
 
 export default function AppRouter() {
   return (
@@ -32,7 +33,7 @@ export default function AppRouter() {
         <Route path="/profile" element={<Profile />} />
 
         <Route path="/test" element={<TestConnection />} />
-
+<Route path="/test-auth" element={<TestAuth />} />
         <Route path="/register" element={<Register />} />
 
         <Route path="/login" element={<Login />} />
@@ -49,6 +50,7 @@ export default function AppRouter() {
           path="/guardian"
           element={<GuardianForm />}
         />
+        
       </Routes>
 
       <BottomNav />
