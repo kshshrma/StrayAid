@@ -1,17 +1,40 @@
 import { supabase } from "../../lib/supabase";
 
-export async function getAssignment(
-  assignmentId: string
-) {
-  const { data, error } = await supabase
-    .from("rescue_assignments")
-    .select("*")
-    .eq("id", assignmentId)
-    .single();
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-  if (error) {
-    throw error;
+export async function getMyAssignments() {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    throw sessionError;
   }
 
-  return data;
+  if (!session?.access_token) {
+    throw new Error("User is not authenticated");
+  }
+
+  const response = await fetch(
+    `${API_URL}/api/rescue/assignments`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.message ||
+        "Failed to fetch rescue assignments"
+    );
+  }
+
+  return result.assignments;
 }
