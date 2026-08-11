@@ -17,7 +17,7 @@ import ReportDetails from "../features/report/ReportDetails";
 
 import GuardianForm from "../features/guardian/GuardianForm";
 import TestAuth from "../pages/TestAuth";
-
+import Guardian from "../pages/Guardian";
 export default function AppRouter() {
   return (
     <BrowserRouter>

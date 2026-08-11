@@ -18,7 +18,6 @@ export async function updateProfile(
       phone: profile.phone,
       city: profile.city,
       avatar_url: profile.avatar_url ?? null,
-      updated_at: new Date().toISOString(),
     })
     .eq("id", userId)
     .select()
