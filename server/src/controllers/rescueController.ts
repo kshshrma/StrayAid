@@ -251,3 +251,75 @@ export async function updateAssignment(
     });
   }
 }
+/**
+ * Get rescue assignments for the authenticated Guardian
+ */
+export async function getMyAssignments(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User is not authenticated",
+      });
+    }
+
+    // Find Guardian belonging to logged-in user
+    const {
+      data: guardian,
+      error: guardianError,
+    } = await supabase
+      .from("guardians")
+      .select("id")
+      .eq("user_id", req.userId)
+      .single();
+
+    if (guardianError || !guardian) {
+      return res.status(403).json({
+        success: false,
+        message: "Guardian profile not found",
+      });
+    }
+
+    // Get assignments belonging to this Guardian
+    const {
+      data: assignments,
+      error: assignmentsError,
+    } = await supabase
+      .from("rescue_assignments")
+      .select("*")
+      .eq("guardian_id", guardian.id)
+      .order("created_at", {
+        ascending: false,
+      });
+
+    if (assignmentsError) {
+      console.error(
+        "Get assignments error:",
+        assignmentsError
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: assignmentsError.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      assignments: assignments ?? [],
+    });
+  } catch (error) {
+    console.error(
+      "Get my assignments error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get rescue assignments",
+    });
+  }
+}

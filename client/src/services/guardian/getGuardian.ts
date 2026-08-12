@@ -1,15 +1,13 @@
 import { supabase } from "../../lib/supabase";
 
-export async function getGuardian(
-  userId: string
-) {
+export async function getGuardian(userId: string) {
   const { data, error } = await supabase
     .from("guardians")
     .select("*")
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
 
-  if (error && error.code !== "PGRST116") {
+  if (error) {
     throw error;
   }
 

@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   createAssignment,
   updateAssignment,
+  getMyAssignments,
 } from "../controllers/rescueController";
 
 import { requireAuth } from "../middleware/auth";
@@ -32,6 +33,11 @@ router.post(
  *
  * Authentication required
  */
+router.get(
+  "/assignments",
+  requireAuth,
+  getMyAssignments
+);
 router.patch(
   "/assignments/:id",
   requireAuth,

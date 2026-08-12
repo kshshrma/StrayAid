@@ -15,9 +15,9 @@ import Login from "../features/auth/Login";
 import ReportsFeed from "../features/report/ReportsFeed";
 import ReportDetails from "../features/report/ReportDetails";
 
-import GuardianForm from "../features/guardian/GuardianForm";
 import TestAuth from "../pages/TestAuth";
 import Guardian from "../pages/Guardian";
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -48,7 +48,7 @@ export default function AppRouter() {
         {/* Guardian Registration */}
         <Route
           path="/guardian"
-          element={<GuardianForm />}
+          element={<Guardian  />}
         />
         
       </Routes>
