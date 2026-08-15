@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
+import { supabase } from "../services/supabase";
+import { AuthenticatedRequest } from "../middleware/auth";
 
-import {
-  createRescueAssignment,
-} from "../services/rescue";
-
+/**
+ * Create a new rescue assignment
+ */
 export async function createAssignment(
   req: Request,
   res: Response
@@ -14,59 +15,225 @@ export async function createAssignment(
       guardianId,
       distanceKm,
       dispatchScore,
-      expiresAt,
     } = req.body;
 
-    if (!reportId) {
-      return res.status(400).json({
-        success: false,
-        message: "Report ID is required",
-      });
-    }
-
-    if (!guardianId) {
+    if (!reportId || !guardianId) {
       return res.status(400).json({
         success: false,
         message:
-          "Guardian ID is required",
+          "reportId and guardianId are required",
       });
     }
 
-    const assignment =
-      await createRescueAssignment({
-        reportId,
-        guardianId,
-        distanceKm,
-        dispatchScore,
-        expiresAt,
+    // Check guardian
+    const {
+      data: guardian,
+      error: guardianError,
+    } = await supabase
+      .from("guardians")
+      .select("*")
+      .eq("id", guardianId)
+      .single();
+
+    if (guardianError || !guardian) {
+      return res.status(404).json({
+        success: false,
+        message: "Guardian not found",
       });
+    }
+
+    // Guardian must be available
+    if (!guardian.available) {
+      return res.status(400).json({
+        success: false,
+        message: "Guardian is not available",
+      });
+    }
+
+    // Guardian must be verified
+    if (!guardian.is_verified) {
+      return res.status(400).json({
+        success: false,
+        message: "Guardian is not verified",
+      });
+    }
+
+    // Check report
+    const {
+      data: report,
+      error: reportError,
+    } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("id", reportId)
+      .single();
+
+    if (reportError || !report) {
+      return res.status(404).json({
+        success: false,
+        message: "Report not found",
+      });
+    }
+
+    // Create assignment
+    const {
+      data: assignment,
+      error: assignmentError,
+    } = await supabase
+      .from("rescue_assignments")
+      .insert({
+        report_id: reportId,
+        guardian_id: guardianId,
+        distance_km:
+          distanceKm ?? null,
+        dispatch_score:
+          dispatchScore ?? null,
+        status: "pending",
+      })
+      .select()
+      .single();
+
+    if (assignmentError) {
+      console.error(
+        "Create assignment error:",
+        assignmentError
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: assignmentError.message,
+      });
+    }
 
     return res.status(201).json({
       success: true,
       assignment,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(
-      "Create Assignment Error:",
+      "Create assignment error:",
       error
     );
 
     return res.status(500).json({
       success: false,
       message:
-        error.message ||
         "Failed to create rescue assignment",
     });
   }
 }
+
+/**
+ * Get rescue assignments belonging to
+ * the currently logged-in Guardian
+ */
+export async function getMyAssignments(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    // User must be authenticated
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User is not authenticated",
+      });
+    }
+
+    // Find Guardian belonging to logged-in user
+    const {
+      data: guardian,
+      error: guardianError,
+    } = await supabase
+      .from("guardians")
+      .select("id")
+      .eq("user_id", req.userId)
+      .single();
+
+    if (guardianError || !guardian) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Guardian profile not found",
+      });
+    }
+
+    // Get assignments for this Guardian
+    const {
+      data: assignments,
+      error: assignmentsError,
+    } = await supabase
+      .from("rescue_assignments")
+      .select("*")
+      .eq("guardian_id", guardian.id)
+      .order("created_at", {
+        ascending: false,
+      });
+
+    if (assignmentsError) {
+      console.error(
+        "Get assignments error:",
+        assignmentsError
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          assignmentsError.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      assignments: assignments ?? [],
+    });
+  } catch (error) {
+    console.error(
+      "Get assignments error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to load rescue assignments",
+    });
+  }
+}
+
+/**
+ * Update rescue assignment
+ *
+ * Allowed statuses:
+ * - accepted
+ * - rejected
+ */
 export async function updateAssignment(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
+    // User must be authenticated
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "User is not authenticated",
+      });
+    }
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Assignment ID is required",
+      });
+    }
+
+    // Only these statuses can be set
     const allowedStatuses = [
       "accepted",
       "rejected",
@@ -80,24 +247,55 @@ export async function updateAssignment(
       });
     }
 
-    // Check that assignment exists
+    // Find Guardian belonging to logged-in user
+    const {
+      data: guardian,
+      error: guardianError,
+    } = await supabase
+      .from("guardians")
+      .select("id")
+      .eq("user_id", req.userId)
+      .single();
+
+    if (guardianError || !guardian) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Guardian profile not found",
+      });
+    }
+
+    // Find assignment
     const {
       data: assignment,
-      error: findError,
+      error: assignmentError,
     } = await supabase
       .from("rescue_assignments")
       .select("*")
       .eq("id", id)
       .single();
 
-    if (findError || !assignment) {
+    if (assignmentError || !assignment) {
       return res.status(404).json({
         success: false,
-        message: "Rescue assignment not found",
+        message:
+          "Rescue assignment not found",
       });
     }
 
-    // Only pending assignments can be accepted/rejected
+    // Make sure assignment belongs to
+    // logged-in Guardian
+    if (
+      assignment.guardian_id !== guardian.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You are not assigned to this rescue",
+      });
+    }
+
+    // Only pending assignments can be responded to
     if (assignment.status !== "pending") {
       return res.status(400).json({
         success: false,
@@ -106,6 +304,7 @@ export async function updateAssignment(
       });
     }
 
+    // Update assignment
     const {
       data: updatedAssignment,
       error: updateError,
@@ -113,15 +312,25 @@ export async function updateAssignment(
       .from("rescue_assignments")
       .update({
         status,
-        responded_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        responded_at:
+          new Date().toISOString(),
+        updated_at:
+          new Date().toISOString(),
       })
       .eq("id", id)
       .select()
       .single();
 
     if (updateError) {
-      throw updateError;
+      console.error(
+        "Update assignment error:",
+        updateError
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: updateError.message,
+      });
     }
 
     return res.status(200).json({
