@@ -2,8 +2,8 @@ import { Router } from "express";
 
 import {
   createAssignment,
-  updateAssignment,
   getMyAssignments,
+  updateAssignment,
 } from "../controllers/rescueController";
 
 import { requireAuth } from "../middleware/auth";
@@ -29,7 +29,8 @@ router.post(
 );
 
 /**
- * Accept or reject rescue assignment
+ * Get rescue assignments
+ * for the logged-in Guardian
  *
  * Authentication required
  */
@@ -38,6 +39,12 @@ router.get(
   requireAuth,
   getMyAssignments
 );
+
+/**
+ * Accept or reject rescue assignment
+ *
+ * Authentication required
+ */
 router.patch(
   "/assignments/:id",
   requireAuth,
