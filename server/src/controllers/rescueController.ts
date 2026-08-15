@@ -94,6 +94,13 @@ export async function createAssignment(
         "Create assignment error:",
         assignmentError
       );
+if (assignmentError.code === "23505") {
+    return res.status(409).json({
+      success: false,
+      message:
+        "This Guardian is already assigned to this rescue.",
+    });
+  }
 
       return res.status(500).json({
         success: false,
