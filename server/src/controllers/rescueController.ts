@@ -241,7 +241,38 @@ export async function updateAssignment(
         message: updateError.message,
       });
     }
+// If Guardian accepts the assignment,
+// update the related report.
+if (status === "accepted") {
+  const {
+    error: reportUpdateError,
+  } = await supabase
+    .from("reports")
+    .update({
+      status: "accepted",
+      assigned_guardian_id:
+        guardian.id,
+      accepted_at:
+        new Date().toISOString(),
+    })
+    .eq(
+      "id",
+      assignment.report_id
+    );
 
+  if (reportUpdateError) {
+    console.error(
+      "Failed to update report after assignment acceptance:",
+      reportUpdateError
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Assignment accepted, but failed to update report",
+    });
+  }
+}
     return res.status(200).json({
       success: true,
       assignment: updatedAssignment,
