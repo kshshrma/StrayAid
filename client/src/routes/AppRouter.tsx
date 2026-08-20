@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import NotificationProvider from "../context/NotificationProvider";
 
 import BottomNav from "../components/layout/BottomNav";
 
@@ -20,7 +21,8 @@ import Guardian from "../pages/Guardian";
 
 export default function AppRouter() {
   return (
-    <BrowserRouter>
+    <NotificationProvider>
+      <BrowserRouter>
       <Routes>
         <Route path="/" element={<Dashboard />} />
 
@@ -54,6 +56,7 @@ export default function AppRouter() {
       </Routes>
 
       <BottomNav />
-    </BrowserRouter>
+      </BrowserRouter>
+    </NotificationProvider>
   );
 }
