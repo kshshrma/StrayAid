@@ -104,7 +104,7 @@ export default function GuardianRescueAssignments() {
           .eq("user_id", session.user.id)
           .maybeSingle();
 
-        if (guardian?.latitude !== null && guardian?.longitude !== null) {
+        if (guardian && guardian.latitude !== null && guardian.longitude !== null) {
           setGuardianCoords([guardian.latitude, guardian.longitude]);
         }
       }
