@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { ai } from "../services/gemini";
 import { downloadImageAsBase64 } from "../utils/downloadImage";
 import { supabase } from "../services/supabase";
+import { dispatchReport } from "../services/dispatch";
 
 export async function analyzeAnimal(
   req: Request,
@@ -331,6 +332,22 @@ Example:
       "Updated Report:",
       updatedReport
     );
+
+    // --------------------------------------------------
+    // Trigger Automatic Dispatch Engine
+    // --------------------------------------------------
+    try {
+      if (updatedReport && updatedReport.latitude !== null && updatedReport.longitude !== null) {
+        await dispatchReport(
+          updatedReport.id,
+          updatedReport.latitude,
+          updatedReport.longitude,
+          updatedReport.severity || "Medium"
+        );
+      }
+    } catch (dispatchErr) {
+      console.error("[Dispatch] Automatic dispatch failed:", dispatchErr);
+    }
 
     // --------------------------------------------------
     // 9. Return successful response

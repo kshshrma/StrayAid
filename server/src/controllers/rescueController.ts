@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { supabase } from "../services/supabase";
 import { AuthenticatedRequest } from "../middleware/auth";
+import { dispatchReport } from "../services/dispatch";
 /**
  * Create a new rescue assignment
  */
@@ -156,12 +157,15 @@ export async function updateAssignment(
     const allowedStatuses = [
       "accepted",
       "rejected",
+      "enroute",
+      "rescued",
+      "completed",
     ];
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Status must be accepted or rejected",
+        message: "Invalid status parameter",
       });
     }
 
@@ -207,25 +211,43 @@ export async function updateAssignment(
       });
     }
 
-    // Only pending assignments can be responded to
-    if (assignment.status !== "pending") {
+    // Validate valid state transitions
+    const currentStatus = assignment.status;
+    let isValidTransition = false;
+
+    if (currentStatus === "pending") {
+      isValidTransition = status === "accepted" || status === "rejected";
+    } else if (currentStatus === "accepted") {
+      isValidTransition = status === "enroute" || status === "rescued" || status === "completed" || status === "rejected";
+    } else if (currentStatus === "enroute") {
+      isValidTransition = status === "rescued" || status === "completed";
+    } else if (currentStatus === "rescued") {
+      isValidTransition = status === "completed";
+    }
+
+    if (!isValidTransition) {
       return res.status(400).json({
         success: false,
-        message: `Assignment is already ${assignment.status}`,
+        message: `Cannot transition assignment from ${currentStatus} to ${status}`,
       });
     }
 
     // Update assignment
+    const updateData: any = {
+      status,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (status === "accepted" || status === "rejected") {
+      updateData.responded_at = new Date().toISOString();
+    }
+
     const {
       data: updatedAssignment,
       error: updateError,
     } = await supabase
       .from("rescue_assignments")
-      .update({
-        status,
-        responded_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq("id", id)
       .select()
       .single();
@@ -241,38 +263,83 @@ export async function updateAssignment(
         message: updateError.message,
       });
     }
-// If Guardian accepts the assignment,
-// update the related report.
-if (status === "accepted") {
-  const {
-    error: reportUpdateError,
-  } = await supabase
-    .from("reports")
-    .update({
-      status: "accepted",
-      assigned_guardian_id:
-        guardian.id,
-      accepted_at:
-        new Date().toISOString(),
-    })
-    .eq(
-      "id",
-      assignment.report_id
-    );
 
-  if (reportUpdateError) {
-    console.error(
-      "Failed to update report after assignment acceptance:",
-      reportUpdateError
-    );
+    // Handle Report status updates and other side-effects
+    try {
+      const nowIso = new Date().toISOString();
+      if (status === "accepted") {
+        await supabase
+          .from("reports")
+          .update({
+            status: "accepted",
+            assigned_guardian_id: guardian.id,
+            accepted_at: nowIso,
+          })
+          .eq("id", assignment.report_id);
+      } else if (status === "rejected") {
+        // Trigger fallback dispatch to next Guardian
+        const { data: report } = await supabase
+          .from("reports")
+          .select("id, latitude, longitude, severity")
+          .eq("id", assignment.report_id)
+          .single();
 
-    return res.status(500).json({
-      success: false,
-      message:
-        "Assignment accepted, but failed to update report",
-    });
-  }
-}
+        if (report && report.latitude !== null && report.longitude !== null) {
+          // Fire-and-forget next dispatch trigger
+          dispatchReport(
+            report.id,
+            report.latitude,
+            report.longitude,
+            report.severity || "Medium"
+          ).catch((err) =>
+            console.error("[Dispatch] Fallback dispatch failed on reject:", err)
+          );
+        }
+      } else if (status === "enroute") {
+        await supabase
+          .from("reports")
+          .update({
+            status: "enroute",
+            enroute_at: nowIso,
+          })
+          .eq("id", assignment.report_id);
+      } else if (status === "rescued") {
+        await supabase
+          .from("reports")
+          .update({
+            status: "rescued",
+            rescued_at: nowIso,
+          })
+          .eq("id", assignment.report_id);
+      } else if (status === "completed") {
+        // Update report status to completed
+        await supabase
+          .from("reports")
+          .update({
+            status: "completed",
+            completed_at: nowIso,
+          })
+          .eq("id", assignment.report_id);
+
+        // Fetch current rescues total
+        const { data: gProfile } = await supabase
+          .from("guardians")
+          .select("total_rescues")
+          .eq("id", guardian.id)
+          .single();
+
+        // Increment total rescues
+        await supabase
+          .from("guardians")
+          .update({
+            total_rescues: (gProfile?.total_rescues ?? 0) + 1,
+            updated_at: nowIso,
+          })
+          .eq("id", guardian.id);
+      }
+    } catch (err) {
+      console.error("Failed handling side effects for assignment status transition:", status, err);
+    }
     return res.status(200).json({
       success: true,
       assignment: updatedAssignment,

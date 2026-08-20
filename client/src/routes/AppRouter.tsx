@@ -4,7 +4,7 @@ import BottomNav from "../components/layout/BottomNav";
 
 import Dashboard from "../pages/Dashboard";
 import Map from "../pages/Map";
-import ReportPage from "../features/report/ReportPage";
+import Report from "../pages/Report";
 import Community from "../pages/Community";
 import Profile from "../pages/Profile";
 import TestConnection from "../pages/TestConnection";
@@ -26,7 +26,7 @@ export default function AppRouter() {
 
         <Route path="/map" element={<Map />} />
 
-        <Route path="/report" element={<ReportPage />} />
+        <Route path="/report" element={<Report />} />
 
         <Route path="/community" element={<Community />} />
 

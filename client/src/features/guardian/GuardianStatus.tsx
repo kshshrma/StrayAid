@@ -73,6 +73,10 @@ export default function GuardianStatus({
         return;
       }
 
+      if (!guardian) {
+        return;
+      }
+
       const updatedGuardian = await updateGuardian(
         session.user.id,
         {
