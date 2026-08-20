@@ -60,3 +60,46 @@ export async function requireAuth(
     });
   }
 }
+
+export async function requireAdmin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+    }
+
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", req.userId)
+      .single();
+
+    if (error || !profile) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Profile not found",
+      });
+    }
+
+    if (profile.role !== "admin" && profile.role !== "ngo") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Admins or NGOs only",
+      });
+    }
+
+    next();
+  } catch (err) {
+    console.error("Admin verification error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Admin authorization failed",
+    });
+  }
+}
