@@ -18,6 +18,7 @@ import ReportDetails from "../features/report/ReportDetails";
 
 import TestAuth from "../pages/TestAuth";
 import Guardian from "../pages/Guardian";
+import AdminDashboard from "../pages/AdminDashboard";
 
 export default function AppRouter() {
   return (
@@ -47,10 +48,14 @@ export default function AppRouter() {
           element={<ReportDetails />}
         />
 
-        {/* Guardian Registration */}
         <Route
           path="/guardian"
           element={<Guardian  />}
+        />
+
+        <Route
+          path="/admin"
+          element={<AdminDashboard />}
         />
         
       </Routes>
