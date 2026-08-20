@@ -27,7 +27,6 @@ export default function NotificationProvider({
 }) {
   const [incoming, setIncoming] = useState<IncomingAssignmentData | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [guardianId, setGuardianId] = useState<string | null>(null);
 
   useEffect(() => {
     async function initSubscription() {
@@ -43,7 +42,6 @@ export default function NotificationProvider({
           .maybeSingle();
 
         if (guardian) {
-          setGuardianId(guardian.id);
 
           const channel = supabase
             .channel(`realtime:rescue_assignments:${guardian.id}`)

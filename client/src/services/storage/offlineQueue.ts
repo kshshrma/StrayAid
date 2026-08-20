@@ -88,10 +88,7 @@ export async function getQueuedReports(): Promise<OfflineReport[]> {
  * Dequeue (delete) a report from local storage after successful upload.
  */
 export async function dequeueReport(id: string): Promise<void> {
-  const db = await dbInstancePromise(db);
-  async function dbInstancePromise(database: IDBDatabase) {
-    return database;
-  }
+  const db = await initDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, "readwrite");
     const store = transaction.objectStore(STORE_NAME);
