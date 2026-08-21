@@ -20,9 +20,11 @@ export default function Dashboard() {
     animalsHelped: 0,
   });
 
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+
   async function loadDashboardStats() {
     try {
-      const data = await getDashboardStats();
+      const data = await getDashboardStats(coords?.lat, coords?.lon);
       setStats(data);
     } catch (error) {
       console.error("Failed to load dashboard stats:", error);
@@ -31,8 +33,26 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardStats();
+  }, [coords]);
 
-    // Subscribe to real-time updates on reports (status updates, inserts, deletes)
+  useEffect(() => {
+    // Acquire browser coordinates on mount
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCoords({
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.error("Dashboard geolocation error:", error);
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+
+    // Subscribe to real-time updates on reports
     const reportsChannel = supabase
       .channel("public:reports:dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, () => {

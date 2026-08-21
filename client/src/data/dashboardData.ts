@@ -10,7 +10,7 @@ import {
 
 export const dashboardStats = [
   {
-    title: "Active Rescues",
+    title: "Immediate Rescue Requests",
     value: "08",
     icon: Ambulance,
   },

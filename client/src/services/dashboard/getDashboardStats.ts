@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { calculateDistance } from "../../utils/distance";
 
 export interface DashboardStats {
   activeRescues: number;
@@ -7,10 +8,13 @@ export interface DashboardStats {
   animalsHelped: number;
 }
 
-export async function getDashboardStats(): Promise<DashboardStats> {
+export async function getDashboardStats(
+  userLat?: number | null,
+  userLon?: number | null
+): Promise<DashboardStats> {
   const { data: reportsData, error: reportsError } = await supabase
     .from("reports")
-    .select("status");
+    .select("status, latitude, longitude");
 
   if (reportsError) throw reportsError;
 
@@ -31,7 +35,22 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   const nearbyReports = reports.filter(r => {
     const s = (r.status || "").toLowerCase();
-    return s === "pending";
+    if (s !== "pending") return false;
+
+    // Filter within 20 km radius if user coordinates are active
+    if (
+      userLat !== undefined &&
+      userLat !== null &&
+      userLon !== undefined &&
+      userLon !== null &&
+      r.latitude !== null &&
+      r.longitude !== null
+    ) {
+      const dist = calculateDistance(userLat, userLon, r.latitude, r.longitude);
+      return dist <= 20;
+    }
+
+    return true; // fallback to count all pending if location not loaded
   }).length;
 
   const animalsHelped = reports.filter(r => {
