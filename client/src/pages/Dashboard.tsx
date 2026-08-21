@@ -63,14 +63,6 @@ export default function Dashboard() {
       ...dashboardStats[1],
       value: stats.nearbyReports.toString(),
     },
-    {
-      ...dashboardStats[2],
-      value: stats.guardiansOnline.toString(),
-    },
-    {
-      ...dashboardStats[3],
-      value: stats.animalsHelped.toString(),
-    },
   ];
 
   return (
