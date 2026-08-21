@@ -14,7 +14,7 @@ export async function getDashboardStats(
 ): Promise<DashboardStats> {
   const { data: reportsData, error: reportsError } = await supabase
     .from("reports")
-    .select("status, latitude, longitude");
+    .select("status, latitude, longitude, severity, priority");
 
   if (reportsError) throw reportsError;
 
@@ -28,14 +28,14 @@ export async function getDashboardStats(
 
   const reports = reportsData ?? [];
 
+  // Immediate Rescue Requests: Pending cases with Critical severity OR Emergency priority
   const activeRescues = reports.filter(r => {
     const s = (r.status || "").toLowerCase();
-    return s === "accepted" || s === "enroute" || s === "rescued";
-  }).length;
-
-  const nearbyReports = reports.filter(r => {
-    const s = (r.status || "").toLowerCase();
     if (s !== "pending") return false;
+
+    const sev = (r.severity || "").toLowerCase();
+    const prio = (r.priority || "").toLowerCase();
+    if (sev !== "critical" && prio !== "emergency") return false;
 
     // Filter within 20 km radius if user coordinates are active
     if (
@@ -50,7 +50,27 @@ export async function getDashboardStats(
       return dist <= 20;
     }
 
-    return true; // fallback to count all pending if location not loaded
+    return true;
+  }).length;
+
+  // Nearby Reports: All Pending cases (within 20 km radius if user coordinates are active)
+  const nearbyReports = reports.filter(r => {
+    const s = (r.status || "").toLowerCase();
+    if (s !== "pending") return false;
+
+    if (
+      userLat !== undefined &&
+      userLat !== null &&
+      userLon !== undefined &&
+      userLon !== null &&
+      r.latitude !== null &&
+      r.longitude !== null
+    ) {
+      const dist = calculateDistance(userLat, userLon, r.latitude, r.longitude);
+      return dist <= 20;
+    }
+
+    return true;
   }).length;
 
   const animalsHelped = reports.filter(r => {
