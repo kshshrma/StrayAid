@@ -15,6 +15,7 @@ interface Report {
   status: string;
   assigned_guardian_id: string | null;
   created_at: string;
+  image_url: string;
 }
 
 export default function RescueRequests() {
@@ -128,6 +129,7 @@ export default function RescueRequests() {
                   animal={report.animal_type}
                   severity={report.severity}
                   time={new Date(report.created_at).toLocaleString()}
+                  imageUrl={report.image_url}
                   greyed={isGreyed}
                 />
               </Link>
