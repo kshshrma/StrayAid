@@ -10,6 +10,7 @@ import FloatingReportButton from "../components/navigation/FloatingReportButton"
 
 import { dashboardStats } from "../data/dashboardData";
 import { getDashboardStats } from "../services/dashboard/getDashboardStats";
+import { supabase } from "../lib/supabase";
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -19,18 +20,39 @@ export default function Dashboard() {
     animalsHelped: 0,
   });
 
-  useEffect(() => {
-    loadDashboardStats();
-  }, []);
-
   async function loadDashboardStats() {
     try {
       const data = await getDashboardStats();
       setStats(data);
     } catch (error) {
-      console.error(error);
+      console.error("Failed to load dashboard stats:", error);
     }
   }
+
+  useEffect(() => {
+    loadDashboardStats();
+
+    // Subscribe to real-time updates on reports (status updates, inserts, deletes)
+    const reportsChannel = supabase
+      .channel("public:reports:dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, () => {
+        loadDashboardStats();
+      })
+      .subscribe();
+
+    // Subscribe to changes in active online guardians availability
+    const guardiansChannel = supabase
+      .channel("public:guardians:dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "guardians" }, () => {
+        loadDashboardStats();
+      })
+      .subscribe();
+
+    return () => {
+      reportsChannel.unsubscribe();
+      guardiansChannel.unsubscribe();
+    };
+  }, []);
 
   const liveStats = [
     {
@@ -58,7 +80,7 @@ export default function Dashboard() {
 
           <DashboardHeader />
 
-          <HeroCard />
+          <HeroCard animalsHelped={stats.animalsHelped} />
 
           <section className="grid grid-cols-2 gap-4">
             {liveStats.map((stat) => (

@@ -8,26 +8,41 @@ export interface DashboardStats {
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const { data, error } = await supabase
+  const { data: reportsData, error: reportsError } = await supabase
     .from("reports")
     .select("status");
 
-  if (error) throw error;
+  if (reportsError) throw reportsError;
 
-  const reports = data ?? [];
+  const { count: guardiansCount, error: guardiansError } = await supabase
+    .from("guardians")
+    .select("id", { count: "exact", head: true })
+    .eq("available", true)
+    .eq("is_verified", true);
+
+  if (guardiansError) throw guardiansError;
+
+  const reports = reportsData ?? [];
+
+  const activeRescues = reports.filter(r => {
+    const s = (r.status || "").toLowerCase();
+    return s === "accepted" || s === "enroute" || s === "rescued";
+  }).length;
+
+  const nearbyReports = reports.filter(r => {
+    const s = (r.status || "").toLowerCase();
+    return s === "pending";
+  }).length;
+
+  const animalsHelped = reports.filter(r => {
+    const s = (r.status || "").toLowerCase();
+    return s === "accepted" || s === "enroute" || s === "rescued" || s === "completed";
+  }).length;
 
   return {
-    activeRescues: reports.filter(
-      r => r.status === "Pending"
-    ).length,
-
-    nearbyReports: reports.length,
-
-    // Placeholder until Guardian system is built
-    guardiansOnline: 0,
-
-    animalsHelped: reports.filter(
-      r => r.status === "Accepted"
-    ).length,
+    activeRescues,
+    nearbyReports,
+    guardiansOnline: guardiansCount || 0,
+    animalsHelped,
   };
 }
