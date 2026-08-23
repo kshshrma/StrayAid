@@ -84,8 +84,17 @@ export default function ImmediateRescueRequests() {
           <p className="text-sm font-medium">Loading immediate rescue requests...</p>
         </div>
       ) : error ? (
-        <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-700 text-sm text-center font-medium">
-          ⚠️ {error}
+        <div className="p-6 rounded-2xl bg-red-50/50 border border-red-100 text-center flex flex-col items-center gap-3">
+          <p className="text-red-700 text-sm font-medium">
+            ⚠️ {error.includes("authenticated") || error.includes("session") ? "Please sign in to view rescue requests." : error}
+          </p>
+          {(error.includes("authenticated") || error.includes("session")) && (
+            <Link to="/login">
+              <Button className="py-1.5 px-4 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold">
+                Sign In
+              </Button>
+            </Link>
+          )}
         </div>
       ) : reports.length === 0 ? (
         <div className="py-10 text-center flex flex-col items-center gap-3">

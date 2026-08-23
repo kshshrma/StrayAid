@@ -101,11 +101,21 @@ export default function NearbyReports() {
           <p className="text-sm font-medium">Loading nearby reports...</p>
         </div>
       ) : error ? (
-        <div className="p-5 rounded-2xl bg-amber-50 border border-amber-100 text-amber-800 text-sm text-center font-medium flex flex-col gap-2">
-          <p>⚠️ {error}</p>
-          <p className="text-xs text-amber-600">
-            Make sure browser location permissions are enabled, or update your Guardian profile coordinates.
+        <div className="p-6 rounded-2xl bg-amber-50/50 border border-amber-100 text-center flex flex-col items-center gap-3">
+          <p className="text-amber-800 text-sm font-medium">
+            ⚠️ {error.includes("authenticated") || error.includes("session") ? "Please sign in to view nearby reports." : error}
           </p>
+          {(error.includes("authenticated") || error.includes("session")) ? (
+            <Link to="/login">
+              <Button className="py-1.5 px-4 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold">
+                Sign In
+              </Button>
+            </Link>
+          ) : (
+            <p className="text-xs text-amber-600">
+              Make sure browser location permissions are enabled, or update your Guardian profile coordinates.
+            </p>
+          )}
         </div>
       ) : reports.length === 0 ? (
         <div className="py-10 text-center flex flex-col items-center gap-3">
