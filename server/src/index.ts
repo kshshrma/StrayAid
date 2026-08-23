@@ -8,6 +8,7 @@ import aiRoutes from "./routes/ai";
 import { ai } from "./services/gemini";
 import rescueRoutes from "./routes/rescue";
 import adminRoutes from "./routes/admin";
+import reportRoutes from "./routes/report";
 import { supabase } from "./services/supabase";
 import { dispatchReport } from "./services/dispatch";
 
@@ -20,6 +21,7 @@ app.use(express.json());
 app.use("/api/ai", aiRoutes);
 app.use("/api/rescue", rescueRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/reports", reportRoutes);
 
 // Home Route
 app.get("/", (_, res) => {

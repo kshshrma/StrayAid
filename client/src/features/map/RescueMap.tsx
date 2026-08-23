@@ -8,7 +8,7 @@ import {
   Polyline,
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import L from "leaflet";
 
 import { getReports } from "../../services/report/getReports";
@@ -70,6 +70,10 @@ function ChangeMapView({
 }
 
 export default function RescueMap() {
+  const [searchParams] = useSearchParams();
+  const paramLat = searchParams.get("lat");
+  const paramLng = searchParams.get("lng");
+
   const [reports, setReports] = useState<Report[]>([]);
   const [myLocation, setMyLocation] = useState<[number, number] | null>(null);
   const [onlineGuardians, setOnlineGuardians] = useState<any[]>([]);
@@ -215,6 +219,13 @@ export default function RescueMap() {
   }, []);
 
   const center = useMemo<[number, number]>(() => {
+    if (paramLat && paramLng) {
+      const lat = parseFloat(paramLat);
+      const lng = parseFloat(paramLng);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        return [lat, lng];
+      }
+    }
     if (myLocation) {
       return myLocation;
     }
@@ -226,7 +237,7 @@ export default function RescueMap() {
     }
 
     return [28.6139, 77.209];
-  }, [myLocation, reports]);
+  }, [myLocation, reports, paramLat, paramLng]);
 
   const markers = useMemo(() => {
     return reports.map((report) => {

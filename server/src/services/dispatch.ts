@@ -27,7 +27,7 @@ interface RankedGuardian extends Guardian {
  * Calculate distance between two GPS coordinates.
  * Returns distance in kilometers.
  */
-function calculateDistanceKm(
+export function calculateDistanceKm(
   lat1: number,
   lon1: number,
   lat2: number,
