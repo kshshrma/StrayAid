@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ClipboardList } from "lucide-react";
 
 import DashboardLayout from "../layouts/DashboardLayout";
 import DashboardHeader from "../components/dashboard/DashboardHeader";
 import HeroCard from "../components/dashboard/HeroCard";
 import StatCard from "../components/dashboard/StatCard";
 import MapPreview from "../components/dashboard/MapPreview";
-import AllReports from "../components/dashboard/AllReports";
 import FloatingReportButton from "../components/navigation/FloatingReportButton";
 
 import { dashboardStats } from "../data/dashboardData";
@@ -21,6 +21,7 @@ export default function Dashboard() {
     nearbyReports: 0,
     guardiansOnline: 0,
     animalsHelped: 0,
+    totalReports: 0,
   });
 
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
@@ -97,7 +98,7 @@ export default function Dashboard() {
 
           <HeroCard animalsHelped={stats.animalsHelped} />
 
-          <section className="grid grid-cols-2 gap-4">
+          <section className="grid grid-cols-3 gap-4">
             <StatCard
               title={liveStats[0].title}
               value={liveStats[0].value}
@@ -110,11 +111,15 @@ export default function Dashboard() {
               icon={liveStats[1].icon}
               onClick={() => navigate("/reports/nearby")}
             />
+            <StatCard
+              title="All Reports"
+              value={stats.totalReports.toString()}
+              icon={ClipboardList}
+              onClick={() => navigate("/reports")}
+            />
           </section>
 
           <MapPreview />
-
-          <AllReports />
 
         </div>
       </DashboardLayout>

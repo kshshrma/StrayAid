@@ -6,6 +6,7 @@ export interface DashboardStats {
   nearbyReports: number;
   guardiansOnline: number;
   animalsHelped: number;
+  totalReports: number;
 }
 
 export async function getDashboardStats(
@@ -28,7 +29,7 @@ export async function getDashboardStats(
 
   const reports = reportsData ?? [];
 
-  // Immediate Rescue Requests: Pending cases with Critical severity OR Emergency priority
+  // Immediate Rescue Requests: Pending cases with Critical severity OR Emergency priority (within 10 km geofenced radius if coordinates are loaded)
   const activeRescues = reports.filter(r => {
     const s = (r.status || "").toLowerCase();
     if (s !== "pending") return false;
@@ -37,7 +38,7 @@ export async function getDashboardStats(
     const prio = (r.priority || "").toLowerCase();
     if (sev !== "critical" && prio !== "emergency") return false;
 
-    // Filter within 20 km radius if user coordinates are active
+    // Filter within 10 km radius if user coordinates are active
     if (
       userLat !== undefined &&
       userLat !== null &&
@@ -47,13 +48,13 @@ export async function getDashboardStats(
       r.longitude !== null
     ) {
       const dist = calculateDistance(userLat, userLon, r.latitude, r.longitude);
-      return dist <= 20;
+      return dist <= 10;
     }
 
     return true;
   }).length;
 
-  // Nearby Reports: All Pending cases (within 20 km radius if user coordinates are active)
+  // Nearby Reports: All Pending cases (within 10 km radius if user coordinates are active)
   const nearbyReports = reports.filter(r => {
     const s = (r.status || "").toLowerCase();
     if (s !== "pending") return false;
@@ -67,7 +68,7 @@ export async function getDashboardStats(
       r.longitude !== null
     ) {
       const dist = calculateDistance(userLat, userLon, r.latitude, r.longitude);
-      return dist <= 20;
+      return dist <= 10;
     }
 
     return true;
@@ -83,5 +84,6 @@ export async function getDashboardStats(
     nearbyReports,
     guardiansOnline: guardiansCount || 0,
     animalsHelped,
+    totalReports: reports.length,
   };
 }
