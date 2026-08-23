@@ -6,6 +6,7 @@ import DashboardHeader from "../components/dashboard/DashboardHeader";
 import HeroCard from "../components/dashboard/HeroCard";
 import StatCard from "../components/dashboard/StatCard";
 import MapPreview from "../components/dashboard/MapPreview";
+import AllReports from "../components/dashboard/AllReports";
 import FloatingReportButton from "../components/navigation/FloatingReportButton";
 
 import { dashboardStats } from "../data/dashboardData";
@@ -112,6 +113,8 @@ export default function Dashboard() {
           </section>
 
           <MapPreview />
+
+          <AllReports />
 
         </div>
       </DashboardLayout>
