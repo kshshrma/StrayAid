@@ -22,6 +22,7 @@ export default function Dashboard() {
   });
 
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [activeSection, setActiveSection] = useState<"immediate" | "nearby" | null>(null);
 
   async function loadDashboardStats() {
     try {
@@ -86,6 +87,10 @@ export default function Dashboard() {
     },
   ];
 
+  const handleCardClick = (section: "immediate" | "nearby") => {
+    setActiveSection((prev) => (prev === section ? null : section));
+  };
+
   return (
     <>
       <DashboardLayout>
@@ -96,21 +101,27 @@ export default function Dashboard() {
           <HeroCard animalsHelped={stats.animalsHelped} />
 
           <section className="grid grid-cols-2 gap-4">
-            {liveStats.map((stat) => (
-              <StatCard
-                key={stat.title}
-                title={stat.title}
-                value={stat.value}
-                icon={stat.icon}
-              />
-            ))}
+            <StatCard
+              title={liveStats[0].title}
+              value={liveStats[0].value}
+              icon={liveStats[0].icon}
+              onClick={() => handleCardClick("immediate")}
+              isActive={activeSection === "immediate"}
+            />
+            <StatCard
+              title={liveStats[1].title}
+              value={liveStats[1].value}
+              icon={liveStats[1].icon}
+              onClick={() => handleCardClick("nearby")}
+              isActive={activeSection === "nearby"}
+            />
           </section>
 
           <MapPreview />
 
-          <ImmediateRescueRequests />
+          {activeSection === "immediate" && <ImmediateRescueRequests />}
 
-          <NearbyReports />
+          {activeSection === "nearby" && <NearbyReports />}
 
         </div>
       </DashboardLayout>
