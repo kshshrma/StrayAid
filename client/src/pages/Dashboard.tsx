@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import DashboardLayout from "../layouts/DashboardLayout";
 import DashboardHeader from "../components/dashboard/DashboardHeader";
 import HeroCard from "../components/dashboard/HeroCard";
 import StatCard from "../components/dashboard/StatCard";
 import MapPreview from "../components/dashboard/MapPreview";
-import ImmediateRescueRequests from "../features/reports/ImmediateRescueRequests";
-import NearbyReports from "../features/reports/NearbyReports";
 import FloatingReportButton from "../components/navigation/FloatingReportButton";
 
 import { dashboardStats } from "../data/dashboardData";
@@ -14,6 +13,8 @@ import { getDashboardStats } from "../services/dashboard/getDashboardStats";
 import { supabase } from "../lib/supabase";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const [stats, setStats] = useState({
     activeRescues: 0,
     nearbyReports: 0,
@@ -22,7 +23,6 @@ export default function Dashboard() {
   });
 
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
-  const [activeSection, setActiveSection] = useState<"immediate" | "nearby" | null>(null);
 
   async function loadDashboardStats() {
     try {
@@ -87,10 +87,6 @@ export default function Dashboard() {
     },
   ];
 
-  const handleCardClick = (section: "immediate" | "nearby") => {
-    setActiveSection((prev) => (prev === section ? null : section));
-  };
-
   return (
     <>
       <DashboardLayout>
@@ -105,23 +101,17 @@ export default function Dashboard() {
               title={liveStats[0].title}
               value={liveStats[0].value}
               icon={liveStats[0].icon}
-              onClick={() => handleCardClick("immediate")}
-              isActive={activeSection === "immediate"}
+              onClick={() => navigate("/reports/immediate")}
             />
             <StatCard
               title={liveStats[1].title}
               value={liveStats[1].value}
               icon={liveStats[1].icon}
-              onClick={() => handleCardClick("nearby")}
-              isActive={activeSection === "nearby"}
+              onClick={() => navigate("/reports/nearby")}
             />
           </section>
 
           <MapPreview />
-
-          {activeSection === "immediate" && <ImmediateRescueRequests />}
-
-          {activeSection === "nearby" && <NearbyReports />}
 
         </div>
       </DashboardLayout>

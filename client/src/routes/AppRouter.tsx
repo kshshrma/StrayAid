@@ -20,6 +20,9 @@ import TestAuth from "../pages/TestAuth";
 import Guardian from "../pages/Guardian";
 import AdminDashboard from "../pages/AdminDashboard";
 
+import ImmediateRescuesPage from "../pages/ImmediateRescuesPage";
+import NearbyReportsPage from "../pages/NearbyReportsPage";
+
 export default function AppRouter() {
   return (
     <NotificationProvider>
@@ -36,12 +39,22 @@ export default function AppRouter() {
         <Route path="/profile" element={<Profile />} />
 
         <Route path="/test" element={<TestConnection />} />
-<Route path="/test-auth" element={<TestAuth />} />
+        <Route path="/test-auth" element={<TestAuth />} />
         <Route path="/register" element={<Register />} />
 
         <Route path="/login" element={<Login />} />
 
         <Route path="/reports" element={<ReportsFeed />} />
+
+        <Route
+          path="/reports/immediate"
+          element={<ImmediateRescuesPage />}
+        />
+
+        <Route
+          path="/reports/nearby"
+          element={<NearbyReportsPage />}
+        />
 
         <Route
           path="/reports/:id"
