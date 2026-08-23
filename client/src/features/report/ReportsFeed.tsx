@@ -22,7 +22,6 @@ export default function ReportsFeed() {
 
   function getPriorityWeight(report: Report) {
     const status = (report.status || "").toLowerCase();
-    const severity = (report.severity || "").toLowerCase();
     const priority = (report.priority || "").toLowerCase();
 
     // 1. Accepted/Claimed ones go to the very bottom
@@ -33,26 +32,21 @@ export default function ReportsFeed() {
       status === "completed";
 
     if (isClaimed) {
-      return -100; // negative weight to push to the bottom
+      return 100; // Large weight to push to the bottom when sorting ascending
     }
 
-    // 2. Urgent priority/severity
-    const isUrgent =
-      severity === "critical" ||
-      severity === "high" ||
-      priority === "emergency" ||
-      priority === "urgent";
-
-    if (isUrgent) {
-      return 2;
-    }
-
-    // 3. Medium severity
-    if (severity === "medium") {
+    // 2. Sorting unclaimed ones: first normal, then urgent, then emergency
+    if (priority === "normal") {
       return 1;
     }
+    if (priority === "urgent") {
+      return 2;
+    }
+    if (priority === "emergency") {
+      return 3;
+    }
 
-    return 0; // Low or default
+    return 4; // Default fallback
   }
 
   async function loadReports() {
@@ -63,7 +57,7 @@ export default function ReportsFeed() {
         const weightB = getPriorityWeight(b);
 
         if (weightA !== weightB) {
-          return weightB - weightA; // Higher weight first
+          return weightA - weightB; // Sort ascending (1 -> 2 -> 3 -> 100)
         }
         // Secondary sorting by created_at descending (most recent first)
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -87,12 +81,13 @@ export default function ReportsFeed() {
   }, []);
 
   function severityColor(severity: string) {
-    switch (severity) {
-      case "Critical":
+    const s = (severity || "").toLowerCase();
+    switch (s) {
+      case "critical":
         return "bg-red-600";
-      case "High":
+      case "high":
         return "bg-orange-500";
-      case "Medium":
+      case "medium":
         return "bg-yellow-500";
       default:
         return "bg-green-600";
@@ -100,10 +95,11 @@ export default function ReportsFeed() {
   }
 
   function priorityColor(priority: string) {
-    switch (priority) {
-      case "Emergency":
+    const p = (priority || "").toLowerCase();
+    switch (p) {
+      case "emergency":
         return "bg-red-600";
-      case "Urgent":
+      case "urgent":
         return "bg-orange-500";
       default:
         return "bg-blue-600";
@@ -167,7 +163,7 @@ export default function ReportsFeed() {
                           report.severity
                         )}`}
                       >
-                        {report.severity}
+                        Severity: {report.severity}
                       </span>
                     </div>
 
@@ -176,7 +172,7 @@ export default function ReportsFeed() {
                         report.priority
                       )}`}
                     >
-                      {report.priority}
+                      Priority: {report.priority}
                     </span>
 
                     <div className="mt-4 rounded-xl bg-slate-100 p-4">
