@@ -1,8 +1,11 @@
 import { MapPin, Ambulance, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import Card from "../ui/Card";
 import Button from "../ui/Button";
 
 export default function MapPreview() {
+  const navigate = useNavigate();
+
   return (
     <Card>
       <div className="flex items-center justify-between">
@@ -56,7 +59,8 @@ export default function MapPreview() {
         </div>
 
         <Button
-          className="flex items-center gap-2"
+          onClick={() => navigate("/map")}
+          className="flex items-center gap-2 font-semibold"
         >
           Open Map
           <ArrowRight size={18} />
