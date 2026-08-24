@@ -1,16 +1,12 @@
 import { Heart, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
 import Card from "../ui/Card";
-import Button from "../ui/Button";
 
 interface HeroCardProps {
   animalsHelped: number;
 }
 
 export default function HeroCard({ animalsHelped }: HeroCardProps) {
-  const navigate = useNavigate();
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 25 }}
@@ -54,13 +50,6 @@ export default function HeroCard({ animalsHelped }: HeroCardProps) {
           </div>
 
         </div>
-
-        <Button
-          onClick={() => navigate("/report")}
-          className="mt-8 w-full bg-white text-green-700 hover:bg-gray-100 font-semibold"
-        >
-          Report Animal
-        </Button>
 
       </Card>
     </motion.div>
