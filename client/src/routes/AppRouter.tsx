@@ -24,6 +24,7 @@ import ImmediateRescuesPage from "../pages/ImmediateRescuesPage";
 import NearbyReportsPage from "../pages/NearbyReportsPage";
 import LostFound from "../pages/LostFound";
 import Connect from "../pages/Connect";
+import Rewards from "../pages/Rewards";
 
 export default function AppRouter() {
   return (
@@ -37,6 +38,8 @@ export default function AppRouter() {
         <Route path="/lost-found" element={<LostFound />} />
 
         <Route path="/connect" element={<Connect />} />
+
+        <Route path="/rewards" element={<Rewards />} />
 
         <Route path="/report" element={<Report />} />
 

@@ -4,7 +4,7 @@ import {
   Search,
   MessageSquare,
   Heart,
-  User,
+  Award,
 } from "lucide-react";
 
 export default function BottomNav() {
@@ -13,7 +13,7 @@ export default function BottomNav() {
     { to: "/lost-found", icon: Search, label: "Lost Found" },
     { to: "/connect", icon: MessageSquare, label: "Connect" },
     { to: "/community", icon: Heart, label: "Community" },
-    { to: "/profile", icon: User, label: "Profile" },
+    { to: "/rewards", icon: Award, label: "Rewards" },
   ];
 
   return (
