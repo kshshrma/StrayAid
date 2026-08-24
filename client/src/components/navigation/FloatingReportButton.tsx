@@ -1,4 +1,3 @@
-import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function FloatingReportButton() {
@@ -18,7 +17,6 @@ export default function FloatingReportButton() {
       -translate-x-1/2
       items-center
       justify-center
-      gap-2
       rounded-full
       bg-green-700
       text-white
@@ -30,7 +28,6 @@ export default function FloatingReportButton() {
       whitespace-nowrap
       "
     >
-      <Plus size={20} />
       <span>Report Animal</span>
     </button>
   );
