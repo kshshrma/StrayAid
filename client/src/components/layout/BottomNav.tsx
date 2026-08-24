@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   Home,
-  Map,
+  Search,
   PlusCircle,
   Heart,
   User,
@@ -10,7 +10,7 @@ import {
 export default function BottomNav() {
   const navItems = [
     { to: "/", icon: Home, label: "Home" },
-    { to: "/map", icon: Map, label: "Map" },
+    { to: "/lost-found", icon: Search, label: "Lost Found" },
     { to: "/report", icon: PlusCircle, label: "Report" },
     { to: "/community", icon: Heart, label: "Community" },
     { to: "/profile", icon: User, label: "Profile" },

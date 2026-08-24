@@ -22,6 +22,7 @@ import AdminDashboard from "../pages/AdminDashboard";
 
 import ImmediateRescuesPage from "../pages/ImmediateRescuesPage";
 import NearbyReportsPage from "../pages/NearbyReportsPage";
+import LostFound from "../pages/LostFound";
 
 export default function AppRouter() {
   return (
@@ -31,6 +32,8 @@ export default function AppRouter() {
         <Route path="/" element={<Dashboard />} />
 
         <Route path="/map" element={<Map />} />
+
+        <Route path="/lost-found" element={<LostFound />} />
 
         <Route path="/report" element={<Report />} />
 
