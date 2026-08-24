@@ -1,8 +1,12 @@
 import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function FloatingReportButton() {
+  const navigate = useNavigate();
+
   return (
     <button
+      onClick={() => navigate("/report")}
       className="
       fixed
       bottom-20
