@@ -15,17 +15,9 @@ export default function HeroCard({ animalsHelped }: HeroCardProps) {
     >
       <Card className="bg-gradient-to-br from-green-700 to-emerald-500 text-white border-none">
 
-        <p className="text-sm opacity-90">
-          Your Impact Today
-        </p>
-
-        <h2 className="mt-2 text-3xl font-bold">
-          Good Morning 👋
-        </h2>
-
-        <p className="mt-1 opacity-90">
+        <h2 className="text-xl font-bold leading-snug">
           Every rescue begins with someone who cares.
-        </p>
+        </h2>
 
         <div className="mt-8 grid grid-cols-2 gap-4">
 
