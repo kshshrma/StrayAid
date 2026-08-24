@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import {
   Home,
   Search,
-  PlusCircle,
+  MessageSquare,
   Heart,
   User,
 } from "lucide-react";
@@ -11,7 +11,7 @@ export default function BottomNav() {
   const navItems = [
     { to: "/", icon: Home, label: "Home" },
     { to: "/lost-found", icon: Search, label: "Lost Found" },
-    { to: "/report", icon: PlusCircle, label: "Report" },
+    { to: "/connect", icon: MessageSquare, label: "Connect" },
     { to: "/community", icon: Heart, label: "Community" },
     { to: "/profile", icon: User, label: "Profile" },
   ];
