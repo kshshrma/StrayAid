@@ -1,5 +1,6 @@
 import { Bell, BarChart3 } from "lucide-react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import Avatar from "../ui/Avatar";
 
 export default function DashboardHeader() {
@@ -11,7 +12,9 @@ export default function DashboardHeader() {
       className="flex items-center justify-between"
     >
       <div className="flex items-center gap-4">
-        <Avatar />
+        <Link to="/profile" className="cursor-pointer transition hover:opacity-85 hover:scale-105 active:scale-95 duration-200">
+          <Avatar />
+        </Link>
 
         <div>
           <h2 className="text-xl font-bold text-green-700">
