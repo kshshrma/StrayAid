@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { getReportById } from "../services/report/getReportById";
 import { updateAssignment } from "../services/rescue/updateAssignment";
 import type { Report } from "../types/report";
+import type { AppNotification } from "../types/notification";
 
 interface IncomingAssignmentData {
   assignment: {
@@ -14,10 +15,79 @@ interface IncomingAssignmentData {
   report: Report;
 }
 
-const NotificationContext = createContext<any>(null);
+interface NotificationContextType {
+  incoming: IncomingAssignmentData | null;
+  setIncoming: React.Dispatch<React.SetStateAction<IncomingAssignmentData | null>>;
+  notifications: AppNotification[];
+  unreadCount: number;
+  isDrawerOpen: boolean;
+  openDrawer: () => void;
+  closeDrawer: () => void;
+  toggleDrawer: () => void;
+  markAsRead: (id: string) => void;
+  markAllAsRead: () => void;
+  deleteNotification: (id: string) => void;
+  addNotification: (notification: Omit<AppNotification, "id" | "timestamp">) => void;
+  simulateAlert: (type?: "lost_found" | "nearby_report" | "rescue_alert") => void;
+}
+
+const DEFAULT_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: "notif-1",
+    category: "lost_found",
+    title: "🚨 Lost Pet Alert: Max (Golden Retriever)",
+    message: "Golden Retriever reported lost in Sector 62, Noida. Wearing a red collar. Keep an eye out!",
+    timestamp: "10 mins ago",
+    read: false,
+    location: "Sector 62, Noida",
+    distanceKm: 1.4,
+    imageUrl: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=400",
+    linkUrl: "/lost-found",
+  },
+  {
+    id: "notif-2",
+    category: "nearby_report",
+    title: "📍 New Stray Report in Your Area",
+    message: "Injured stray dog reported near Knowledge Park III. Medical assistance requested by local rescuer.",
+    timestamp: "35 mins ago",
+    read: false,
+    location: "Knowledge Park III",
+    distanceKm: 2.1,
+    animalType: "Dog",
+    imageUrl: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&q=80&w=400",
+    linkUrl: "/reports/nearby",
+  },
+  {
+    id: "notif-3",
+    category: "lost_found",
+    title: "✅ Pet Found Update: Persian Cat",
+    message: "White fluffy Persian cat found resting near Indirapuram, Ghaziabad. Owner notified.",
+    timestamp: "2 hours ago",
+    read: true,
+    location: "Indirapuram, Ghaziabad",
+    distanceKm: 3.8,
+    imageUrl: "https://images.unsplash.com/photo-1618826411640-d6df44dd3f7a?auto=format&fit=crop&q=80&w=400",
+    linkUrl: "/lost-found",
+  },
+  {
+    id: "notif-4",
+    category: "status_update",
+    title: "🚑 Rescue Successful",
+    message: "Report #104 (Injured Pup) has been successfully picked up by StrayAid Guardian.",
+    timestamp: "5 hours ago",
+    read: true,
+    linkUrl: "/reports",
+  },
+];
+
+const NotificationContext = createContext<NotificationContextType | null>(null);
 
 export function useNotification() {
-  return useContext(NotificationContext);
+  const context = useContext(NotificationContext);
+  if (!context) {
+    throw new Error("useNotification must be used within a NotificationProvider");
+  }
+  return context;
 }
 
 export default function NotificationProvider({
@@ -27,14 +97,110 @@ export default function NotificationProvider({
 }) {
   const [incoming, setIncoming] = useState<IncomingAssignmentData | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>(DEFAULT_NOTIFICATIONS);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const openDrawer = () => setIsDrawerOpen(true);
+  const closeDrawer = () => setIsDrawerOpen(false);
+  const toggleDrawer = () => setIsDrawerOpen((prev) => !prev);
+
+  const markAsRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const markAllAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const deleteNotification = (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const addNotification = (
+    data: Omit<AppNotification, "id" | "timestamp">
+  ) => {
+    const newNotif: AppNotification = {
+      ...data,
+      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: "Just now",
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+  };
+
+  const simulateAlert = (type: "lost_found" | "nearby_report" | "rescue_alert" = "lost_found") => {
+    if (type === "lost_found") {
+      addNotification({
+        category: "lost_found",
+        title: "🚨 New Lost Pet Reported Nearby",
+        message: "Beagle puppy 'Charlie' missing near Sector 15. Please report if sighted!",
+        read: false,
+        location: "Sector 15, Noida",
+        distanceKm: 0.8,
+        imageUrl: "https://images.unsplash.com/photo-1534361960057-19889db9621e?auto=format&fit=crop&q=80&w=400",
+        linkUrl: "/lost-found",
+      });
+    } else if (type === "nearby_report") {
+      addNotification({
+        category: "nearby_report",
+        title: "📍 New Area Report: Stray Kitten",
+        message: "Dehydrated kitten found near Metro Station Gate 2. Food & foster care needed.",
+        read: false,
+        location: "Metro Gate 2, Noida",
+        distanceKm: 0.5,
+        linkUrl: "/reports/nearby",
+      });
+    } else {
+      addNotification({
+        category: "rescue_alert",
+        title: "⚡ Urgent Rescue Request Assigned",
+        message: "High priority rescue dispatched in your 3 km radius.",
+        read: false,
+        location: "Sector 62",
+        distanceKm: 1.2,
+        linkUrl: "/reports/immediate",
+      });
+    }
+  };
 
   useEffect(() => {
     async function initSubscription() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) return;
+        
+        // Subscribe to all new report insertions for real-time local notifications
+        const reportsChannel = supabase
+          .channel("realtime:reports_notifications")
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "reports",
+            },
+            (payload) => {
+              const newReport = payload.new as any;
+              if (newReport) {
+                addNotification({
+                  category: "nearby_report",
+                  title: `📍 New ${newReport.animal_type || "Animal"} Reported in Area`,
+                  message: newReport.description || "A new animal report was posted near your location.",
+                  read: false,
+                  location: newReport.location || "Nearby",
+                  linkUrl: `/reports/${newReport.id}`,
+                  meta: { reportId: newReport.id, severity: newReport.severity },
+                });
+              }
+            }
+          )
+          .subscribe();
 
-        // Fetch guardian profile
+        if (!session?.user) return () => { reportsChannel.unsubscribe(); };
+
+        // Fetch guardian profile if authenticated
         const { data: guardian } = await supabase
           .from("guardians")
           .select("id")
@@ -42,8 +208,7 @@ export default function NotificationProvider({
           .maybeSingle();
 
         if (guardian) {
-
-          const channel = supabase
+          const rescueChannel = supabase
             .channel(`realtime:rescue_assignments:${guardian.id}`)
             .on(
               "postgres_changes",
@@ -62,6 +227,14 @@ export default function NotificationProvider({
                       assignment: newAssignment,
                       report,
                     });
+                    addNotification({
+                      category: "rescue_alert",
+                      title: "🚨 Emergency Rescue Assigned!",
+                      message: `New rescue assigned for ${report.animal_type || "Animal"}. ${newAssignment.distance_km ?? 0} km away.`,
+                      read: false,
+                      distanceKm: newAssignment.distance_km,
+                      linkUrl: "/reports/immediate",
+                    });
                   } catch (err) {
                     console.error("Failed to load report for real-time notification:", err);
                   }
@@ -71,9 +244,14 @@ export default function NotificationProvider({
             .subscribe();
 
           return () => {
-            channel.unsubscribe();
+            reportsChannel.unsubscribe();
+            rescueChannel.unsubscribe();
           };
         }
+
+        return () => {
+          reportsChannel.unsubscribe();
+        };
       } catch (err) {
         console.error("Failed to initialize notification subscription:", err);
       }
@@ -81,7 +259,6 @@ export default function NotificationProvider({
 
     initSubscription();
 
-    // Listen to Auth State changes to refresh subscription
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
       initSubscription();
     });
@@ -111,7 +288,23 @@ export default function NotificationProvider({
   }
 
   return (
-    <NotificationContext.Provider value={{ incoming, setIncoming }}>
+    <NotificationContext.Provider
+      value={{
+        incoming,
+        setIncoming,
+        notifications,
+        unreadCount,
+        isDrawerOpen,
+        openDrawer,
+        closeDrawer,
+        toggleDrawer,
+        markAsRead,
+        markAllAsRead,
+        deleteNotification,
+        addNotification,
+        simulateAlert,
+      }}
+    >
       {children}
 
       {/* Floating Real-time Rescue Request Notification Banner */}

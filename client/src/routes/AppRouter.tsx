@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import NotificationProvider from "../context/NotificationProvider";
+import NotificationDrawer from "../components/notifications/NotificationDrawer";
 
 import BottomNav from "../components/layout/BottomNav";
 
@@ -30,59 +31,60 @@ export default function AppRouter() {
   return (
     <NotificationProvider>
       <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <NotificationDrawer />
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
 
-        <Route path="/map" element={<Map />} />
+          <Route path="/map" element={<Map />} />
 
-        <Route path="/lost-found" element={<LostFound />} />
+          <Route path="/lost-found" element={<LostFound />} />
 
-        <Route path="/connect" element={<Connect />} />
+          <Route path="/connect" element={<Connect />} />
 
-        <Route path="/rewards" element={<Rewards />} />
+          <Route path="/rewards" element={<Rewards />} />
 
-        <Route path="/report" element={<Report />} />
+          <Route path="/report" element={<Report />} />
 
-        <Route path="/community" element={<Community />} />
+          <Route path="/community" element={<Community />} />
 
-        <Route path="/profile" element={<Profile />} />
+          <Route path="/profile" element={<Profile />} />
 
-        <Route path="/test" element={<TestConnection />} />
-        <Route path="/test-auth" element={<TestAuth />} />
-        <Route path="/register" element={<Register />} />
+          <Route path="/test" element={<TestConnection />} />
+          <Route path="/test-auth" element={<TestAuth />} />
+          <Route path="/register" element={<Register />} />
 
-        <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<Login />} />
 
-        <Route path="/reports" element={<ReportsFeed />} />
+          <Route path="/reports" element={<ReportsFeed />} />
 
-        <Route
-          path="/reports/immediate"
-          element={<ImmediateRescuesPage />}
-        />
+          <Route
+            path="/reports/immediate"
+            element={<ImmediateRescuesPage />}
+          />
 
-        <Route
-          path="/reports/nearby"
-          element={<NearbyReportsPage />}
-        />
+          <Route
+            path="/reports/nearby"
+            element={<NearbyReportsPage />}
+          />
 
-        <Route
-          path="/reports/:id"
-          element={<ReportDetails />}
-        />
+          <Route
+            path="/reports/:id"
+            element={<ReportDetails />}
+          />
 
-        <Route
-          path="/guardian"
-          element={<Guardian  />}
-        />
+          <Route
+            path="/guardian"
+            element={<Guardian  />}
+          />
 
-        <Route
-          path="/admin"
-          element={<AdminDashboard />}
-        />
-        
-      </Routes>
+          <Route
+            path="/admin"
+            element={<AdminDashboard />}
+          />
+          
+        </Routes>
 
-      <BottomNav />
+        <BottomNav />
       </BrowserRouter>
     </NotificationProvider>
   );

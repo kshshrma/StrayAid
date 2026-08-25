@@ -2,8 +2,11 @@ import { Bell, BarChart3 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import Avatar from "../ui/Avatar";
+import { useNotification } from "../../context/NotificationProvider";
 
 export default function DashboardHeader() {
+  const { openDrawer, unreadCount } = useNotification();
+
   return (
     <motion.header
       initial={{ opacity: 0, y: -20 }}
@@ -28,12 +31,22 @@ export default function DashboardHeader() {
       </div>
 
       <div className="flex gap-3">
-        <button className="rounded-xl bg-white p-3 shadow">
-          <BarChart3 size={20} />
-        </button>
+        <Link to="/admin" className="rounded-xl bg-white p-3 shadow hover:bg-slate-50 transition active:scale-95">
+          <BarChart3 size={20} className="text-slate-700" />
+        </Link>
 
-        <button className="rounded-xl bg-white p-3 shadow">
-          <Bell size={20} />
+        <button
+          onClick={openDrawer}
+          className="relative rounded-xl bg-white p-3 shadow hover:bg-slate-50 transition active:scale-95 cursor-pointer group"
+          title="Notifications (Lost & Found, Nearby Reports)"
+        >
+          <Bell size={20} className="text-slate-700 group-hover:text-emerald-600 transition-colors" />
+
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-extrabold text-white ring-2 ring-white animate-pulse">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
         </button>
       </div>
     </motion.header>
