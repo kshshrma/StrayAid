@@ -3,7 +3,7 @@ import ImageUploader from "../features/report/ImageUploader";
 import ImagePreview from "../features/report/ImagePreview";
 import SubmitReport from "../features/report/SubmitReport";
 import Card from "../components/ui/Card";
-import { Camera, MapPin, RefreshCw, Check, Loader2, AlertCircle } from "lucide-react";
+import { RefreshCw, Check, Loader2, AlertCircle } from "lucide-react";
 
 export default function Report() {
   const [step, setStep] = useState(1); // 1: Capture, 2: Preview & Submit
