@@ -1,18 +1,21 @@
 import { useState, useEffect } from "react";
 import ImageUploader from "../features/report/ImageUploader";
 import ImagePreview from "../features/report/ImagePreview";
-import LocationCard from "../features/report/LocationCard";
 import SubmitReport from "../features/report/SubmitReport";
 import Card from "../components/ui/Card";
-import { Camera, MapPin, RefreshCw, Check } from "lucide-react";
+import { Camera, MapPin, RefreshCw, Check, Loader2, AlertCircle } from "lucide-react";
 
 export default function Report() {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); // 1: Capture, 2: Preview & Submit
   const [image, setImage] = useState<File | null>(null);
+  
+  // Location states
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
-  // Automatically advance to Step 2 (Preview) when an image is uploaded or captured
+  // Automatically advance to Step 2 when an image is captured or uploaded
   useEffect(() => {
     if (image && step === 1) {
       setStep(2);
@@ -21,32 +24,36 @@ export default function Report() {
 
   function handleRetake() {
     setImage(null);
-    setStep(1);
-  }
-
-  function handleConfirmPhoto() {
-    setStep(3);
-  }
-
-  function handleLocationProceed() {
-    if (latitude !== null && longitude !== null) {
-      setStep(4);
-    }
-  }
-
-  function handleStartOver() {
-    setImage(null);
     setLatitude(null);
     setLongitude(null);
+    setLocationError(null);
+    setLocating(false);
     setStep(1);
   }
 
-  const steps = [
-    { num: 1, label: "Capture" },
-    { num: 2, label: "Preview" },
-    { num: 3, label: "Location" },
-    { num: 4, label: "Submit" },
-  ];
+  function handleUsePhotoAndGetLocation() {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setLocating(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude);
+        setLongitude(position.coords.longitude);
+        setLocating(false);
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        setLocationError("Unable to retrieve location. Please check browser GPS permissions.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 pb-24 animate-fadeIn">
@@ -56,36 +63,29 @@ export default function Report() {
             🐾 Emergency Report
           </h1>
           <p className="mt-1 text-slate-500 text-sm">
-            Quick 4-step wizard to report an animal in distress.
+            Report an animal in distress in just two simple steps.
           </p>
         </div>
 
         {/* STEP PROGRESS TRACKER */}
-        <div className="flex justify-between items-center max-w-xs mx-auto mb-8 relative px-2">
-          {/* Progress background line */}
-          <div className="absolute left-4 right-4 h-0.5 bg-slate-200 top-1/2 -translate-y-1/2 z-0" />
-          {/* Progress filled line */}
-          <div 
-            className="absolute left-4 h-0.5 bg-green-600 top-1/2 -translate-y-1/2 z-0 transition-all duration-300" 
-            style={{ width: `${((step - 1) / (steps.length - 1)) * 88}%` }}
-          />
-          
-          {steps.map((s) => (
-            <div key={s.num} className="z-10 flex flex-col items-center gap-1.5">
-              <div 
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all duration-300 border ${
-                  step >= s.num 
-                    ? "bg-green-600 border-green-600 text-white shadow-sm shadow-green-100" 
-                    : "bg-white border-slate-200 text-slate-400"
-                }`}
-              >
-                {s.num}
-              </div>
-              <span className={`text-[10px] font-bold ${step >= s.num ? "text-slate-800" : "text-slate-400"}`}>
-                {s.label}
-              </span>
-            </div>
-          ))}
+        <div className="flex items-center justify-center gap-4 max-w-xs mx-auto mb-6 bg-white border border-slate-100 p-2.5 rounded-2xl shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+              step === 1 ? "bg-green-600 text-white" : "bg-green-50 text-green-700"
+            }`}>
+              1
+            </span>
+            <span className={`text-xs font-bold ${step === 1 ? "text-slate-800" : "text-slate-400"}`}>Capture</span>
+          </div>
+          <div className="w-8 h-0.5 bg-slate-200" />
+          <div className="flex items-center gap-2">
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+              step === 2 ? "bg-green-600 text-white" : "bg-slate-100 text-slate-400"
+            }`}>
+              2
+            </span>
+            <span className={`text-xs font-bold ${step === 2 ? "text-slate-800" : "text-slate-400"}`}>Submit</span>
+          </div>
         </div>
 
         {/* STEP VIEWS */}
@@ -100,100 +100,88 @@ export default function Report() {
             <div className="space-y-4 animate-slideUp">
               <ImagePreview image={image} />
               
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={handleRetake}
-                  className="flex-1 py-3 text-xs font-bold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition flex items-center justify-center gap-1.5 cursor-pointer bg-white"
-                >
-                  <RefreshCw size={14} /> Retake Photo
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={handleConfirmPhoto}
-                  className="flex-1 py-3 text-xs font-bold rounded-xl bg-green-600 text-white hover:bg-green-700 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-green-100 border border-green-600"
-                >
-                  <Check size={14} /> Use This Photo
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-4 animate-slideUp">
-              <LocationCard
-                latitude={latitude}
-                longitude={longitude}
-                setLatitude={setLatitude}
-                setLongitude={setLongitude}
-              />
-
-              {latitude !== null && longitude !== null && (
-                <button
-                  type="button"
-                  onClick={handleLocationProceed}
-                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-green-100 border border-green-600 text-xs font-semibold"
-                >
-                  Confirm Location & Proceed
-                </button>
+              {/* Geolocation Loading State */}
+              {locating && (
+                <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center gap-2.5 text-blue-700 font-bold text-xs">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>📍 Automatically retrieving GPS location...</span>
+                </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="w-full py-2.5 border border-slate-200 text-slate-500 hover:bg-slate-100 rounded-xl transition text-xs font-bold bg-white cursor-pointer"
-              >
-                ← Back to Photo Preview
-              </button>
-            </div>
-          )}
+              {/* Geolocation Error State */}
+              {locationError && (
+                <div className="p-4 rounded-2xl bg-red-50 border border-red-150 space-y-3">
+                  <div className="flex items-center gap-2 text-red-700 font-bold text-xs">
+                    <AlertCircle size={16} />
+                    <span>{locationError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleUsePhotoAndGetLocation}
+                    className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-800 font-bold rounded-xl transition text-[11px] cursor-pointer"
+                  >
+                    Retry Fetching Location
+                  </button>
+                </div>
+              )}
 
-          {step === 4 && (
-            <div className="space-y-6 animate-slideUp">
-              <Card className="p-5 bg-white border border-slate-100 rounded-3xl shadow-sm space-y-4">
-                <h3 className="text-sm font-bold text-slate-900 border-b border-slate-50 pb-2">
-                  📝 Report Summary
-                </h3>
-
-                <div className="flex gap-3">
-                  {image && (
-                    <img
-                      src={URL.createObjectURL(image)}
-                      alt="Captured animal"
-                      className="w-20 h-20 rounded-xl object-cover border border-slate-100"
-                    />
-                  )}
-                  <div className="space-y-2 text-xs font-semibold text-slate-500">
-                    <div className="flex items-center gap-1.5 text-slate-700">
-                      <Camera size={14} className="text-slate-400" />
-                      <span>Photo Captured Successfully</span>
+              {/* Coordinates Retrieved Summary Card */}
+              {latitude !== null && longitude !== null && (
+                <Card className="p-4 bg-white border border-slate-100 rounded-2xl shadow-xs space-y-3">
+                  <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-50 pb-2">
+                    📍 Incident Location Retrieved
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3 text-xs font-semibold text-slate-600">
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100/50">
+                      <p className="text-[10px] text-slate-400">LATITUDE</p>
+                      <p className="mt-0.5 text-slate-800">{latitude.toFixed(6)}</p>
                     </div>
-                    <div className="flex items-center gap-1.5 text-slate-700">
-                      <MapPin size={14} className="text-slate-400" />
-                      <span>
-                        Coordinates: {latitude?.toFixed(4)}, {longitude?.toFixed(4)}
-                      </span>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100/50">
+                      <p className="text-[10px] text-slate-400">LONGITUDE</p>
+                      <p className="mt-0.5 text-slate-800">{longitude.toFixed(6)}</p>
                     </div>
                   </div>
+                </Card>
+              )}
+
+              {/* Interactive buttons */}
+              {latitude === null && !locating ? (
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleRetake}
+                    className="flex-1 py-3 text-xs font-bold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition flex items-center justify-center gap-1.5 cursor-pointer bg-white"
+                  >
+                    <RefreshCw size={14} /> Retake Photo
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={handleUsePhotoAndGetLocation}
+                    className="flex-1 py-3 text-xs font-bold rounded-xl bg-green-600 text-white hover:bg-green-700 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-green-100 border border-green-600"
+                  >
+                    <Check size={14} /> Use This Photo
+                  </button>
                 </div>
-              </Card>
+              ) : (
+                latitude !== null && (
+                  <div className="space-y-3">
+                    <SubmitReport
+                      image={image}
+                      latitude={latitude}
+                      longitude={longitude}
+                    />
 
-              <div className="space-y-3">
-                <SubmitReport
-                  image={image}
-                  latitude={latitude}
-                  longitude={longitude}
-                />
-
-                <button
-                  type="button"
-                  onClick={handleStartOver}
-                  className="w-full py-2.5 border border-red-200 hover:bg-red-50 text-red-600 rounded-xl transition text-xs font-bold bg-white cursor-pointer"
-                >
-                  🗑️ Discard & Start Over
-                </button>
-              </div>
+                    <button
+                      type="button"
+                      onClick={handleRetake}
+                      className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl transition text-xs font-bold bg-white cursor-pointer"
+                    >
+                      ← Discard & Start Over
+                    </button>
+                  </div>
+                )
+              )}
             </div>
           )}
         </div>
