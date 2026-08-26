@@ -8,6 +8,7 @@ import { RefreshCw, Check, Loader2, AlertCircle } from "lucide-react";
 export default function Report() {
   const [step, setStep] = useState(1); // 1: Capture, 2: Preview & Submit
   const [image, setImage] = useState<File | null>(null);
+  const [uploadSource, setUploadSource] = useState<"camera" | "gallery" | null>(null);
   
   // Location states
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -92,7 +93,12 @@ export default function Report() {
         <div className="space-y-6">
           {step === 1 && (
             <div className="animate-fadeIn">
-              <ImageUploader image={image} setImage={setImage} />
+              <ImageUploader
+                image={image}
+                setImage={setImage}
+                uploadSource={uploadSource}
+                setUploadSource={setUploadSource}
+              />
             </div>
           )}
 

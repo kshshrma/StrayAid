@@ -1,14 +1,18 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Camera, Image as ImageIcon, Check, X } from "lucide-react";
 
 interface ImageUploaderProps {
   image: File | null;
   setImage: React.Dispatch<React.SetStateAction<File | null>>;
+  uploadSource: "camera" | "gallery" | null;
+  setUploadSource: React.Dispatch<React.SetStateAction<"camera" | "gallery" | null>>;
 }
 
 export default function ImageUploader({
   image,
   setImage,
+  uploadSource,
+  setUploadSource,
 }: ImageUploaderProps) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -18,14 +22,25 @@ export default function ImageUploader({
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
 
+  // Automatically open uploader on mount if we are retaking
+  useEffect(() => {
+    if (!image && uploadSource === "camera") {
+      triggerCamera();
+    } else if (!image && uploadSource === "gallery") {
+      triggerGallery();
+    }
+  }, [uploadSource, image]);
+
   function handleImageChange(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
     if (!event.target.files?.length) return;
+    setUploadSource("gallery");
     setImage(event.target.files[0]);
   }
 
   async function triggerCamera() {
+    setUploadSource("camera");
     try {
       // Prompt camera access with rear camera fallback
       const stream = await navigator.mediaDevices.getUserMedia({
