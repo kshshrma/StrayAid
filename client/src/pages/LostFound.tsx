@@ -1,431 +1,179 @@
 import { useState } from "react";
-import Card from "../components/ui/Card";
+import { Heart, Search, PlusCircle } from "lucide-react";
+import AnimalReportCard, { type LostFoundPet } from "../features/lost-found/AnimalReportCard";
+import LostFoundFilters from "../features/lost-found/LostFoundFilters";
+import LostAnimalForm from "../features/lost-found/LostAnimalForm";
 import Button from "../components/ui/Button";
-import { Search, PlusCircle, Calendar, MapPin, X, User, Phone, MessageSquare } from "lucide-react";
-
-interface LostFoundPet {
-  id: string;
-  type: "lost" | "found";
-  animal: string;
-  breed: string;
-  location: string;
-  date: string;
-  description: string;
-  image: string;
-}
 
 export default function LostFound() {
   const [filter, setFilter] = useState<"all" | "lost" | "found">("all");
-  
-  // Dynamic list of pets
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+
+  // Realistic mock data incorporating optional details
   const [pets, setPets] = useState<LostFoundPet[]>([
     {
-      id: "1",
+      id: "lf-1",
       type: "lost",
       animal: "Dog",
       breed: "Golden Retriever",
-      location: "Sector 62, Noida",
+      name: "Max",
+      color: "Golden / Light Brown",
+      collarColor: "Red collar with a brass tag",
+      uniqueId: "Dark spot on left hind leg, floppy ears",
+      location: "28.627311, 77.372545",
+      address: "Near Block B Park, Sector 62, Noida",
       date: "2026-08-22",
-      description: "Friendly male retriever wearing a red collar. Answers to 'Max'.",
+      description: "Super friendly, responds to 'Max'. Went missing during evening walk.",
       image: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=400",
+      additionalInfo: "Microchipped, wearing a red collar. Please contact relay if seen.",
     },
     {
-      id: "2",
+      id: "lf-2",
       type: "found",
       animal: "Cat",
       breed: "Persian Cat",
-      location: "Indirapuram, Ghaziabad",
+      color: "Fluffy White",
+      uniqueId: "Blue eyes, bushy tail",
+      location: "28.635901, 77.359211",
+      address: "Staircase of Building C, Indirapuram, Ghaziabad",
       date: "2026-08-23",
-      description: "White fluffy Persian cat found resting under building stairs. Very calm.",
+      description: "Calm white Persian cat found resting. Safe with security.",
       image: "https://images.unsplash.com/photo-1618826411640-d6df44dd3f7a?auto=format&fit=crop&q=80&w=400",
+      additionalInfo: "No collar, very clean, likely a house pet.",
     },
     {
-      id: "3",
+      id: "lf-3",
       type: "lost",
       animal: "Dog",
       breed: "Beagle",
-      location: "Sector 15, Noida",
+      name: "Bella",
+      color: "Tri-color (Black, Brown, White)",
+      collarColor: "Blue nylon belt",
+      uniqueId: "Brown spots on white stomach patches",
+      location: "28.583210, 77.316890",
+      address: "Near Sector 15 Metro Station, Noida",
       date: "2026-08-21",
-      description: "Tri-color female Beagle, microchipped. Very energetic.",
+      description: "Very energetic female Beagle. Friendly but easily scared by loud noises.",
       image: "https://images.unsplash.com/photo-1534361960057-19889db9621e?auto=format&fit=crop&q=80&w=400",
+      additionalInfo: "Answers to 'Bella'. Wearing a blue collar without tag.",
     },
   ]);
 
-  // Report Modal states
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [newType, setNewType] = useState<"lost" | "found">("lost");
-  const [newAnimal, setNewAnimal] = useState("Dog");
-  const [newBreed, setNewBreed] = useState("");
-  const [newLocation, setNewLocation] = useState("");
-  const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
-  const [newDescription, setNewDescription] = useState("");
-  const [newImageUrl, setNewImageUrl] = useState("");
+  const filteredPets = filter === "all" ? pets : pets.filter((pet) => pet.type === filter);
 
-  // Contact Modal states
-  const [selectedPet, setSelectedPet] = useState<LostFoundPet | null>(null);
-  const [contactSuccess, setContactSuccess] = useState(false);
-  const [contactMessage, setContactMessage] = useState("");
-
-  const defaultImages: Record<string, string> = {
-    dog: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&q=80&w=400",
-    cat: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=400",
-    cow: "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?auto=format&fit=crop&q=80&w=400",
-    bird: "https://images.unsplash.com/photo-1452570053594-1b985d6ea890?auto=format&fit=crop&q=80&w=400",
-    other: "https://images.unsplash.com/photo-1474511320723-9a56873867b5?auto=format&fit=crop&q=80&w=400",
-  };
-
-  const filteredPets = filter === "all" ? pets : pets.filter(p => p.type === filter);
-
-  function handleAddReport(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newBreed || !newLocation || !newDescription) {
-      alert("Please fill in all fields.");
-      return;
-    }
-
-    const animKey = newAnimal.toLowerCase();
-    const fallbackImg = defaultImages[animKey] || defaultImages.other;
-    const finalImg = newImageUrl.trim() || fallbackImg;
-
-    const newPet: LostFoundPet = {
-      id: Date.now().toString(),
-      type: newType,
-      animal: newAnimal,
-      breed: newBreed,
-      location: newLocation,
-      date: newDate,
-      description: newDescription,
-      image: finalImg,
-    };
-
-    setPets(prev => [newPet, ...prev]);
-    setIsReportModalOpen(false);
-
-    // Reset fields
-    setNewBreed("");
-    setNewLocation("");
-    setNewDescription("");
-    setNewImageUrl("");
-    setNewDate(new Date().toISOString().split("T")[0]);
-  }
-
-  function handleSendContactMessage(e: React.FormEvent) {
-    e.preventDefault();
-    if (!contactMessage.trim()) return;
-    setContactSuccess(true);
-    setTimeout(() => {
-      setContactSuccess(false);
-      setContactMessage("");
-      setSelectedPet(null);
-    }, 2000);
+  function handleFormSubmitSuccess(newReport: LostFoundPet) {
+    // Prepend new report
+    setPets((prev) => [newReport, ...prev]);
+    setIsFormOpen(false);
+    setShowSuccessPopup(true);
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-5 pb-28">
-      <h1 className="mb-6 text-center text-4xl font-extrabold text-slate-900 tracking-tight flex items-center justify-center gap-2">
-        <Search className="text-green-600" size={32} /> Lost & Found
-      </h1>
-
-      <div className="max-w-md mx-auto mb-6 flex gap-2">
-        <button
-          onClick={() => setFilter("all")}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-            filter === "all"
-              ? "bg-green-600 border-green-600 text-white shadow-md"
-              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          All Pets
-        </button>
-        <button
-          onClick={() => setFilter("lost")}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-            filter === "lost"
-              ? "bg-red-600 border-red-600 text-white shadow-md"
-              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          🚨 Lost
-        </button>
-        <button
-          onClick={() => setFilter("found")}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-            filter === "found"
-              ? "bg-blue-600 border-blue-600 text-white shadow-md"
-              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          ✅ Found
-        </button>
-      </div>
-
-      <div className="max-w-md mx-auto space-y-5">
-        {filteredPets.map(pet => (
-          <Card key={pet.id} className="overflow-hidden p-0 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow transition-all">
-            <img src={pet.image} alt={pet.animal} className="h-48 w-full object-cover" />
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-bold text-slate-900">
-                  {pet.breed} ({pet.animal})
-                </h2>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${
-                    pet.type === "lost"
-                      ? "bg-red-100 text-red-700 border border-red-200"
-                      : "bg-blue-100 text-blue-700 border border-blue-200"
-                  }`}
-                >
-                  {pet.type}
-                </span>
-              </div>
-
-              <p className="text-sm text-slate-600 mb-4">{pet.description}</p>
-
-              <div className="flex flex-col gap-1 text-xs text-gray-500 font-medium pt-3 border-t border-slate-100">
-                <span className="flex items-center gap-1.5">
-                  <MapPin size={14} className="text-gray-400" /> {pet.location}
-                </span>
-                <span className="flex items-center gap-1.5 mt-1">
-                  <Calendar size={14} className="text-gray-400" /> Reported: {pet.date}
-                </span>
-              </div>
-
-              <Button
-                onClick={() => setSelectedPet(pet)}
-                className={`mt-4 w-full text-xs font-bold py-2 rounded-xl transition ${
-                  pet.type === "lost"
-                    ? "bg-red-50 text-red-700 hover:bg-red-100 border border-red-100"
-                    : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100"
-                }`}
-              >
-                {pet.type === "lost" ? "💬 Message Finder / Owner" : "📞 Contact Reporter"}
-              </Button>
-            </div>
-          </Card>
-        ))}
-
-        <Button
-          onClick={() => setIsReportModalOpen(true)}
-          className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition shadow-md shadow-green-100"
-        >
-          <PlusCircle size={18} /> Report Lost or Found Pet
-        </Button>
-      </div>
-
-      {/* REPORT PET MODAL OVERLAY */}
-      {isReportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 animate-slideUp max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setIsReportModalOpen(false)}
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
-            >
-              <X size={18} />
-            </button>
-
-            <h2 className="text-2xl font-black text-slate-900 mb-2 flex items-center gap-1.5">
-              📢 Report Pet Case
-            </h2>
-            <p className="text-slate-500 text-xs mb-4">
-              Help reunite pets with their owners by adding details below.
-            </p>
-
-            <form onSubmit={handleAddReport} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">CASE STATUS</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewType("lost")}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
-                      newType === "lost"
-                        ? "bg-red-50 text-red-700 border-red-200 shadow-sm"
-                        : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    🚨 Lost
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewType("found")}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
-                      newType === "found"
-                        ? "bg-blue-50 text-blue-700 border-blue-200 shadow-sm"
-                        : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    ✅ Found
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-1">ANIMAL TYPE</label>
-                  <select
-                    value={newAnimal}
-                    onChange={(e) => setNewAnimal(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="Dog">Dog 🐕</option>
-                    <option value="Cat">Cat 🐈</option>
-                    <option value="Cow">Cow 🐄</option>
-                    <option value="Bird">Bird 🐦</option>
-                    <option value="Other">Other 🐾</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-1">BREED / COLOR</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Beagle, White Fluffy"
-                    value={newBreed}
-                    onChange={(e) => setNewBreed(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-1">LOCATION</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Sector 62, Noida"
-                    value={newLocation}
-                    onChange={(e) => setNewLocation(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-1">DATE OBSERVED</label>
-                  <input
-                    type="date"
-                    value={newDate}
-                    onChange={(e) => setNewDate(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">IMAGE URL (OPTIONAL)</label>
-                <input
-                  type="url"
-                  placeholder="Leave empty for generic photo or paste Unsplash URL"
-                  value={newImageUrl}
-                  onChange={(e) => setNewImageUrl(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">DESCRIPTION</label>
-                <textarea
-                  placeholder="Details like collar color, tags, behavior or where last seen..."
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 h-20 resize-none"
-                  required
-                />
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition mt-2 shadow-md shadow-green-100"
-              >
-                Publish Case Report
-              </Button>
-            </form>
-          </div>
+    <div className="min-h-screen bg-slate-50 px-4 py-6 pb-24 animate-fadeIn">
+      <div className="mx-auto max-w-4xl space-y-6">
+        
+        {/* 1. PAGE HEADER */}
+        <div className="text-center md:text-left space-y-1 pb-2 border-b border-slate-100">
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center justify-center md:justify-start gap-2">
+            <Search className="text-green-700 shrink-0" size={32} /> Lost & Found
+          </h1>
+          <p className="text-xs font-semibold text-slate-500">
+            Help reunite lost animals with the people who love them.
+          </p>
         </div>
-      )}
 
-      {/* CONTACT DIALOG OVERLAY */}
-      {selectedPet && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 animate-scaleIn">
-            <button
-              onClick={() => {
-                setSelectedPet(null);
-                setContactSuccess(false);
-              }}
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
-            >
-              <X size={18} />
-            </button>
+        {/* 2. PRIMARY ACTION — PLACE THIS FIRST */}
+        <div className="pt-2">
+          <Button
+            onClick={() => setIsFormOpen(true)}
+            className="w-full md:w-auto bg-green-700 hover:bg-green-800 text-white font-extrabold py-3.5 px-8 rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition shadow-md shadow-green-100/80 hover:shadow-lg text-sm uppercase tracking-wider"
+          >
+            <PlusCircle size={18} /> Report Lost Animal
+          </Button>
+        </div>
 
-            {contactSuccess ? (
-              <div className="text-center py-6 space-y-3">
-                <div className="mx-auto w-12 h-12 rounded-full bg-green-50 text-green-600 flex items-center justify-center text-xl font-bold">
-                  ✓
-                </div>
-                <h3 className="text-lg font-bold text-slate-900">Message Dispatched!</h3>
-                <p className="text-xs text-slate-500">
-                  Your message has been sent to the reporter. They will reach out to you directly shortly.
+        {/* 3. FILTERS */}
+        <div className="max-w-md">
+          <LostFoundFilters filter={filter} setFilter={setFilter} />
+        </div>
+
+        {/* 4. ANIMAL REPORTS GRID */}
+        <div>
+          {filteredPets.length === 0 ? (
+            /* 9. EMPTY STATES */
+            <div className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-150 shadow-xs max-w-lg mx-auto space-y-3.5 my-6 animate-fadeIn">
+              <div className="mx-auto w-12 h-12 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center text-lg">
+                🐾
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-black text-slate-800 leading-tight">
+                  {filter === "lost"
+                    ? "No lost animals reported yet."
+                    : filter === "found"
+                    ? "No found animals reported yet."
+                    : "No reports posted yet."}
+                </h3>
+                <p className="text-[11px] text-slate-400 font-semibold leading-relaxed">
+                  New reports will appear here and may help reunite an animal with their family.
                 </p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-lg">
-                    👤
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Contact Case Reporter
-                    </h3>
-                    <p className="text-[10px] text-slate-400">
-                      Re: {selectedPet.breed} ({selectedPet.type})
-                    </p>
-                  </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 animate-fadeIn">
+              {filteredPets.map((pet) => (
+                <div key={pet.id} className="h-full">
+                  <AnimalReportCard pet={pet} />
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-                <div className="text-xs space-y-2.5">
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <User size={14} className="text-slate-400" />
-                    <span>Case ID: #{selectedPet.id.slice(-6)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <Phone size={14} className="text-slate-400" />
-                    <span>Secure Relay Option Enabled</span>
-                  </div>
-                </div>
+      </div>
 
-                <form onSubmit={handleSendContactMessage} className="space-y-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Quick Message
-                    </label>
-                    <textarea
-                      placeholder={
-                        selectedPet.type === "lost"
-                          ? "I think I saw this pet near... Please call me!"
-                          : "Hello! I am the owner of this pet. How can I contact you?"
-                      }
-                      value={contactMessage}
-                      onChange={(e) => setContactMessage(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 h-20 resize-none"
-                      required
-                    />
-                  </div>
+      {/* 5. REPORT LOST ANIMAL FORM MODAL */}
+      {isFormOpen && (
+        <LostAnimalForm
+          onClose={() => setIsFormOpen(false)}
+          onSubmitSuccess={handleFormSubmitSuccess}
+        />
+      )}
 
-                  <Button
-                    type="submit"
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-xs"
-                  >
-                    <MessageSquare size={14} /> Send Secure Message
-                  </Button>
-                </form>
+      {/* 8. SUCCESSFUL SUBMISSION CONFIRMATION MODAL */}
+      {showSuccessPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 animate-scaleIn text-center space-y-5">
+            
+            {/* Paw Heart Icon */}
+            <div className="mx-auto w-16 h-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center animate-pulse">
+              <Heart size={32} className="fill-red-500" />
+            </div>
+
+            {/* Success messaging */}
+            <div className="space-y-2">
+              <h2 className="text-xl font-black text-slate-900 leading-tight">
+                🐾 Report Submitted
+              </h2>
+              <div className="text-slate-500 text-xs font-bold space-y-1.5 leading-relaxed">
+                <p className="text-slate-800 font-extrabold text-sm">
+                  You showed up. A life got a chance.
+                </p>
+                <p>Your report may help bring them home.</p>
               </div>
-            )}
+            </div>
+
+            {/* Acknowledge Button */}
+            <button
+              onClick={() => setShowSuccessPopup(false)}
+              className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-3.5 rounded-2xl transition text-xs shadow-md shadow-green-100 cursor-pointer border border-green-700"
+            >
+              Continue to Lost & Found
+            </button>
+            
           </div>
         </div>
       )}
     </div>
   );
 }
-
