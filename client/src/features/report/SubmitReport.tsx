@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { uploadImage } from "../../services/storage/uploadImage";
 import { saveReport } from "../../services/report/saveReport";
-import { Heart, Check } from "lucide-react";
+import { Heart } from "lucide-react";
 import {
   enqueueReport,
   getQueuedReports,
