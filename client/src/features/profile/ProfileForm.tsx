@@ -5,13 +5,11 @@ import {
   MapPin,
   ShieldAlert,
   Bell,
-  CheckCircle,
   User,
   Phone,
   Building,
   Image as ImageIcon,
   Sparkles,
-  HelpCircle,
   Lock,
 } from "lucide-react";
 
@@ -52,7 +50,6 @@ export default function ProfileForm() {
   // Guardian & Notification State
   const [isGuardian, setIsGuardian] = useState(false);
   const [notifyNearbyRescues, setNotifyNearbyRescues] = useState(true);
-  const [guardianId, setGuardianId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -98,7 +95,6 @@ export default function ProfileForm() {
           const guardian = await getGuardian(user.id);
           if (guardian) {
             setIsGuardian(true);
-            setGuardianId(guardian.id);
           }
         } catch (gErr) {
           console.log("Guardian profile not created yet:", gErr);
@@ -197,7 +193,7 @@ export default function ProfileForm() {
         let lat = locationCoords?.lat ?? null;
         let lon = locationCoords?.lon ?? null;
 
-        const guardian = await createGuardian({
+        await createGuardian({
           user_id: userId,
           latitude: lat,
           longitude: lon,
@@ -207,7 +203,6 @@ export default function ProfileForm() {
         });
 
         setIsGuardian(true);
-        setGuardianId(guardian.id);
         alert("🎉 Congratulations! You are now an active StrayAid Guardian. You'll receive real-time alerts for local rescue emergencies.");
       } else {
         // Deactivate Guardian
