@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Camera,
@@ -11,6 +11,8 @@ import {
   Image as ImageIcon,
   Sparkles,
   Lock,
+  X,
+  RefreshCw,
 } from "lucide-react";
 
 import { supabase } from "../../lib/supabase";
@@ -41,6 +43,12 @@ export default function ProfileForm() {
   const [avatarUrl, setAvatarUrl] = useState("https://i.pravatar.cc/150?img=5");
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [customAvatarInput, setCustomAvatarInput] = useState("");
+  
+  // Custom Profile Camera & Photo Choice States
+  const [isPhotoOptionsOpen, setIsPhotoOptionsOpen] = useState(false);
+  const [profileCameraStream, setProfileCameraStream] = useState<MediaStream | null>(null);
+  const [isProfileCameraOpen, setIsProfileCameraOpen] = useState(false);
+  const profileVideoRef = useRef<HTMLVideoElement>(null);
 
   // App Permissions State
   const [cameraPermission, setCameraPermission] = useState<"prompt" | "granted" | "denied">("prompt");
@@ -181,6 +189,49 @@ export default function ProfileForm() {
     }
   }
 
+  async function handleAvatarCameraClick() {
+    try {
+      // Prompt user for camera permission
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setProfileCameraStream(stream);
+      setIsProfileCameraOpen(true);
+      setCameraPermission("granted");
+      setIsPhotoOptionsOpen(false); // Close choice modal if open
+    } catch (err) {
+      console.error("Camera access failed in profile avatar click:", err);
+      setCameraPermission("denied");
+      // Fallback: show the preset avatar picker
+      setIsPhotoOptionsOpen(false);
+      setShowAvatarPicker(true);
+      alert("Camera access is required to capture a live profile picture. Please enable it in browser settings.");
+    }
+  }
+
+  function handleProfileCapture() {
+    if (!profileVideoRef.current || !profileCameraStream) return;
+
+    const video = profileVideoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 320;
+    canvas.height = video.videoHeight || 320;
+
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg");
+      setAvatarUrl(dataUrl);
+      closeProfileCamera();
+    }
+  }
+
+  function closeProfileCamera() {
+    if (profileCameraStream) {
+      profileCameraStream.getTracks().forEach((track) => track.stop());
+    }
+    setProfileCameraStream(null);
+    setIsProfileCameraOpen(false);
+  }
+
   async function handleToggleGuardianStatus() {
     if (!userId) return;
 
@@ -294,7 +345,7 @@ export default function ProfileForm() {
             />
             <button
               type="button"
-              onClick={() => setShowAvatarPicker((prev) => !prev)}
+              onClick={() => setIsPhotoOptionsOpen(true)}
               className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md hover:bg-emerald-700 transition cursor-pointer"
               title="Update profile picture"
             >
@@ -359,6 +410,99 @@ export default function ProfileForm() {
                     Apply
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* CHOOSE PROFILE PHOTO OPTIONS DIALOG */}
+          {isPhotoOptionsOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+              <div className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 animate-scaleIn text-center space-y-4">
+                <button
+                  onClick={() => setIsPhotoOptionsOpen(false)}
+                  className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
+                >
+                  <X size={18} />
+                </button>
+                
+                <h3 className="text-base font-bold text-slate-900">
+                  Update Profile Picture
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Select how you want to update your community avatar photo.
+                </p>
+
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAvatarCameraClick}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-emerald-100 border border-emerald-600"
+                  >
+                    <Camera size={16} /> Take Photo with Camera
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPhotoOptionsOpen(false);
+                      setShowAvatarPicker(true);
+                    }}
+                    className="w-full py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-xl transition text-xs flex items-center justify-center gap-1.5 cursor-pointer bg-white"
+                  >
+                    <ImageIcon size={16} className="text-slate-400" /> Choose Preset Avatar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* IN-APP CAMERA FOR PROFILE PICTURE VIEWPORT */}
+          {isProfileCameraOpen && profileCameraStream && (
+            <div className="fixed inset-0 z-50 flex flex-col justify-between bg-black p-4 animate-fadeIn">
+              <div className="flex justify-between items-center text-white">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  📷 Snap Profile Photo
+                </span>
+                <button
+                  onClick={closeProfileCamera}
+                  className="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-full transition cursor-pointer"
+                >
+                  <X size={20} className="text-white" />
+                </button>
+              </div>
+
+              {/* Viewfinder Circle Crop */}
+              <div className="flex-1 my-4 flex items-center justify-center overflow-hidden bg-slate-950 relative rounded-3xl border border-slate-800">
+                <div className="w-64 h-64 rounded-full border-4 border-emerald-500 overflow-hidden relative shadow-2xl">
+                  <video
+                    ref={profileVideoRef}
+                    ref={(ref) => {
+                      if (ref && profileCameraStream) {
+                        ref.srcObject = profileCameraStream;
+                      }
+                      // Keep local ref too
+                      (profileVideoRef as any).current = ref;
+                    }}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="absolute top-2 left-0 right-0 text-center">
+                  <span className="text-[10px] text-slate-400 font-semibold bg-slate-900/60 px-2.5 py-1 rounded-full border border-slate-800/50">
+                    Position your face in the circle
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-center items-center pb-6">
+                <button
+                  type="button"
+                  onClick={handleProfileCapture}
+                  className="w-20 h-20 rounded-full bg-white border-8 border-slate-800 flex items-center justify-center cursor-pointer transition transform hover:scale-105 active:scale-95 shadow-2xl"
+                  title="Snap Photo"
+                >
+                  <div className="w-10 h-10 rounded-full bg-emerald-600 animate-pulse" />
+                </button>
               </div>
             </div>
           )}
