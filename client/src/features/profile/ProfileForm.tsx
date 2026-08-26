@@ -12,7 +12,6 @@ import {
   Sparkles,
   Lock,
   X,
-  RefreshCw,
 } from "lucide-react";
 
 import { supabase } from "../../lib/supabase";
@@ -474,7 +473,6 @@ export default function ProfileForm() {
               <div className="flex-1 my-4 flex items-center justify-center overflow-hidden bg-slate-950 relative rounded-3xl border border-slate-800">
                 <div className="w-64 h-64 rounded-full border-4 border-emerald-500 overflow-hidden relative shadow-2xl">
                   <video
-                    ref={profileVideoRef}
                     ref={(ref) => {
                       if (ref && profileCameraStream) {
                         ref.srcObject = profileCameraStream;

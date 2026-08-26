@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Camera, Image as ImageIcon, Check, X, RefreshCw } from "lucide-react";
+import { Camera, Image as ImageIcon, Check, X } from "lucide-react";
 
 interface ImageUploaderProps {
   image: File | null;
@@ -17,7 +17,6 @@ export default function ImageUploader({
   // In-app Camera state
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [locatingError, setLocatingError] = useState<string | null>(null);
 
   function handleImageChange(
     event: React.ChangeEvent<HTMLInputElement>
@@ -28,7 +27,6 @@ export default function ImageUploader({
 
   async function triggerCamera() {
     try {
-      setLocatingError(null);
       // Prompt camera access with rear camera fallback
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
@@ -156,10 +154,10 @@ export default function ImageUploader({
                 if (ref && cameraStream) {
                   ref.srcObject = cameraStream;
                 }
+                (videoRef as any).current = ref;
               }}
               autoPlay
               playsInline
-              ref={videoRef}
               className="w-full h-full object-cover"
             />
           </div>
