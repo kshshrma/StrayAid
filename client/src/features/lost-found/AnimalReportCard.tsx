@@ -21,6 +21,8 @@ export interface LostFoundPet {
   additionalInfo?: string;
   distanceKm?: number;
   contactNumber?: string;
+  reporterId?: string;
+  messages?: Array<{ senderId: string; text: string; timestamp: string; senderName?: string }>;
 }
 
 interface AnimalReportCardProps {
