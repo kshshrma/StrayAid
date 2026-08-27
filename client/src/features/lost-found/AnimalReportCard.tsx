@@ -90,10 +90,13 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
             setParticipants(userIds);
             if (userIds.length > 0 && !selectedParticipantId) {
               setSelectedParticipantId(userIds[0]);
+            } else if (userIds.length === 0) {
+              setSelectedParticipantId(pet.reporterId || null);
             }
           }
         } catch (err) {
           console.error("Failed to load conversation participants:", err);
+          setSelectedParticipantId(pet.reporterId || null);
         }
       }
       fetchParticipants();
@@ -169,7 +172,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
   }
 
   const isOwner = currentUserId === pet.reporterId;
-  const showChat = !isOwner || !!selectedParticipantId;
+  const showChat = true;
 
   return (
     <>
@@ -359,7 +362,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                 </div>
                 
                 {/* Participant Selector for Owner */}
-                {currentUserId === pet.reporterId && participants.length > 0 && (
+                {isOwner && participants.length > 0 && (
                   <select
                     value={selectedParticipantId || ""}
                     onChange={(e) => setSelectedParticipantId(e.target.value)}
