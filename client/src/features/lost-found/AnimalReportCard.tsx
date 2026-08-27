@@ -3,6 +3,7 @@ import { MapPin, Calendar, ShieldAlert, X, MessageSquare, Info } from "lucide-re
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import { useNotification } from "../../context/NotificationProvider";
+import { sendReportMessage } from "../../services/lost-found/lostFoundService";
 
 export interface LostFoundPet {
   id: string;
@@ -35,25 +36,22 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
   const [contactMessage, setContactMessage] = useState("");
   const [contactSuccess, setContactSuccess] = useState(false);
 
-  function handleSendContactMessage(e: React.FormEvent) {
+  async function handleSendContactMessage(e: React.FormEvent) {
     e.preventDefault();
     if (!contactMessage.trim()) return;
 
-    addNotification({
-      category: "lost_found",
-      title: `✉️ Message: ${pet.name ? `${pet.name} (${pet.breed})` : pet.breed}`,
-      message: `"${contactMessage}"`,
-      read: false,
-      imageUrl: pet.image,
-      linkUrl: "/lost-found",
-    });
-
-    setContactSuccess(true);
-    setTimeout(() => {
-      setContactSuccess(false);
-      setContactMessage("");
-      setShowDetails(false);
-    }, 2500);
+    try {
+      await sendReportMessage(pet.id, contactMessage);
+      setContactSuccess(true);
+      setTimeout(() => {
+        setContactSuccess(false);
+        setContactMessage("");
+        setShowDetails(false);
+      }, 2500);
+    } catch (err) {
+      console.error("Failed to send Secure Relay message:", err);
+      alert("Failed to send message. Please try again.");
+    }
   }
 
   return (
