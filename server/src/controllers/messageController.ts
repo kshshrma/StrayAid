@@ -115,8 +115,9 @@ export async function getConversation(req: AuthenticatedRequest, res: Response) 
     // 2. Security/Auth checks (current user must be either the owner or the other participant)
     const isOwner = userId === ownerId;
     const isOtherParticipant = userId === otherUserId;
+    const isTargetingOwner = otherUserId === ownerId;
 
-    if (!isOwner && !isOtherParticipant) {
+    if (!isOwner && !isOtherParticipant && !isTargetingOwner) {
       return res.status(403).json({ success: false, message: "ACCESS DENIED" });
     }
 
