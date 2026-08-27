@@ -152,7 +152,7 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
         date: mock.date,
         description: mock.description,
         additionalInfo: mock.additionalInfo,
-        contactNumber: (mock as any).contactNumber || "",
+        contactNumber: (mock as { contactNumber?: string }).contactNumber || "",
         reporterId: "mock-system-reporter-id",
         messages: [],
       };
@@ -197,8 +197,23 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
     return seededList;
   }
 
-  return reports.map((row: any) => {
-    let metadata: any = {};
+  interface PetMetadata {
+    breed?: string;
+    color?: string;
+    collarColor?: string;
+    uniqueId?: string;
+    name?: string;
+    address?: string;
+    date?: string;
+    description?: string;
+    additionalInfo?: string;
+    contactNumber?: string;
+    reporterId?: string;
+    messages?: Array<{ senderId: string; senderName: string; text: string; timestamp: string }>;
+  }
+
+  return reports.map((row: { id: string; status: string; animal_type?: string; latitude: number; longitude: number; created_at?: string; image_url?: string; ai_advice?: string }) => {
+    let metadata: PetMetadata = {};
     try {
       metadata = JSON.parse(row.ai_advice || "{}");
     } catch (e) {
@@ -227,49 +242,4 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
   });
 }
 
-export async function sendReportMessage(
-  reportId: string,
-  messageText: string
-): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  const senderId = user?.id || "anonymous";
-  const senderName = user?.email?.split("@")[0] || "Someone";
 
-  const { data: report, error: fetchError } = await supabase
-    .from("reports")
-    .select("ai_advice")
-    .eq("id", reportId)
-    .single();
-
-  if (fetchError || !report) {
-    throw new Error("Report not found");
-  }
-
-  let metadata: any = {};
-  try {
-    metadata = JSON.parse(report.ai_advice || "{}");
-  } catch (e) {
-    metadata = {};
-  }
-
-  const messages = metadata.messages || [];
-  messages.push({
-    senderId,
-    senderName,
-    text: messageText,
-    timestamp: new Date().toISOString(),
-  });
-
-  metadata.messages = messages;
-
-  const { error: updateError } = await supabase
-    .from("reports")
-    .update({
-      ai_advice: JSON.stringify(metadata),
-    })
-    .eq("id", reportId);
-
-  if (updateError) {
-    throw updateError;
-  }
-}
