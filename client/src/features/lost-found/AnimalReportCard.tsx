@@ -18,6 +18,7 @@ export interface LostFoundPet {
   name?: string;
   address?: string;
   additionalInfo?: string;
+  distanceKm?: number;
 }
 
 interface AnimalReportCardProps {
