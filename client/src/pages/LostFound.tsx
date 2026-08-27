@@ -6,9 +6,15 @@ import LostAnimalForm from "../features/lost-found/LostAnimalForm";
 import Button from "../components/ui/Button";
 import { getLostFoundPets } from "../services/lost-found/lostFoundService";
 import { calculateDistance } from "../utils/distance";
+import { useNotification } from "../context/NotificationProvider";
 
 export default function LostFound() {
+  const { notifications, markAsRead } = useNotification();
   const [filter, setFilter] = useState<"all" | "lost" | "found">("all");
+
+  const lostFoundNotifications = notifications.filter(
+    (n) => n.category === "lost_found" && !n.read
+  );
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [pets, setPets] = useState<LostFoundPet[]>([]);
@@ -117,6 +123,46 @@ export default function LostFound() {
             Help reunite lost animals with the people who love them.
           </p>
         </div>
+
+        {/* NOTIFICATIONS SECTION */}
+        {lostFoundNotifications.length > 0 && (
+          <div className="space-y-2.5 animate-fadeIn">
+            {lostFoundNotifications.map((notif) => (
+              <div
+                key={notif.id}
+                className="flex items-center justify-between gap-4 p-4 rounded-3xl bg-emerald-50 border border-emerald-100/60 shadow-sm backdrop-blur-xs transition hover:shadow-md animate-slideDown"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {notif.imageUrl ? (
+                    <img
+                      src={notif.imageUrl}
+                      alt={notif.title}
+                      className="w-10 h-10 rounded-2xl object-cover shrink-0 border border-emerald-200/50 shadow-inner"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center text-lg shrink-0">
+                      ✉️
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-black text-slate-800 leading-tight">
+                      {notif.title}
+                    </h4>
+                    <p className="text-[11px] text-slate-600 font-semibold mt-0.5 truncate max-w-lg">
+                      {notif.message}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => markAsRead(notif.id)}
+                  className="shrink-0 text-[10px] text-emerald-800 hover:text-emerald-950 font-bold border border-emerald-200 bg-white hover:bg-emerald-50 px-3 py-1.5 rounded-xl transition cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* 2. PRIMARY ACTION — PLACE THIS FIRST */}
         <div className="pt-2">
