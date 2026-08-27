@@ -15,6 +15,14 @@ export default function LostFound() {
   const lostFoundNotifications = notifications.filter(
     (n) => n.category === "lost_found" && !n.read
   );
+
+  const messageNotifications = lostFoundNotifications.filter(
+    (n) => n.title.includes("✉️")
+  );
+
+  const newReportNotifications = lostFoundNotifications.filter(
+    (n) => !n.title.includes("✉️")
+  );
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [pets, setPets] = useState<LostFoundPet[]>([]);
@@ -124,13 +132,53 @@ export default function LostFound() {
           </p>
         </div>
 
-        {/* NOTIFICATIONS SECTION */}
-        {lostFoundNotifications.length > 0 && (
-          <div className="space-y-2.5 animate-fadeIn">
-            {lostFoundNotifications.map((notif) => (
+        {/* TOP LEFT: NEW REPORT NOTIFICATIONS */}
+        {newReportNotifications.length > 0 && (
+          <div className="fixed top-6 left-6 z-50 w-full max-w-sm space-y-3 pointer-events-auto">
+            {newReportNotifications.map((notif) => (
               <div
                 key={notif.id}
-                className="flex items-center justify-between gap-4 p-4 rounded-3xl bg-emerald-50 border border-emerald-100/60 shadow-sm backdrop-blur-xs transition hover:shadow-md animate-slideDown"
+                className="flex items-center justify-between gap-4 p-4 rounded-3xl bg-red-50 border border-red-100/60 shadow-lg backdrop-blur-md transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 animate-slideRight"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {notif.imageUrl ? (
+                    <img
+                      src={notif.imageUrl}
+                      alt={notif.title}
+                      className="w-10 h-10 rounded-2xl object-cover shrink-0 border border-red-200/50 shadow-inner animate-pulse"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center text-lg shrink-0">
+                      🚨
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-black text-slate-800 leading-tight">
+                      {notif.title}
+                    </h4>
+                    <p className="text-[11px] text-slate-600 font-semibold mt-0.5 truncate max-w-[200px]" title={notif.message}>
+                      {notif.message}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => markAsRead(notif.id)}
+                  className="shrink-0 text-[10px] text-red-800 hover:text-red-950 font-bold border border-red-200 bg-white hover:bg-red-50 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* TOP RIGHT: SECURE RELAY MESSAGE NOTIFICATIONS */}
+        {messageNotifications.length > 0 && (
+          <div className="fixed top-6 right-6 z-50 w-full max-w-sm space-y-3 pointer-events-auto">
+            {messageNotifications.map((notif) => (
+              <div
+                key={notif.id}
+                className="flex items-center justify-between gap-4 p-4 rounded-3xl bg-emerald-50 border border-emerald-100/60 shadow-lg backdrop-blur-md transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 animate-slideLeft"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {notif.imageUrl ? (
@@ -148,14 +196,14 @@ export default function LostFound() {
                     <h4 className="text-xs font-black text-slate-800 leading-tight">
                       {notif.title}
                     </h4>
-                    <p className="text-[11px] text-slate-600 font-semibold mt-0.5 truncate max-w-lg">
+                    <p className="text-[11px] text-slate-600 font-semibold mt-0.5 truncate max-w-[200px]" title={notif.message}>
                       {notif.message}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => markAsRead(notif.id)}
-                  className="shrink-0 text-[10px] text-emerald-800 hover:text-emerald-950 font-bold border border-emerald-200 bg-white hover:bg-emerald-50 px-3 py-1.5 rounded-xl transition cursor-pointer"
+                  className="shrink-0 text-[10px] text-emerald-800 hover:text-emerald-950 font-bold border border-emerald-200 bg-white hover:bg-emerald-50 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
                 >
                   Dismiss
                 </button>
