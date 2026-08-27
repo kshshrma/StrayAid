@@ -31,6 +31,8 @@ interface NotificationContextType {
   deleteNotification: (id: string) => void;
   addNotification: (notification: Omit<AppNotification, "id" | "timestamp">) => void;
   simulateAlert: (type?: "lost_found" | "nearby_report" | "rescue_alert") => void;
+  activeChat: { reportId: string; senderId: string } | null;
+  setActiveChat: React.Dispatch<React.SetStateAction<{ reportId: string; senderId: string } | null>>;
 }
 
 const DEFAULT_NOTIFICATIONS: AppNotification[] = [
@@ -100,6 +102,7 @@ export default function NotificationProvider({
   const [incoming, setIncoming] = useState<IncomingAssignmentData | null>(null);
   const [updating, setUpdating] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>(DEFAULT_NOTIFICATIONS);
+  const [activeChat, setActiveChat] = useState<{ reportId: string; senderId: string } | null>(null);
 
   const addMessageNotification = (msg: any) => {
     const messageText = `"${msg.content}"`;
@@ -378,6 +381,8 @@ export default function NotificationProvider({
         deleteNotification,
         addNotification,
         simulateAlert,
+        activeChat,
+        setActiveChat,
       }}
     >
       {children}
