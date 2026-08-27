@@ -61,6 +61,9 @@ export async function saveLostFoundPet(
   const latitude = parseFloat(latStr.trim()) || 0.0;
   const longitude = parseFloat(lonStr.trim()) || 0.0;
 
+  const { data: { user } } = await supabase.auth.getUser();
+  const reporterId = user?.id || "";
+
   // 3. Serialize metadata to JSON and store in ai_advice
   const metadata = {
     breed: pet.breed,
@@ -73,6 +76,8 @@ export async function saveLostFoundPet(
     description: pet.description || "",
     additionalInfo: pet.additionalInfo || "",
     contactNumber: pet.contactNumber || "",
+    reporterId,
+    messages: [],
   };
 
   const { data, error } = await supabase
@@ -111,6 +116,8 @@ export async function saveLostFoundPet(
     additionalInfo: metadata.additionalInfo,
     name: metadata.name,
     contactNumber: metadata.contactNumber,
+    reporterId: metadata.reporterId || "",
+    messages: metadata.messages || [],
   };
 }
 
@@ -146,6 +153,8 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
         description: mock.description,
         additionalInfo: mock.additionalInfo,
         contactNumber: (mock as any).contactNumber || "",
+        reporterId: "mock-system-reporter-id",
+        messages: [],
       };
 
       const { data, error: insertError } = await supabase
@@ -180,6 +189,8 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
           additionalInfo: metadata.additionalInfo,
           name: metadata.name,
           contactNumber: metadata.contactNumber,
+          reporterId: metadata.reporterId,
+          messages: metadata.messages,
         });
       }
     }
@@ -210,6 +221,55 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
       additionalInfo: metadata.additionalInfo || "",
       name: metadata.name || "",
       contactNumber: metadata.contactNumber || "",
+      reporterId: metadata.reporterId || "",
+      messages: metadata.messages || [],
     };
   });
+}
+
+export async function sendReportMessage(
+  reportId: string,
+  messageText: string
+): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const senderId = user?.id || "anonymous";
+  const senderName = user?.email?.split("@")[0] || "Someone";
+
+  const { data: report, error: fetchError } = await supabase
+    .from("reports")
+    .select("ai_advice")
+    .eq("id", reportId)
+    .single();
+
+  if (fetchError || !report) {
+    throw new Error("Report not found");
+  }
+
+  let metadata: any = {};
+  try {
+    metadata = JSON.parse(report.ai_advice || "{}");
+  } catch (e) {
+    metadata = {};
+  }
+
+  const messages = metadata.messages || [];
+  messages.push({
+    senderId,
+    senderName,
+    text: messageText,
+    timestamp: new Date().toISOString(),
+  });
+
+  metadata.messages = messages;
+
+  const { error: updateError } = await supabase
+    .from("reports")
+    .update({
+      ai_advice: JSON.stringify(metadata),
+    })
+    .eq("id", reportId);
+
+  if (updateError) {
+    throw updateError;
+  }
 }
