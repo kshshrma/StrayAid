@@ -19,6 +19,7 @@ export interface LostFoundPet {
   address?: string;
   additionalInfo?: string;
   distanceKm?: number;
+  contactNumber?: string;
 }
 
 interface AnimalReportCardProps {
@@ -169,6 +170,12 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Unique Identifiers</span>
                     <span className="text-slate-800 font-bold">{pet.uniqueId}</span>
+                  </div>
+                )}
+                {pet.contactNumber && (
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Contact Number</span>
+                    <span className="text-slate-800 font-bold">{pet.contactNumber}</span>
                   </div>
                 )}
               </div>
