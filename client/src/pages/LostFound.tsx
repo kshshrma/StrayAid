@@ -1,70 +1,105 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Heart, Search, PlusCircle } from "lucide-react";
 import AnimalReportCard, { type LostFoundPet } from "../features/lost-found/AnimalReportCard";
 import LostFoundFilters from "../features/lost-found/LostFoundFilters";
 import LostAnimalForm from "../features/lost-found/LostAnimalForm";
 import Button from "../components/ui/Button";
+import { getLostFoundPets } from "../services/lost-found/lostFoundService";
+import { calculateDistance } from "../utils/distance";
 
 export default function LostFound() {
   const [filter, setFilter] = useState<"all" | "lost" | "found">("all");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [pets, setPets] = useState<LostFoundPet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
 
-  // Realistic mock data incorporating optional details
-  const [pets, setPets] = useState<LostFoundPet[]>([
-    {
-      id: "lf-1",
-      type: "lost",
-      animal: "Dog",
-      breed: "Golden Retriever",
-      name: "Max",
-      color: "Golden / Light Brown",
-      collarColor: "Red collar with a brass tag",
-      uniqueId: "Dark spot on left hind leg, floppy ears",
-      location: "28.627311, 77.372545",
-      address: "Near Block B Park, Sector 62, Noida",
-      date: "2026-08-22",
-      description: "Super friendly, responds to 'Max'. Went missing during evening walk.",
-      image: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=400",
-      additionalInfo: "Microchipped, wearing a red collar. Please contact relay if seen.",
-    },
-    {
-      id: "lf-2",
-      type: "found",
-      animal: "Cat",
-      breed: "Persian Cat",
-      color: "Fluffy White",
-      uniqueId: "Blue eyes, bushy tail",
-      location: "28.635901, 77.359211",
-      address: "Staircase of Building C, Indirapuram, Ghaziabad",
-      date: "2026-08-23",
-      description: "Calm white Persian cat found resting. Safe with security.",
-      image: "https://images.unsplash.com/photo-1618826411640-d6df44dd3f7a?auto=format&fit=crop&q=80&w=400",
-      additionalInfo: "No collar, very clean, likely a house pet.",
-    },
-    {
-      id: "lf-3",
-      type: "lost",
-      animal: "Dog",
-      breed: "Beagle",
-      name: "Bella",
-      color: "Tri-color (Black, Brown, White)",
-      collarColor: "Blue nylon belt",
-      uniqueId: "Brown spots on white stomach patches",
-      location: "28.583210, 77.316890",
-      address: "Near Sector 15 Metro Station, Noida",
-      date: "2026-08-21",
-      description: "Very energetic female Beagle. Friendly but easily scared by loud noises.",
-      image: "https://images.unsplash.com/photo-1534361960057-19889db9621e?auto=format&fit=crop&q=80&w=400",
-      additionalInfo: "Answers to 'Bella'. Wearing a blue collar without tag.",
-    },
-  ]);
+  // Get browser coordinates on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCoords({
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+          });
+        },
+        (err) => {
+          console.error("Geolocation error fetching location for sorting:", err);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  }, []);
+
+  // Fetch reports and apply location-based prioritization sorting
+  useEffect(() => {
+    async function fetchReports() {
+      try {
+        setLoading(true);
+        const data = await getLostFoundPets();
+
+        // If user coordinates exist, map distance Km and sort by distance ascending
+        if (coords) {
+          const petsWithDistance = data.map((pet) => {
+            const [latStr, lonStr] = pet.location.split(",");
+            const petLat = parseFloat(latStr.trim());
+            const petLon = parseFloat(lonStr.trim());
+            
+            let distanceKm = 0;
+            if (!isNaN(petLat) && !isNaN(petLon)) {
+              distanceKm = calculateDistance(coords.lat, coords.lon, petLat, petLon);
+            }
+            
+            return {
+              ...pet,
+              distanceKm: parseFloat(distanceKm.toFixed(2)),
+            };
+          });
+
+          // Nearest location gets first priority (sort ascending)
+          petsWithDistance.sort((a, b) => (a.distanceKm || 0) - (b.distanceKm || 0));
+          setPets(petsWithDistance);
+        } else {
+          // Sort by date descending (newest first)
+          data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          setPets(data);
+        }
+      } catch (err) {
+        console.error("Error loading Lost & Found reports:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchReports();
+  }, [coords]);
 
   const filteredPets = filter === "all" ? pets : pets.filter((pet) => pet.type === filter);
 
   function handleFormSubmitSuccess(newReport: LostFoundPet) {
-    // Prepend new report
-    setPets((prev) => [newReport, ...prev]);
+    let petWithDistance = { ...newReport };
+    if (coords) {
+      const [latStr, lonStr] = newReport.location.split(",");
+      const petLat = parseFloat(latStr.trim());
+      const petLon = parseFloat(lonStr.trim());
+      let distanceKm = 0;
+      if (!isNaN(petLat) && !isNaN(petLon)) {
+        distanceKm = calculateDistance(coords.lat, coords.lon, petLat, petLon);
+      }
+      petWithDistance.distanceKm = parseFloat(distanceKm.toFixed(2));
+    }
+
+    setPets((prev) => {
+      const updatedList = [petWithDistance, ...prev];
+      if (coords) {
+        // Nearest location gets first priority (sort ascending)
+        updatedList.sort((a, b) => (a.distanceKm || 0) - (b.distanceKm || 0));
+      }
+      return updatedList;
+    });
+
     setIsFormOpen(false);
     setShowSuccessPopup(true);
   }
@@ -100,7 +135,12 @@ export default function LostFound() {
 
         {/* 4. ANIMAL REPORTS GRID */}
         <div>
-          {filteredPets.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 bg-white rounded-3xl border border-slate-100 shadow-sm animate-fadeIn">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-700 border-t-transparent" />
+              <p className="text-xs font-semibold text-slate-500">Retrieving nearby sightings...</p>
+            </div>
+          ) : filteredPets.length === 0 ? (
             /* 9. EMPTY STATES */
             <div className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-150 shadow-xs max-w-lg mx-auto space-y-3.5 my-6 animate-fadeIn">
               <div className="mx-auto w-12 h-12 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center text-lg">
