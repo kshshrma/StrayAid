@@ -57,6 +57,8 @@ export default function ProfileForm() {
 
   // Guardian & Notification State
   const [isGuardian, setIsGuardian] = useState(false);
+  const [guardianAvailable, setGuardianAvailable] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [notifyNearbyRescues, setNotifyNearbyRescues] = useState(true);
 
   const [loading, setLoading] = useState(true);
@@ -103,6 +105,7 @@ export default function ProfileForm() {
           const guardian = await getGuardian(user.id);
           if (guardian) {
             setIsGuardian(true);
+            setGuardianAvailable(guardian.available);
           }
         } catch (gErr) {
           console.log("Guardian profile not created yet:", gErr);
@@ -237,10 +240,9 @@ export default function ProfileForm() {
 
     try {
       setGuardianLoading(true);
-      const newGuardianStatus = !isGuardian;
 
-      if (newGuardianStatus) {
-        // Activate Guardian
+      if (!isGuardian) {
+        // Registering as a Guardian for the first time
         let lat = locationCoords?.lat ?? null;
         let lon = locationCoords?.lon ?? null;
 
@@ -254,17 +256,22 @@ export default function ProfileForm() {
         });
 
         setIsGuardian(true);
-        alert("🎉 Congratulations! You are now an active StrayAid Guardian. You'll receive real-time alerts for local rescue emergencies.");
+        setGuardianAvailable(true);
+        setShowSuccessModal(true);
       } else {
-        // Deactivate Guardian
-        if (userId) {
-          await updateGuardian(userId, { available: false });
+        // Toggling availability (Guardian Mode ON/OFF)
+        const nextAvailable = !guardianAvailable;
+        await updateGuardian(userId, { available: nextAvailable });
+        setGuardianAvailable(nextAvailable);
+        
+        if (nextAvailable) {
+          setShowSuccessModal(true);
+        } else {
+          alert("Guardian Mode turned OFF. You will not receive nearby rescue notifications.");
         }
-        setIsGuardian(false);
-        alert("Guardian status set to inactive.");
       }
     } catch (error: any) {
-      console.error("Failed to toggle guardian status:", error);
+      console.error("Failed to update guardian status:", error);
       alert(error?.message || "Failed to update Guardian status.");
     } finally {
       setGuardianLoading(false);
@@ -670,40 +677,48 @@ export default function ProfileForm() {
           </div>
         </div>
 
-        {/* BECOME A GUARDIAN SECTION */}
+        {/* GUARDIAN MODE SETTINGS */}
         <div className="space-y-4 pt-4 border-t border-slate-100">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <ShieldAlert size={16} className="text-emerald-600" /> Become a Guardian
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+              <ShieldAlert size={16} className="text-emerald-600" /> Guardian Mode Settings
             </h3>
             {isGuardian && (
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-800 border border-emerald-200">
-                ✓ Active Guardian
+              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold border ${
+                guardianAvailable
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                  : "bg-slate-100 text-slate-600 border-slate-200"
+              }`}>
+                Guardian Mode: {guardianAvailable ? "ON" : "OFF"}
               </span>
             )}
           </div>
 
-          {/* Educational Feature Description */}
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
-            <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
-              <Sparkles size={16} className="text-emerald-600 shrink-0" />
-              What is the Guardian Feature?
+          {/* Educational Description (only when not registered yet) */}
+          {!isGuardian && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                <Sparkles size={16} className="text-emerald-600 shrink-0" />
+                What is Guardian Mode?
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed">
+                StrayAid Guardians are local animal heroes and volunteers willing to receive <strong>real-time notifications</strong> about nearby rescue dispatches. Enabling Guardian Mode registers you to help when you are available. You are never obligated to accept every rescue!
+              </p>
             </div>
-            <p className="text-xs text-slate-700 leading-relaxed">
-              StrayAid Guardians are local animal heroes and verified community volunteers who receive <strong>real-time emergency rescue requests</strong> for injured or vulnerable stray animals nearby. As a Guardian, you help verify reports, accept rescue dispatches, and save lives in your city!
-            </p>
-          </div>
+          )}
 
-          {/* Become a Guardian Switch */}
+          {/* Guardian Mode Activation Toggle */}
           <div className="flex items-center justify-between rounded-2xl border border-slate-200 p-4 bg-white shadow-xs">
             <div className="pr-4">
               <h4 className="text-xs font-bold text-slate-900">
-                Guardian Status
+                {isGuardian ? "Active Status" : "Become a Guardian"}
               </h4>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {isGuardian
-                  ? "You are registered as an active Guardian rescuer."
-                  : "Enable to register as a local Guardian volunteer."}
+                  ? guardianAvailable
+                    ? "Guardian Mode is ON. You are willing to receive local rescue alerts."
+                    : "Guardian Mode is OFF. You will not receive local rescue alerts."
+                  : "Register as a volunteer willing to help local strays."}
               </p>
             </div>
 
@@ -712,12 +727,12 @@ export default function ProfileForm() {
               disabled={guardianLoading}
               onClick={handleToggleGuardianStatus}
               className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                isGuardian ? "bg-emerald-600" : "bg-slate-300"
+                (isGuardian ? guardianAvailable : isGuardian) ? "bg-emerald-600" : "bg-slate-300"
               } ${guardianLoading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               <span
                 className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                  isGuardian ? "left-5.5" : "left-0.5"
+                  (isGuardian ? guardianAvailable : isGuardian) ? "left-5.5" : "left-0.5"
                 }`}
               />
             </button>
@@ -768,6 +783,34 @@ export default function ProfileForm() {
         </div>
 
       </div>
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-slate-100 text-center space-y-6 animate-scaleIn">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-3xl">
+              🐾
+            </div>
+            
+            <h2 className="text-2xl font-extrabold text-slate-900 font-sans">
+              You're now a Guardian
+            </h2>
+            
+            <p className="text-sm text-slate-600 leading-relaxed font-sans">
+              You've chosen to help animals in need around you. When a rescue request is reported nearby, we'll let you know. You can decide whether you're available to help.
+            </p>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setShowSuccessModal(false);
+              }}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition text-sm shadow-md shadow-emerald-100 border border-emerald-600 cursor-pointer font-sans"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
