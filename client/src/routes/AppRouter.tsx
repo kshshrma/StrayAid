@@ -1,6 +1,8 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import NotificationProvider from "../context/NotificationProvider";
 import NotificationDrawer from "../components/notifications/NotificationDrawer";
+import { supabase } from "../lib/supabase";
 
 import BottomNav from "../components/layout/BottomNav";
 
@@ -28,63 +30,111 @@ import Connect from "../pages/Connect";
 import Rewards from "../pages/Rewards";
 
 export default function AppRouter() {
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
+          <p className="text-sm font-semibold text-slate-500 font-sans">Loading StrayAid...</p>
+        </div>
+      </div>
+    );
+  }
+
+  function ProtectedRoute({ children }: { children: React.ReactNode }) {
+    if (!session) {
+      return <Navigate to="/login" replace />;
+    }
+    return <>{children}</>;
+  }
+
   return (
     <NotificationProvider>
       <BrowserRouter>
-        <NotificationDrawer />
+        {session && <NotificationDrawer />}
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
 
-          <Route path="/map" element={<Map />} />
+          <Route path="/map" element={<ProtectedRoute><Map /></ProtectedRoute>} />
 
-          <Route path="/lost-found" element={<LostFound />} />
+          <Route path="/lost-found" element={<ProtectedRoute><LostFound /></ProtectedRoute>} />
 
-          <Route path="/connect" element={<Connect />} />
+          <Route path="/connect" element={<ProtectedRoute><Connect /></ProtectedRoute>} />
 
-          <Route path="/rewards" element={<Rewards />} />
+          <Route path="/rewards" element={<ProtectedRoute><Rewards /></ProtectedRoute>} />
 
-          <Route path="/report" element={<Report />} />
+          <Route path="/report" element={<ProtectedRoute><Report /></ProtectedRoute>} />
 
-          <Route path="/community" element={<Community />} />
+          <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
 
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
           <Route path="/test" element={<TestConnection />} />
           <Route path="/test-auth" element={<TestAuth />} />
-          <Route path="/register" element={<Register />} />
+          
+          <Route 
+            path="/register" 
+            element={session ? <Navigate to="/" replace /> : <Register />} 
+          />
 
-          <Route path="/login" element={<Login />} />
+          <Route 
+            path="/login" 
+            element={session ? <Navigate to="/" replace /> : <Login />} 
+          />
 
-          <Route path="/reports" element={<ReportsFeed />} />
+          <Route path="/reports" element={<ProtectedRoute><ReportsFeed /></ProtectedRoute>} />
 
           <Route
             path="/reports/immediate"
-            element={<ImmediateRescuesPage />}
+            element={<ProtectedRoute><ImmediateRescuesPage /></ProtectedRoute>}
           />
 
           <Route
             path="/reports/nearby"
-            element={<NearbyReportsPage />}
+            element={<ProtectedRoute><NearbyReportsPage /></ProtectedRoute>}
           />
 
           <Route
             path="/reports/:id"
-            element={<ReportDetails />}
+            element={<ProtectedRoute><ReportDetails /></ProtectedRoute>}
           />
 
           <Route
             path="/guardian"
-            element={<Guardian  />}
+            element={<ProtectedRoute><Guardian /></ProtectedRoute>}
           />
 
           <Route
             path="/admin"
-            element={<AdminDashboard />}
+            element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>}
           />
           
         </Routes>
 
-        <BottomNav />
+        {session && <BottomNav />}
       </BrowserRouter>
     </NotificationProvider>
   );

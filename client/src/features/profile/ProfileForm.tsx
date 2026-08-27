@@ -12,6 +12,7 @@ import {
   Sparkles,
   Lock,
   X,
+  LogOut,
 } from "lucide-react";
 
 import { supabase } from "../../lib/supabase";
@@ -312,6 +313,21 @@ export default function ProfileForm() {
     } catch (error: any) {
       console.error("Profile save error:", error);
       alert(error?.message || "Failed to save profile.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSignOut() {
+    try {
+      setSaving(true);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      alert("Signed out successfully!");
+      navigate("/login");
+    } catch (error: any) {
+      console.error("Sign out error:", error);
+      alert(error?.message || "Failed to sign out.");
     } finally {
       setSaving(false);
     }
@@ -738,6 +754,17 @@ export default function ProfileForm() {
             </button>
           </div>
 
+        </div>
+
+        {/* Sign Out Section */}
+        <div className="pt-4 border-t border-slate-150 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="w-full rounded-xl border border-rose-200 bg-rose-50/50 py-3 text-sm font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <LogOut size={16} /> Sign Out
+          </button>
         </div>
 
       </div>
