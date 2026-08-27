@@ -17,5 +17,8 @@ export interface AppNotification {
     reportId?: string;
     lostFoundId?: string;
     severity?: string;
+    messageId?: string;
+    senderId?: string;
+    content?: string;
   };
 }
