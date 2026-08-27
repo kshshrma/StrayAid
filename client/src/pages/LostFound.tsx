@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Heart, Search, PlusCircle, Bell, MessageSquare, X } from "lucide-react";
+import { Heart, Search, PlusCircle, X } from "lucide-react";
 import AnimalReportCard, { type LostFoundPet } from "../features/lost-found/AnimalReportCard";
 import LostFoundFilters from "../features/lost-found/LostFoundFilters";
 import LostAnimalForm from "../features/lost-found/LostAnimalForm";
@@ -10,7 +10,7 @@ import { useNotification } from "../context/NotificationProvider";
 import { supabase } from "../lib/supabase";
 
 export default function LostFound() {
-  const { notifications, markAsRead, addNotification } = useNotification();
+  const { notifications, markAsRead, addNotification, setActiveChat } = useNotification();
   const [filter, setFilter] = useState<"all" | "lost" | "found">("all");
 
   const lostFoundNotifications = notifications.filter(
@@ -215,17 +215,17 @@ export default function LostFound() {
           </p>
         </div>
 
-        {/* TOP LEFT: BELL ICON INDICATOR */}
+        {/* TOP LEFT: LOST & FOUND INDICATOR */}
         <div className="fixed top-6 left-6 z-50 pointer-events-auto flex flex-col items-start gap-2">
           <button
             onClick={() => setShowLeftDropdown(!showLeftDropdown)}
-            className={`relative p-3.5 rounded-full bg-white border border-slate-100 shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center cursor-pointer group ${
+            className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${
               newReportNotifications.length > 0 ? "animate-bounce" : ""
             }`}
           >
-            <Bell className="text-red-500 group-hover:scale-110 transition-transform" size={20} />
+            <span>🐾 Lost & Found</span>
             {newReportNotifications.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-sm animate-pulse">
+              <span className="bg-red-500 text-white font-black px-2 py-0.5 rounded-full text-[9px] min-w-5 text-center">
                 {newReportNotifications.length}
               </span>
             )}
@@ -242,7 +242,24 @@ export default function LostFound() {
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                 {newReportNotifications.map((notif) => (
                   <div key={notif.id} className="p-2.5 rounded-2xl bg-red-50/50 border border-red-100/50 flex items-start gap-2.5 justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
+                    <button
+                      onClick={() => {
+                        markAsRead(notif.id);
+                        if (newReportNotifications.length <= 1) setShowLeftDropdown(false);
+                        // Scroll to the card
+                        if (notif.meta?.reportId) {
+                          const element = document.getElementById(`report-card-${notif.meta.reportId}`);
+                          if (element) {
+                            element.scrollIntoView({ behavior: "smooth", block: "center" });
+                            element.classList.add("ring-4", "ring-red-500/20");
+                            setTimeout(() => {
+                              element.classList.remove("ring-4", "ring-red-500/20");
+                            }, 3000);
+                          }
+                        }
+                      }}
+                      className="flex items-center gap-2 min-w-0 text-left hover:opacity-80 transition cursor-pointer flex-1"
+                    >
                       {notif.imageUrl && (
                         <img src={notif.imageUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-100" />
                       )}
@@ -250,13 +267,13 @@ export default function LostFound() {
                         <h5 className="text-[11px] font-bold text-slate-800 truncate">{notif.title}</h5>
                         <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
                       </div>
-                    </div>
+                    </button>
                     <button
                       onClick={() => {
                         markAsRead(notif.id);
                         if (newReportNotifications.length <= 1) setShowLeftDropdown(false);
                       }}
-                      className="text-[9px] text-red-600 hover:text-red-800 font-extrabold cursor-pointer shrink-0 ml-1.5"
+                      className="text-[9px] text-red-600 hover:text-red-800 font-extrabold cursor-pointer shrink-0 ml-1.5 self-center"
                     >
                       Dismiss
                     </button>
@@ -267,17 +284,17 @@ export default function LostFound() {
           )}
         </div>
 
-        {/* TOP RIGHT: SECURE RELAY MESSAGE ICON INDICATOR */}
+        {/* TOP RIGHT: SECURE RELAY MESSAGE INDICATOR */}
         <div className="fixed top-6 right-6 z-50 pointer-events-auto flex flex-col items-end gap-2">
           <button
             onClick={() => setShowRightDropdown(!showRightDropdown)}
-            className={`relative p-3.5 rounded-full bg-white border border-slate-100 shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center cursor-pointer group ${
+            className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${
               messageNotifications.length > 0 ? "animate-pulse" : ""
             }`}
           >
-            <MessageSquare className="text-emerald-600 group-hover:scale-110 transition-transform" size={20} />
+            <span>💬 Secure Messages</span>
             {messageNotifications.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-sm animate-pulse">
+              <span className="bg-green-700 text-white font-black px-2 py-0.5 rounded-full text-[9px] min-w-5 text-center">
                 {messageNotifications.length}
               </span>
             )}
@@ -294,7 +311,27 @@ export default function LostFound() {
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                 {messageNotifications.map((notif) => (
                   <div key={notif.id} className="p-2.5 rounded-2xl bg-emerald-50/50 border border-emerald-100/50 flex items-start gap-2.5 justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
+                    <button
+                      onClick={() => {
+                        markAsRead(notif.id);
+                        if (messageNotifications.length <= 1) setShowRightDropdown(false);
+                        
+                        if (notif.meta?.reportId && notif.meta?.senderId) {
+                          // Set active chat to trigger details modal and chat thread in AnimalReportCard
+                          setActiveChat({
+                            reportId: notif.meta.reportId,
+                            senderId: notif.meta.senderId,
+                          });
+                          
+                          // Scroll to the card as well
+                          const element = document.getElementById(`report-card-${notif.meta.reportId}`);
+                          if (element) {
+                            element.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }
+                        }
+                      }}
+                      className="flex items-center gap-2 min-w-0 text-left hover:opacity-80 transition cursor-pointer flex-1"
+                    >
                       {notif.imageUrl && (
                         <img src={notif.imageUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-100" />
                       )}
@@ -302,13 +339,13 @@ export default function LostFound() {
                         <h5 className="text-[11px] font-bold text-slate-800 truncate">{notif.title}</h5>
                         <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
                       </div>
-                    </div>
+                    </button>
                     <button
                       onClick={() => {
                         markAsRead(notif.id);
                         if (messageNotifications.length <= 1) setShowRightDropdown(false);
                       }}
-                      className="text-[9px] text-emerald-700 hover:text-emerald-950 font-extrabold cursor-pointer shrink-0 ml-1.5"
+                      className="text-[9px] text-emerald-700 hover:text-emerald-950 font-extrabold cursor-pointer shrink-0 ml-1.5 self-center"
                     >
                       Dismiss
                     </button>
@@ -363,7 +400,7 @@ export default function LostFound() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 animate-fadeIn">
               {filteredPets.map((pet) => (
-                <div key={pet.id} className="h-full">
+                <div key={pet.id} id={`report-card-${pet.id}`} className="h-full transition-all duration-300 rounded-3xl">
                   <AnimalReportCard pet={pet} />
                 </div>
               ))}
