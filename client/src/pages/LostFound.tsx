@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Heart, Search, PlusCircle } from "lucide-react";
+import { Heart, Search, PlusCircle, Bell, MessageSquare, X } from "lucide-react";
 import AnimalReportCard, { type LostFoundPet } from "../features/lost-found/AnimalReportCard";
 import LostFoundFilters from "../features/lost-found/LostFoundFilters";
 import LostAnimalForm from "../features/lost-found/LostAnimalForm";
@@ -23,6 +23,8 @@ export default function LostFound() {
   const newReportNotifications = lostFoundNotifications.filter(
     (n) => !n.title.includes("✉️")
   );
+  const [showLeftDropdown, setShowLeftDropdown] = useState(false);
+  const [showRightDropdown, setShowRightDropdown] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [pets, setPets] = useState<LostFoundPet[]>([]);
@@ -132,85 +134,109 @@ export default function LostFound() {
           </p>
         </div>
 
-        {/* TOP LEFT: NEW REPORT NOTIFICATIONS */}
-        {newReportNotifications.length > 0 && (
-          <div className="fixed top-6 left-6 z-50 w-full max-w-sm space-y-3 pointer-events-auto">
-            {newReportNotifications.map((notif) => (
-              <div
-                key={notif.id}
-                className="flex items-center justify-between gap-4 p-4 rounded-3xl bg-red-50 border border-red-100/60 shadow-lg backdrop-blur-md transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 animate-slideRight"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {notif.imageUrl ? (
-                    <img
-                      src={notif.imageUrl}
-                      alt={notif.title}
-                      className="w-10 h-10 rounded-2xl object-cover shrink-0 border border-red-200/50 shadow-inner animate-pulse"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center text-lg shrink-0">
-                      🚨
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <h4 className="text-xs font-black text-slate-800 leading-tight">
-                      {notif.title}
-                    </h4>
-                    <p className="text-[11px] text-slate-600 font-semibold mt-0.5 truncate max-w-[200px]" title={notif.message}>
-                      {notif.message}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => markAsRead(notif.id)}
-                  className="shrink-0 text-[10px] text-red-800 hover:text-red-950 font-bold border border-red-200 bg-white hover:bg-red-50 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
-                >
-                  Dismiss
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* TOP LEFT: BELL ICON INDICATOR */}
+        <div className="fixed top-6 left-6 z-50 pointer-events-auto flex flex-col items-start gap-2">
+          <button
+            onClick={() => setShowLeftDropdown(!showLeftDropdown)}
+            className={`relative p-3.5 rounded-full bg-white border border-slate-100 shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center cursor-pointer group ${
+              newReportNotifications.length > 0 ? "animate-bounce" : ""
+            }`}
+          >
+            <Bell className="text-red-500 group-hover:scale-110 transition-transform" size={20} />
+            {newReportNotifications.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-sm animate-pulse">
+                {newReportNotifications.length}
+              </span>
+            )}
+          </button>
 
-        {/* TOP RIGHT: SECURE RELAY MESSAGE NOTIFICATIONS */}
-        {messageNotifications.length > 0 && (
-          <div className="fixed top-6 right-6 z-50 w-full max-w-sm space-y-3 pointer-events-auto">
-            {messageNotifications.map((notif) => (
-              <div
-                key={notif.id}
-                className="flex items-center justify-between gap-4 p-4 rounded-3xl bg-emerald-50 border border-emerald-100/60 shadow-lg backdrop-blur-md transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 animate-slideLeft"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {notif.imageUrl ? (
-                    <img
-                      src={notif.imageUrl}
-                      alt={notif.title}
-                      className="w-10 h-10 rounded-2xl object-cover shrink-0 border border-emerald-200/50 shadow-inner"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center text-lg shrink-0">
-                      ✉️
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <h4 className="text-xs font-black text-slate-800 leading-tight">
-                      {notif.title}
-                    </h4>
-                    <p className="text-[11px] text-slate-600 font-semibold mt-0.5 truncate max-w-[200px]" title={notif.message}>
-                      {notif.message}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => markAsRead(notif.id)}
-                  className="shrink-0 text-[10px] text-emerald-800 hover:text-emerald-950 font-bold border border-emerald-200 bg-white hover:bg-emerald-50 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
-                >
-                  Dismiss
+          {showLeftDropdown && newReportNotifications.length > 0 && (
+            <div className="w-80 rounded-3xl bg-white/95 border border-slate-100 shadow-2xl p-4 space-y-2.5 backdrop-blur-md animate-slideRight">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">New Reports</span>
+                <button onClick={() => setShowLeftDropdown(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <X size={12} />
                 </button>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {newReportNotifications.map((notif) => (
+                  <div key={notif.id} className="p-2.5 rounded-2xl bg-red-50/50 border border-red-100/50 flex items-start gap-2.5 justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {notif.imageUrl && (
+                        <img src={notif.imageUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-100" />
+                      )}
+                      <div className="min-w-0">
+                        <h5 className="text-[11px] font-bold text-slate-800 truncate">{notif.title}</h5>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        markAsRead(notif.id);
+                        if (newReportNotifications.length <= 1) setShowLeftDropdown(false);
+                      }}
+                      className="text-[9px] text-red-600 hover:text-red-800 font-extrabold cursor-pointer shrink-0 ml-1.5"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* TOP RIGHT: SECURE RELAY MESSAGE ICON INDICATOR */}
+        <div className="fixed top-6 right-6 z-50 pointer-events-auto flex flex-col items-end gap-2">
+          <button
+            onClick={() => setShowRightDropdown(!showRightDropdown)}
+            className={`relative p-3.5 rounded-full bg-white border border-slate-100 shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center cursor-pointer group ${
+              messageNotifications.length > 0 ? "animate-pulse" : ""
+            }`}
+          >
+            <MessageSquare className="text-emerald-600 group-hover:scale-110 transition-transform" size={20} />
+            {messageNotifications.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-sm animate-pulse">
+                {messageNotifications.length}
+              </span>
+            )}
+          </button>
+
+          {showRightDropdown && messageNotifications.length > 0 && (
+            <div className="w-80 rounded-3xl bg-white/95 border border-slate-100 shadow-2xl p-4 space-y-2.5 backdrop-blur-md animate-slideLeft">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Messages</span>
+                <button onClick={() => setShowRightDropdown(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <X size={12} />
+                </button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {messageNotifications.map((notif) => (
+                  <div key={notif.id} className="p-2.5 rounded-2xl bg-emerald-50/50 border border-emerald-100/50 flex items-start gap-2.5 justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {notif.imageUrl && (
+                        <img src={notif.imageUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-100" />
+                      )}
+                      <div className="min-w-0">
+                        <h5 className="text-[11px] font-bold text-slate-800 truncate">{notif.title}</h5>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        markAsRead(notif.id);
+                        if (messageNotifications.length <= 1) setShowRightDropdown(false);
+                      }}
+                      className="text-[9px] text-emerald-700 hover:text-emerald-950 font-extrabold cursor-pointer shrink-0 ml-1.5"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* 2. PRIMARY ACTION — PLACE THIS FIRST */}
         <div className="pt-2">
