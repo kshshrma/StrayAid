@@ -163,3 +163,20 @@ export async function getConversations(req: AuthenticatedRequest, res: Response)
     return res.status(500).json({ success: false, message: err.message || "Failed to fetch conversations" });
   }
 }
+
+// GET /api/messages/unread-messages
+export async function getUnreadMessages(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const messages = await messageService.readMessages();
+    const unread = messages.filter((m) => m.recipientId === userId && !m.isRead);
+    return res.json({ success: true, messages: unread });
+  } catch (err: any) {
+    console.error("[MessageController] Error fetching unread messages:", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to fetch unread messages" });
+  }
+}
