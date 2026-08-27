@@ -2,7 +2,6 @@ import { useState } from "react";
 import { MapPin, Calendar, ShieldAlert, X, MessageSquare, Info } from "lucide-react";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
-import { useNotification } from "../../context/NotificationProvider";
 import { sendReportMessage } from "../../services/lost-found/lostFoundService";
 
 export interface LostFoundPet {
@@ -31,7 +30,6 @@ interface AnimalReportCardProps {
 }
 
 export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
-  const { addNotification } = useNotification();
   const [showDetails, setShowDetails] = useState(false);
   const [contactMessage, setContactMessage] = useState("");
   const [contactSuccess, setContactSuccess] = useState(false);
