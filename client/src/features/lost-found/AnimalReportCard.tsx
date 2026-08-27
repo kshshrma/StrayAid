@@ -2,6 +2,7 @@ import { useState } from "react";
 import { MapPin, Calendar, ShieldAlert, X, MessageSquare, Info } from "lucide-react";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
+import { useNotification } from "../../context/NotificationProvider";
 
 export interface LostFoundPet {
   id: string;
@@ -27,6 +28,7 @@ interface AnimalReportCardProps {
 }
 
 export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
+  const { addNotification } = useNotification();
   const [showDetails, setShowDetails] = useState(false);
   const [contactMessage, setContactMessage] = useState("");
   const [contactSuccess, setContactSuccess] = useState(false);
@@ -34,6 +36,16 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
   function handleSendContactMessage(e: React.FormEvent) {
     e.preventDefault();
     if (!contactMessage.trim()) return;
+
+    addNotification({
+      category: "lost_found",
+      title: `✉️ Message: ${pet.name ? `${pet.name} (${pet.breed})` : pet.breed}`,
+      message: `"${contactMessage}"`,
+      read: false,
+      imageUrl: pet.image,
+      linkUrl: "/lost-found",
+    });
+
     setContactSuccess(true);
     setTimeout(() => {
       setContactSuccess(false);
