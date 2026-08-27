@@ -17,6 +17,7 @@ const MOCK_SEEDS = [
     description: "Super friendly, responds to 'Max'. Went missing during evening walk.",
     image: "https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=400",
     additionalInfo: "Microchipped, wearing a red collar. Please contact relay if seen.",
+    contactNumber: "+91 98765 43210",
   },
   {
     type: "found",
@@ -71,6 +72,7 @@ export async function saveLostFoundPet(
     date: new Date().toISOString().split("T")[0],
     description: pet.description || "",
     additionalInfo: pet.additionalInfo || "",
+    contactNumber: pet.contactNumber || "",
   };
 
   const { data, error } = await supabase
@@ -108,6 +110,7 @@ export async function saveLostFoundPet(
     image: data.image_url || "",
     additionalInfo: metadata.additionalInfo,
     name: metadata.name,
+    contactNumber: metadata.contactNumber,
   };
 }
 
@@ -142,6 +145,7 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
         date: mock.date,
         description: mock.description,
         additionalInfo: mock.additionalInfo,
+        contactNumber: (mock as any).contactNumber || "",
       };
 
       const { data, error: insertError } = await supabase
@@ -175,6 +179,7 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
           image: data.image_url || "",
           additionalInfo: metadata.additionalInfo,
           name: metadata.name,
+          contactNumber: metadata.contactNumber,
         });
       }
     }
@@ -204,6 +209,7 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
       image: row.image_url || "",
       additionalInfo: metadata.additionalInfo || "",
       name: metadata.name || "",
+      contactNumber: metadata.contactNumber || "",
     };
   });
 }
