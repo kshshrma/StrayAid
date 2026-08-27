@@ -116,7 +116,7 @@ export async function saveLostFoundPet(
     additionalInfo: metadata.additionalInfo,
     name: metadata.name,
     contactNumber: metadata.contactNumber,
-    reporterId: metadata.reporterId || "3e79170e-c511-4ad2-ad34-270992a73339",
+    reporterId: metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
     messages: metadata.messages || [],
   };
 }
@@ -153,7 +153,7 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
         description: mock.description,
         additionalInfo: mock.additionalInfo,
         contactNumber: (mock as { contactNumber?: string }).contactNumber || "",
-        reporterId: "3e79170e-c511-4ad2-ad34-270992a73339",
+        reporterId: "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
         messages: [],
       };
 
@@ -236,7 +236,7 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
       additionalInfo: metadata.additionalInfo || "",
       name: metadata.name || "",
       contactNumber: metadata.contactNumber || "",
-      reporterId: metadata.reporterId || "3e79170e-c511-4ad2-ad34-270992a73339",
+      reporterId: metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
       messages: metadata.messages || [],
     };
   });

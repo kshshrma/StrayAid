@@ -17,9 +17,9 @@ async function getReportOwnerId(reportId: string): Promise<string | null> {
 
   try {
     const metadata = JSON.parse(report.ai_advice || "{}");
-    return metadata.reporterId || "3e79170e-c511-4ad2-ad34-270992a73339";
+    return metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949";
   } catch (e) {
-    return "3e79170e-c511-4ad2-ad34-270992a73339";
+    return "6c4c4175-c2c4-470b-a5d5-c86639f3e949";
   }
 }
 
