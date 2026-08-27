@@ -4,6 +4,8 @@ import { getReportById } from "../services/report/getReportById";
 import { updateAssignment } from "../services/rescue/updateAssignment";
 import type { Report } from "../types/report";
 import type { AppNotification } from "../types/notification";
+import { connectSocket, disconnectSocket, getSocket } from "../services/socket";
+import { getUnreadMessagesFromBackend } from "../services/lost-found/messageApiService";
 
 interface IncomingAssignmentData {
   assignment: {
@@ -98,6 +100,31 @@ export default function NotificationProvider({
   const [incoming, setIncoming] = useState<IncomingAssignmentData | null>(null);
   const [updating, setUpdating] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>(DEFAULT_NOTIFICATIONS);
+
+  const addMessageNotification = (msg: any) => {
+    const messageText = `"${msg.content}"`;
+    setNotifications((prev) => {
+      const exists = prev.some((n) => n.meta?.messageId === msg.id);
+      if (exists) return prev;
+
+      const newNotif: AppNotification = {
+        id: `msg-${msg.id}`,
+        category: "lost_found",
+        title: `✉️ New Secure Message`,
+        message: messageText,
+        read: msg.isRead,
+        timestamp: "Just now",
+        linkUrl: "/lost-found",
+        meta: {
+          messageId: msg.id,
+          reportId: msg.reportId,
+          senderId: msg.senderId,
+          content: msg.content,
+        },
+      };
+      return [newNotif, ...prev];
+    });
+  };
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -181,24 +208,72 @@ export default function NotificationProvider({
               schema: "public",
               table: "reports",
             },
-            (payload) => {
+            async (payload) => {
               const newReport = payload.new as any;
               if (newReport) {
-                addNotification({
-                  category: "nearby_report",
-                  title: `📍 New ${newReport.animal_type || "Animal"} Reported in Area`,
-                  message: newReport.description || "A new animal report was posted near your location.",
-                  read: false,
-                  location: newReport.location || "Nearby",
-                  linkUrl: `/reports/${newReport.id}`,
-                  meta: { reportId: newReport.id, severity: newReport.severity },
-                });
+                let isOwnReport = false;
+                try {
+                  const meta = JSON.parse(newReport.ai_advice || "{}");
+                  const { data: { session: currentSession } } = await supabase.auth.getSession();
+                  if (currentSession?.user && meta.reporterId === currentSession.user.id) {
+                    isOwnReport = true;
+                  }
+                } catch {}
+
+                if (!isOwnReport) {
+                  if (newReport.status === "lost" || newReport.status === "found") {
+                    addNotification({
+                      category: "lost_found",
+                      title: "🐾 New Lost & Found Report",
+                      message: "A new animal report has been posted nearby.",
+                      read: false,
+                      linkUrl: "/lost-found",
+                      meta: { reportId: newReport.id },
+                    });
+                  } else {
+                    addNotification({
+                      category: "nearby_report",
+                      title: `📍 New ${newReport.animal_type || "Animal"} Reported in Area`,
+                      message: newReport.description || "A new animal report was posted near your location.",
+                      read: false,
+                      location: newReport.location || "Nearby",
+                      linkUrl: `/reports/${newReport.id}`,
+                      meta: { reportId: newReport.id, severity: newReport.severity },
+                    });
+                  }
+                }
               }
             }
           )
           .subscribe();
 
-        if (!session?.user) return () => { reportsChannel.unsubscribe(); };
+        if (!session?.user) {
+          disconnectSocket();
+          return () => { reportsChannel.unsubscribe(); };
+        }
+
+        // Connect Socket.IO client and join user room
+        connectSocket(session.user.id);
+
+        // Fetch unread messages from backend and add them to notifications
+        try {
+          const unreadMsgs = await getUnreadMessagesFromBackend();
+          unreadMsgs.forEach((msg: any) => {
+            addMessageNotification(msg);
+          });
+        } catch (err) {
+          console.error("Failed to fetch unread messages on login:", err);
+        }
+
+        // Setup real-time Socket.IO listener
+        const socket = getSocket();
+        socket.off("secure_message_received");
+        socket.on("secure_message_received", (data: any) => {
+          console.log("📨 Real-time secure message received via socket:", data);
+          if (data && data.message) {
+            addMessageNotification(data.message);
+          }
+        });
 
         // Fetch guardian profile if authenticated
         const { data: guardian } = await supabase
