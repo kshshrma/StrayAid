@@ -168,6 +168,9 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
     }
   }
 
+  const isOwner = currentUserId === pet.reporterId;
+  const showChat = !isOwner || !!selectedParticipantId;
+
   return (
     <>
       <Card className="overflow-hidden p-0 rounded-3xl border border-slate-100 bg-white shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 flex flex-col h-full group">
@@ -376,7 +379,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                 <div className="text-center py-6 text-slate-400 text-xs font-semibold">
                   Loading message history...
                 </div>
-              ) : selectedParticipantId ? (
+              ) : showChat ? (
                 <>
                   <div className="space-y-2.5 max-h-48 overflow-y-auto mb-3 p-3 bg-slate-50 rounded-2xl border border-slate-100/80 flex flex-col">
                     {messages.length === 0 ? (
