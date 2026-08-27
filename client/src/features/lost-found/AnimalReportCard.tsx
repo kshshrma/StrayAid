@@ -80,9 +80,18 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
 
           <div className="space-y-3 pt-3 border-t border-slate-50">
             <div className="flex flex-col gap-1.5 text-[11px] text-slate-500 font-semibold">
-              <span className="flex items-center gap-1.5">
-                <MapPin size={13} className="text-slate-400 shrink-0" />
-                <span className="truncate">{pet.location}</span>
+              <span className="flex items-center gap-1.5 justify-between">
+                <span className="flex items-center gap-1.5 truncate">
+                  <MapPin size={13} className="text-slate-400 shrink-0" />
+                  <span className="truncate" title={pet.address || pet.location}>
+                    {pet.address || pet.location}
+                  </span>
+                </span>
+                {pet.distanceKm !== undefined && (
+                  <span className="shrink-0 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full text-[9px] font-black border border-emerald-100 font-sans">
+                    {pet.distanceKm} km away
+                  </span>
+                )}
               </span>
               <span className="flex items-center gap-1.5">
                 <Calendar size={13} className="text-slate-400 shrink-0" />
@@ -178,6 +187,12 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                   <div className="flex justify-between border-t border-slate-100 pt-1.5 mt-1.5">
                     <span className="shrink-0 mr-3">Address Description:</span>
                     <span className="text-slate-800 text-right">{pet.address}</span>
+                  </div>
+                )}
+                {pet.distanceKm !== undefined && (
+                  <div className="flex justify-between border-t border-slate-100 pt-1.5 mt-1.5">
+                    <span>Proximity Distance:</span>
+                    <span className="text-emerald-700 font-black font-sans">{pet.distanceKm} km away</span>
                   </div>
                 )}
               </div>
