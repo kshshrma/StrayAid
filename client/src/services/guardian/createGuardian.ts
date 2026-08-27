@@ -22,6 +22,7 @@ export async function createGuardian(
 
       bio: data.bio ?? null,
       experience: data.experience ?? null,
+      is_verified: true,
     })
     .select()
     .single();
