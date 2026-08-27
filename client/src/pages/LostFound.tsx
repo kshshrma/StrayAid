@@ -7,9 +7,10 @@ import Button from "../components/ui/Button";
 import { getLostFoundPets } from "../services/lost-found/lostFoundService";
 import { calculateDistance } from "../utils/distance";
 import { useNotification } from "../context/NotificationProvider";
+import { supabase } from "../lib/supabase";
 
 export default function LostFound() {
-  const { notifications, markAsRead } = useNotification();
+  const { notifications, markAsRead, addNotification } = useNotification();
   const [filter, setFilter] = useState<"all" | "lost" | "found">("all");
 
   const lostFoundNotifications = notifications.filter(
@@ -30,6 +31,7 @@ export default function LostFound() {
   const [pets, setPets] = useState<LostFoundPet[]>([]);
   const [loading, setLoading] = useState(true);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Get browser coordinates on mount
   useEffect(() => {
@@ -48,6 +50,85 @@ export default function LostFound() {
       );
     }
   }, []);
+
+  // Get logged-in user ID
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    });
+  }, []);
+
+  // Generate message notifications from fetched reports privately
+  useEffect(() => {
+    if (!currentUserId || pets.length === 0) return;
+
+    pets.forEach((pet) => {
+      // Only display messages sent to reports owned by this user
+      if (pet.reporterId === currentUserId && pet.messages && pet.messages.length > 0) {
+        pet.messages.forEach((msg) => {
+          // Avoid duplicate notifications locally
+          const messageText = `"${msg.text}" - sent by ${msg.senderName || "Someone"}`;
+          const exists = notifications.some(
+            (n) => n.category === "lost_found" && n.message === messageText
+          );
+
+          if (!exists) {
+            addNotification({
+              category: "lost_found",
+              title: `✉️ Message: ${pet.name ? `${pet.name} (${pet.breed})` : pet.breed}`,
+              message: messageText,
+              read: false,
+              imageUrl: pet.image,
+              linkUrl: "/lost-found",
+            });
+          }
+        });
+      }
+    });
+  }, [pets, currentUserId, notifications, addNotification]);
+
+  // Listen for real-time updates to reports to trigger re-fetching of messages
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime:reports_updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "reports",
+        },
+        () => {
+          // Re-fetch reports
+          getLostFoundPets().then((data) => {
+            if (coords) {
+              const petsWithDistance = data.map((pet) => {
+                const [latStr, lonStr] = pet.location.split(",");
+                const petLat = parseFloat(latStr.trim());
+                const petLon = parseFloat(lonStr.trim());
+                let distanceKm = 0;
+                if (!isNaN(petLat) && !isNaN(petLon)) {
+                  distanceKm = calculateDistance(coords.lat, coords.lon, petLat, petLon);
+                }
+                return { ...pet, distanceKm: parseFloat(distanceKm.toFixed(2)) };
+              });
+              petsWithDistance.sort((a, b) => (a.distanceKm || 0) - (b.distanceKm || 0));
+              setPets(petsWithDistance);
+            } else {
+              data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              setPets(data);
+            }
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [coords]);
 
   // Fetch reports and apply location-based prioritization sorting
   useEffect(() => {
