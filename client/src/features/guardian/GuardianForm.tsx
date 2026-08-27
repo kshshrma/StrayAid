@@ -15,6 +15,7 @@ export default function GuardianForm() {
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] =
     useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const [latitude, setLatitude] =
     useState<number | null>(null);
@@ -115,11 +116,7 @@ export default function GuardianForm() {
           experience.trim() || null,
       });
 
-      alert(
-        "Guardian application submitted successfully!"
-      );
-
-      navigate("/profile");
+      setShowSuccessModal(true);
     } catch (error: any) {
       console.error(
         "Guardian registration error:",
@@ -282,19 +279,6 @@ export default function GuardianForm() {
             </button>
           </div>
 
-          {/* Verification notice */}
-          <div className="rounded-2xl bg-yellow-50 p-4 text-sm text-yellow-800">
-            <strong>
-              Verification required
-            </strong>
-
-            <p className="mt-1">
-              Your Guardian profile will initially
-              be marked as unverified. Guardian
-              verification will be handled separately.
-            </p>
-          </div>
-
           {/* Submit */}
           <button
             type="submit"
@@ -308,6 +292,35 @@ export default function GuardianForm() {
 
         </form>
       </div>
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-slate-100 text-center space-y-6 animate-scaleIn">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-3xl">
+              🐾
+            </div>
+            
+            <h2 className="text-2xl font-extrabold text-slate-900 font-sans">
+              You're now a Guardian
+            </h2>
+            
+            <p className="text-sm text-slate-600 leading-relaxed font-sans">
+              You've chosen to help animals in need around you. When a rescue request is reported nearby, we'll let you know. You can decide whether you're available to help.
+            </p>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setShowSuccessModal(false);
+                navigate("/profile");
+              }}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition text-sm shadow-md shadow-emerald-100 border border-emerald-600 cursor-pointer font-sans"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
