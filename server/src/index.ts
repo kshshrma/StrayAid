@@ -9,7 +9,10 @@ import { ai } from "./services/gemini";
 import rescueRoutes from "./routes/rescue";
 import adminRoutes from "./routes/admin";
 import reportRoutes from "./routes/report";
+import messageRoutes from "./routes/message";
 import { supabase } from "./services/supabase";
+import http from "http";
+import { Server } from "socket.io";
 import { dispatchReport } from "./services/dispatch";
 
 const app = express();
@@ -22,6 +25,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/rescue", rescueRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/messages", messageRoutes);
 
 // Home Route
 app.get("/", (_, res) => {
@@ -137,7 +141,33 @@ function startExpirationSweep() {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
+
+app.set("io", io);
+
+io.on("connection", (socket) => {
+  console.log(`🔌 Client connected: ${socket.id}`);
+
+  socket.on("join_user_room", (userId: string) => {
+    if (userId) {
+      const roomName = `user:${userId}`;
+      socket.join(roomName);
+      console.log(`👤 Socket ${socket.id} joined room: ${roomName}`);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`🔌 Client disconnected: ${socket.id}`);
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   startExpirationSweep();
 });
