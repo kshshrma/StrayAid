@@ -1,8 +1,16 @@
 import { useState } from "react";
 import { MapPin, Calendar, ShieldAlert, X, MessageSquare, Info } from "lucide-react";
+import { useEffect } from "react";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
-import { sendReportMessage } from "../../services/lost-found/lostFoundService";
+import { supabase } from "../../lib/supabase";
+import { useNotification } from "../../context/NotificationProvider";
+import { getSocket } from "../../services/socket";
+import {
+  sendMessageToBackend,
+  getConversationFromBackend,
+  markConversationAsReadOnBackend,
+} from "../../services/lost-found/messageApiService";
 
 export interface LostFoundPet {
   id: string;
@@ -30,22 +38,130 @@ interface AnimalReportCardProps {
 }
 
 export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
+  const { activeChat, setActiveChat } = useNotification();
   const [showDetails, setShowDetails] = useState(false);
   const [contactMessage, setContactMessage] = useState("");
-  const [contactSuccess, setContactSuccess] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [participants, setParticipants] = useState<string[]>([]);
+  const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+
+  // Fetch current user ID on mount
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    });
+  }, []);
+
+  // Listen to activeChat triggers from notifications click
+  useEffect(() => {
+    if (activeChat && activeChat.reportId === pet.id) {
+      setShowDetails(true);
+      setSelectedParticipantId(activeChat.senderId);
+      setActiveChat(null); // Reset trigger
+    }
+  }, [activeChat, pet.id, setActiveChat]);
+
+  // Load participant list if current user is owner, or set owner as selectedParticipantId if enquirer
+  useEffect(() => {
+    if (!showDetails || !currentUserId) return;
+
+    const isOwner = currentUserId === pet.reporterId;
+
+    if (isOwner) {
+      async function fetchParticipants() {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await fetch(
+            `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/messages/conversations`,
+            {
+              headers: {
+                Authorization: `Bearer ${session?.access_token || ""}`,
+              },
+            }
+          );
+          const data = await res.json();
+          if (data.success && data.conversations) {
+            const reportConvs = data.conversations.filter((c: any) => c.reportId === pet.id);
+            const userIds = reportConvs.map((c: any) => c.otherParticipantId);
+            setParticipants(userIds);
+            if (userIds.length > 0 && !selectedParticipantId) {
+              setSelectedParticipantId(userIds[0]);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load conversation participants:", err);
+        }
+      }
+      fetchParticipants();
+    } else {
+      setSelectedParticipantId(pet.reporterId || null);
+    }
+  }, [showDetails, currentUserId, pet.id, pet.reporterId, selectedParticipantId]);
+
+  // Fetch message thread when selectedParticipantId is resolved
+  useEffect(() => {
+    if (!showDetails || !currentUserId || !selectedParticipantId) return;
+
+    async function loadConversation() {
+      try {
+        setLoadingMessages(true);
+        const msgs = await getConversationFromBackend(pet.id, selectedParticipantId!);
+        setMessages(msgs);
+        
+        // Mark conversation as read on the backend
+        await markConversationAsReadOnBackend(pet.id, selectedParticipantId!);
+      } catch (err) {
+        console.error("Failed to load message thread:", err);
+      } finally {
+        setLoadingMessages(false);
+      }
+    }
+    loadConversation();
+  }, [showDetails, currentUserId, selectedParticipantId, pet.id]);
+
+  // Listen for real-time messages for this active chat in the card modal
+  useEffect(() => {
+    if (!showDetails || !currentUserId || !selectedParticipantId) return;
+
+    const socket = getSocket();
+    socket.off("secure_message_received");
+    socket.on("secure_message_received", (data: any) => {
+      if (data && data.message) {
+        const msg = data.message;
+        const isThisReport = msg.reportId === pet.id;
+        const isFromParticipant = msg.senderId === selectedParticipantId;
+        const isToMe = msg.recipientId === currentUserId;
+        
+        if (isThisReport && isFromParticipant && isToMe) {
+          setMessages((prev) => {
+            const exists = prev.some((m) => m.id === msg.id);
+            if (exists) return prev;
+            return [...prev, msg];
+          });
+          
+          // Mark it as read
+          markConversationAsReadOnBackend(pet.id, selectedParticipantId!);
+        }
+      }
+    });
+
+    return () => {
+      socket.off("secure_message_received");
+    };
+  }, [showDetails, currentUserId, selectedParticipantId, pet.id]);
 
   async function handleSendContactMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!contactMessage.trim()) return;
+    if (!contactMessage.trim() || !selectedParticipantId) return;
 
     try {
-      await sendReportMessage(pet.id, contactMessage);
-      setContactSuccess(true);
-      setTimeout(() => {
-        setContactSuccess(false);
-        setContactMessage("");
-        setShowDetails(false);
-      }, 2500);
+      const newMsg = await sendMessageToBackend(pet.id, contactMessage.trim(), selectedParticipantId);
+      setMessages((prev) => [...prev, newMsg]);
+      setContactMessage("");
     } catch (err) {
       console.error("Failed to send Secure Relay message:", err);
       alert("Failed to send message. Please try again.");
@@ -132,7 +248,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
             <button
               onClick={() => {
                 setShowDetails(false);
-                setContactSuccess(false);
               }}
               className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
             >
@@ -231,43 +346,93 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
             </div>
 
             {/* Messaging Section */}
-            <div className="border-t border-slate-100 pt-5">
-              {contactSuccess ? (
-                <div className="text-center py-4 bg-green-50 rounded-2xl border border-green-100 space-y-1 animate-fadeIn">
-                  <div className="mx-auto w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center text-lg font-bold">
-                    ✓
-                  </div>
-                  <h3 className="text-sm font-extrabold text-slate-900 mt-2">Message Dispatched!</h3>
-                  <p className="text-[11px] text-slate-500">
-                    Your response has been routed securely. You will be contacted shortly.
-                  </p>
+            <div className="border-t border-slate-100 pt-5 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert size={14} className="text-green-600" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Secure Relay Messaging
+                  </span>
                 </div>
-              ) : (
-                <form onSubmit={handleSendContactMessage} className="space-y-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ShieldAlert size={14} className="text-green-600" />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      Secure Relay Messaging
-                    </span>
-                  </div>
-                  <textarea
-                    placeholder={
-                      pet.type === "lost"
-                        ? "I think I spotted this animal nearby! Please reach out..."
-                        : "I am the owner of this animal. Let's arrange a secure handover..."
-                    }
-                    value={contactMessage}
-                    onChange={(e) => setContactMessage(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 p-3 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 h-20 resize-none"
-                    required
-                  />
-                  <Button
-                    type="submit"
-                    className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-xs cursor-pointer shadow-md shadow-green-100"
+                
+                {/* Participant Selector for Owner */}
+                {currentUserId === pet.reporterId && participants.length > 0 && (
+                  <select
+                    value={selectedParticipantId || ""}
+                    onChange={(e) => setSelectedParticipantId(e.target.value)}
+                    className="text-[10px] border border-slate-200 rounded-lg px-2 py-1 text-slate-700 bg-white font-bold focus:outline-none focus:ring-1 focus:ring-green-500"
                   >
-                    <MessageSquare size={14} /> Contact Case Reporter
-                  </Button>
-                </form>
+                    {participants.map((pid, idx) => (
+                      <option key={pid} value={pid}>
+                        Enquirer #{idx + 1} ({pid.substring(0, 5)})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Chat Thread History */}
+              {loadingMessages ? (
+                <div className="text-center py-6 text-slate-400 text-xs font-semibold">
+                  Loading message history...
+                </div>
+              ) : selectedParticipantId ? (
+                <>
+                  <div className="space-y-2.5 max-h-48 overflow-y-auto mb-3 p-3 bg-slate-50 rounded-2xl border border-slate-100/80 flex flex-col">
+                    {messages.length === 0 ? (
+                      <div className="text-center py-4 text-slate-400 text-xs font-semibold my-auto">
+                        No messages yet. Send a message below to start the conversation!
+                      </div>
+                    ) : (
+                      messages.map((m) => {
+                        const isMe = m.senderId === currentUserId;
+                        return (
+                          <div
+                            key={m.id}
+                            className={`flex flex-col ${isMe ? "items-end" : "items-start"} space-y-0.5`}
+                          >
+                            <div
+                              className={`rounded-2xl px-3.5 py-2 text-xs font-semibold max-w-[85%] leading-relaxed shadow-sm ${
+                                isMe
+                                  ? "bg-green-700 text-white rounded-br-none"
+                                  : "bg-white border border-slate-100 text-slate-800 rounded-bl-none"
+                              }`}
+                            >
+                              {m.content}
+                            </div>
+                            <span className="text-[8px] text-slate-400 px-1 select-none font-medium">
+                              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <form onSubmit={handleSendContactMessage} className="space-y-3">
+                    <textarea
+                      placeholder={
+                        pet.type === "lost"
+                          ? "I think I spotted this animal nearby! Please reach out..."
+                          : "I am the owner of this animal. Let's arrange a secure handover..."
+                      }
+                      value={contactMessage}
+                      onChange={(e) => setContactMessage(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 p-3 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 h-20 resize-none"
+                      required
+                    />
+                    <Button
+                      type="submit"
+                      className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-xs cursor-pointer shadow-md shadow-green-100"
+                    >
+                      <MessageSquare size={14} /> Send Secure Message
+                    </Button>
+                  </form>
+                </>
+              ) : (
+                <div className="text-center py-6 text-slate-400 text-xs font-semibold bg-slate-50 rounded-2xl border border-slate-100">
+                  No active inquiries for this case yet.
+                </div>
               )}
             </div>
 
