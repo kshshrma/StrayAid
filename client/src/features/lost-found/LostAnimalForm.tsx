@@ -22,6 +22,7 @@ export default function LostAnimalForm({
   const [uniqueId, setUniqueId] = useState("");
   const [collarColor, setCollarColor] = useState("");
   const [name, setName] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
   const [location, setLocation] = useState("");
   const [address, setAddress] = useState("");
   const [additionalInfo, setAdditionalInfo] = useState("");
@@ -106,6 +107,7 @@ export default function LostAnimalForm({
           name: name || undefined,
           address: address || undefined,
           additionalInfo: additionalInfo || undefined,
+          contactNumber: contactNumber || undefined,
         },
         imageFile!
       );
@@ -384,6 +386,23 @@ export default function LostAnimalForm({
             />
             <span className="text-[9px] text-slate-400 mt-1 block">
               Street name, colony, landmark, nearby shop, etc.
+            </span>
+          </div>
+
+          {/* CONTACT NUMBER */}
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+              Contact Number (Optional)
+            </label>
+            <input
+              type="tel"
+              placeholder="e.g. +91 98765 43210 or local number"
+              value={contactNumber}
+              onChange={(e) => setContactNumber(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+            <span className="text-[9px] text-slate-400 mt-1 block">
+              Direct phone number if you wish to be reached directly.
             </span>
           </div>
 
