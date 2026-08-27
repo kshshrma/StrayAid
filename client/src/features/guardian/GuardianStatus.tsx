@@ -204,41 +204,22 @@ export default function GuardianStatus({
       {/* Status cards */}
       <div className="mt-5 grid grid-cols-2 gap-3">
 
-        {/* Verification */}
+        {/* Guardian Mode */}
         <div className="rounded-2xl bg-gray-50 p-4">
           <p className="text-xs text-gray-500">
-            Verification
+            Guardian Mode
           </p>
 
           <p
-            className={`mt-1 text-sm font-bold ${
-              guardian.is_verified
-                ? "text-green-600"
-                : "text-yellow-600"
-            }`}
-          >
-            {guardian.is_verified
-              ? "✓ Verified"
-              : "⏳ Pending"}
-          </p>
-        </div>
-
-        {/* Availability */}
-        <div className="rounded-2xl bg-gray-50 p-4">
-          <p className="text-xs text-gray-500">
-            Availability
-          </p>
-
-          <p
-            className={`mt-1 text-sm font-bold ${
+            className={`mt-1 text-sm font-extrabold ${
               guardian.available
                 ? "text-green-600"
                 : "text-gray-500"
             }`}
           >
             {guardian.available
-              ? "● Available"
-              : "○ Unavailable"}
+              ? "ON"
+              : "OFF"}
           </p>
         </div>
 
@@ -248,76 +229,62 @@ export default function GuardianStatus({
             Rescues Completed
           </p>
 
-          <p className="mt-1 text-lg font-bold text-gray-900">
+          <p className="mt-1 text-sm font-extrabold text-gray-900">
             {guardian.total_rescues}
           </p>
         </div>
 
         {/* Experience */}
-        <div className="rounded-2xl bg-gray-50 p-4">
+        <div className="rounded-2xl bg-gray-50 p-4 col-span-2">
           <p className="text-xs text-gray-500">
-            Experience
+            Rescue Experience
           </p>
 
-          <p className="mt-1 truncate text-sm font-semibold text-gray-900">
-            {guardian.experience ||
-              "Not added"}
+          <p className="mt-1 text-sm font-semibold text-gray-900 leading-relaxed">
+            {guardian.experience || "No rescue experience listed"}
           </p>
         </div>
       </div>
 
-      {/* Availability control */}
-      <div className="mt-5 rounded-2xl border border-gray-100 p-4">
+      {/* Guardian Mode Control */}
+      <div className="mt-5 rounded-2xl border border-gray-100 p-4 bg-slate-50/40">
         <div className="flex items-center justify-between gap-4">
-
           <div>
-            <h3 className="font-semibold text-gray-800">
-              Available for rescues
+            <h3 className="font-bold text-gray-800 flex items-center gap-1.5 font-sans text-sm">
+              🐾 Guardian Mode
             </h3>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Turn this off when you don't want
-              to receive rescue requests.
+            <p className="mt-1 text-xs text-gray-500 leading-normal font-sans">
+              Being a Guardian means you are willing to help animals in need around you. You can turn this off if you are temporarily unavailable.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={toggleAvailability}
-            disabled={updating}
-            className={`relative h-7 w-12 shrink-0 rounded-full transition ${
-              guardian.available
-                ? "bg-green-600"
-                : "bg-gray-300"
-            } ${
-              updating
-                ? "cursor-not-allowed opacity-50"
-                : ""
-            }`}
-          >
-            <span
-              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${
+          <div className="flex flex-col items-center gap-2 shrink-0">
+            <span className={`text-xs font-extrabold px-3 py-1 rounded-full border font-sans ${
+              guardian.available 
+                ? "bg-emerald-100 text-emerald-800 border-emerald-200" 
+                : "bg-slate-100 text-slate-600 border-slate-200"
+            }`}>
+              {guardian.available ? "ON" : "OFF"}
+            </span>
+            
+            <button
+              type="button"
+              onClick={toggleAvailability}
+              disabled={updating}
+              className={`text-xs font-bold px-3 py-2 rounded-xl border transition cursor-pointer font-sans shadow-sm ${
                 guardian.available
-                  ? "left-6"
-                  : "left-1"
-              }`}
-            />
-          </button>
+                  ? "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+              } ${updating ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              {updating 
+                ? "Updating..." 
+                : guardian.available 
+                  ? "Turn Off Guardian Mode" 
+                  : "Turn On Guardian Mode"}
+            </button>
+          </div>
         </div>
-
-        <p
-          className={`mt-3 text-sm font-semibold ${
-            guardian.available
-              ? "text-green-600"
-              : "text-gray-500"
-          }`}
-        >
-          {updating
-            ? "Updating..."
-            : guardian.available
-            ? "You are currently available"
-            : "You are currently unavailable"}
-        </p>
       </div>
 
       {/* Location */}
@@ -358,22 +325,6 @@ export default function GuardianStatus({
             : "📍 Update My Location"}
         </button>
       </div>
-
-      {/* Verification */}
-      {!guardian.is_verified && (
-        <div className="mt-4 rounded-2xl bg-yellow-50 p-4 text-sm text-yellow-800">
-          <p className="font-semibold">
-            Guardian verification pending
-          </p>
-
-          <p className="mt-1">
-            Your Guardian profile has been
-            submitted. Verification will be
-            completed before you receive rescue
-            assignments.
-          </p>
-        </div>
-      )}
 
     </div>
   );
