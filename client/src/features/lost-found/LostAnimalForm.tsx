@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { X, Camera, MapPin, Loader2, AlertCircle } from "lucide-react";
 import Button from "../../components/ui/Button";
+import { saveLostFoundPet } from "../../services/lost-found/lostFoundService";
 
 interface LostAnimalFormProps {
   onClose: () => void;
@@ -27,6 +28,7 @@ export default function LostAnimalForm({
 
   // File Preview States
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   // Status states
   const [locating, setLocating] = useState(false);
@@ -36,6 +38,7 @@ export default function LostAnimalForm({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (!e.target.files?.length) return;
     const file = e.target.files[0];
+    setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
     setErrors(prev => prev.filter(err => err !== "Animal photo is required."));
   }
@@ -68,12 +71,12 @@ export default function LostAnimalForm({
     );
   }
 
-  function handleFormSubmit(e: React.FormEvent) {
+  async function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     // Validation
     const validationErrors: string[] = [];
-    if (!imagePreview) validationErrors.push("Animal photo is required.");
+    if (!imageFile) validationErrors.push("Animal photo is required.");
     if (!breed) validationErrors.push("Breed is required.");
     if (!color) validationErrors.push("Animal color is required.");
     if (!location) validationErrors.push("Last seen location is required.");
@@ -89,28 +92,31 @@ export default function LostAnimalForm({
     setErrors([]);
     setSubmitting(true);
 
-    // Simulate submission delay
-    setTimeout(() => {
-      const newReport = {
-        id: Date.now().toString(),
-        type,
-        animal,
-        breed,
-        color,
-        location,
-        date: new Date().toISOString().split("T")[0],
-        description: additionalInfo || `A ${color.toLowerCase()} ${breed.toLowerCase()} spotted in this area.`,
-        image: imagePreview || "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&q=80&w=400",
-        uniqueId: uniqueId || undefined,
-        collarColor: collarColor || undefined,
-        name: name || undefined,
-        address: address || undefined,
-        additionalInfo: additionalInfo || undefined,
-      };
+    try {
+      const newReport = await saveLostFoundPet(
+        {
+          type,
+          animal,
+          breed,
+          color,
+          location,
+          description: additionalInfo || `A ${color.toLowerCase()} ${breed.toLowerCase()} spotted in this area.`,
+          uniqueId: uniqueId || undefined,
+          collarColor: collarColor || undefined,
+          name: name || undefined,
+          address: address || undefined,
+          additionalInfo: additionalInfo || undefined,
+        },
+        imageFile!
+      );
 
-      setSubmitting(false);
       onSubmitSuccess(newReport);
-    }, 1500);
+    } catch (error: any) {
+      console.error("Submission failed:", error);
+      setErrors([error?.message || "Failed to submit lost animal report."]);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
