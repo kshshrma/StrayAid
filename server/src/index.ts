@@ -9,7 +9,6 @@ import { ai } from "./services/gemini";
 import rescueRoutes from "./routes/rescue";
 import adminRoutes from "./routes/admin";
 import reportRoutes from "./routes/report";
-import messageRoutes from "./routes/message";
 import { supabase } from "./services/supabase";
 import http from "http";
 import { Server } from "socket.io";
@@ -25,7 +24,6 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/rescue", rescueRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/reports", reportRoutes);
-app.use("/api/messages", messageRoutes);
 
 // Home Route
 app.get("/", (_, res) => {
