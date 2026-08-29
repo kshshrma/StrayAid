@@ -114,6 +114,21 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
     setSightingTime(localISO);
   }, [showDetails]);
 
+  // Listen to activeChat triggers from View Report click or notifications click
+  useEffect(() => {
+    if (activeChat && activeChat.reportId === pet.id) {
+      setShowDetails(true);
+      setActiveTab("details");
+      setActiveChat(null); // Reset trigger
+      
+      // Scroll to the card
+      const element = document.getElementById(`report-card-${pet.id}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [activeChat, pet.id, setActiveChat]);
+
   // Fetch sightings and matches when details opens
   useEffect(() => {
     if (!showDetails) return;
