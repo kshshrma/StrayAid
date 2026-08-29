@@ -4,7 +4,7 @@ import AnimalReportCard, { type LostFoundPet } from "../features/lost-found/Anim
 import LostFoundFilters from "../features/lost-found/LostFoundFilters";
 import LostAnimalForm from "../features/lost-found/LostAnimalForm";
 import Button from "../components/ui/Button";
-import { getLostFoundPets } from "../services/lost-found/lostFoundService";
+import { getLostFoundPets, getLostFoundPetById } from "../services/lost-found/lostFoundService";
 import { calculateDistance } from "../utils/distance";
 import { useNotification } from "../context/NotificationProvider";
 import { supabase } from "../lib/supabase";
@@ -91,7 +91,7 @@ export default function LostFound() {
 
   // Listen to activeChat notifications click to launch Inbox View
   useEffect(() => {
-    if (activeChat) {
+    if (activeChat && !activeChat.showReportDetails) {
       setShowInboxView(true);
       
       // Attempt to find conversation matching reportId and senderId
@@ -305,12 +305,31 @@ export default function LostFound() {
   }
 
   // Conversation Context Actions
-  function handleContextViewReport(reportId: string, otherParticipantId: string) {
-    setShowInboxView(false);
-    setActiveChat({
-      reportId,
-      senderId: otherParticipantId,
-    });
+  async function handleContextViewReport(reportId: string, otherParticipantId: string) {
+    try {
+      let pet = pets.find((p) => p.id === reportId);
+      if (!pet) {
+        const fetched = await getLostFoundPetById(reportId);
+        if (!fetched) {
+          alert("This report is no longer available.");
+          return;
+        }
+        pet = fetched;
+        setPets((prev) => [fetched, ...prev]);
+      }
+
+      setShowInboxView(false);
+      setFilter("all"); // Ensure list is unfiltered so matching card mounts in DOM
+      
+      setActiveChat({
+        reportId,
+        senderId: otherParticipantId,
+        showReportDetails: true,
+      });
+    } catch (err) {
+      console.error(err);
+      alert("This report is no longer available.");
+    }
   }
 
   async function handleBlockInbox(conversationId: string) {

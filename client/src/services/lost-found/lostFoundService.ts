@@ -262,3 +262,43 @@ export async function markReunitedOnBackend(reportId: string, reunionPhotoFile?:
   }
   return result;
 }
+
+export async function getLostFoundPetById(reportId: string): Promise<LostFoundPet | null> {
+  const { data: row, error } = await supabase
+    .from("reports")
+    .select("*")
+    .eq("id", reportId)
+    .single();
+
+  if (error || !row) {
+    return null;
+  }
+
+  let metadata: any = {};
+  try {
+    metadata = JSON.parse(row.ai_advice || "{}");
+  } catch (e) {}
+
+  return {
+    id: row.id,
+    type: (row.status === "reunited" ? (metadata.originalType || "lost") : row.status) as "lost" | "found",
+    animal: row.animal_type || "Other",
+    breed: metadata.breed || "",
+    color: metadata.color || "",
+    collarColor: metadata.collarColor || "",
+    uniqueId: metadata.uniqueId || "",
+    location: `${row.latitude}, ${row.longitude}`,
+    address: metadata.address || "",
+    date: metadata.date || (row.created_at ? row.created_at.split("T")[0] : ""),
+    description: metadata.description || "",
+    image: row.image_url || "",
+    additionalInfo: metadata.additionalInfo || "",
+    name: metadata.name || "",
+    contactNumber: metadata.contactNumber || "",
+    reporterId: metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
+    urgency: metadata.urgency || "Normal",
+    reunited: metadata.reunited || (row.status === "reunited"),
+    reunionPhotoUrl: metadata.reunionPhotoUrl || "",
+    reunitedAt: metadata.reunitedAt || "",
+  };
+}

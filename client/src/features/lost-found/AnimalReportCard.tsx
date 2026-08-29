@@ -116,7 +116,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
 
   // Listen to activeChat triggers from View Report click or notifications click
   useEffect(() => {
-    if (activeChat && activeChat.reportId === pet.id) {
+    if (activeChat && activeChat.showReportDetails && activeChat.reportId === pet.id) {
       setShowDetails(true);
       setActiveTab("details");
       setActiveChat(null); // Reset trigger
