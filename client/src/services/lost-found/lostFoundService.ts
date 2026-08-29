@@ -2,74 +2,55 @@ import { supabase } from "../../lib/supabase";
 import { uploadImage } from "../storage/uploadImage";
 import type { LostFoundPet } from "../../features/lost-found/AnimalReportCard";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("User not authenticated");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.access_token}`,
+  };
+}
+
 export async function saveLostFoundPet(
-  pet: Omit<LostFoundPet, "id" | "date" | "image">,
+  pet: Omit<LostFoundPet, "id" | "date" | "image"> & { urgency?: string },
   imageFile: File
 ): Promise<LostFoundPet> {
-  // 1. Upload the image file to Supabase Storage
+  // 1. Upload the image file to Supabase Storage first
   const imageUrl = await uploadImage(imageFile);
 
-  // 2. Parse coordinates from string e.g., "28.627311, 77.372545"
-  const [latStr, lonStr] = pet.location.split(",");
-  const latitude = parseFloat(latStr.trim()) || 0.0;
-  const longitude = parseFloat(lonStr.trim()) || 0.0;
+  // 2. Call backend API to create the report
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/api/reports/lost-found`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      type: pet.type,
+      animal: pet.animal,
+      breed: pet.breed,
+      color: pet.color,
+      location: pet.location,
+      description: pet.description,
+      photoUrl: imageUrl,
+      uniqueId: pet.uniqueId,
+      collarColor: pet.collarColor,
+      name: pet.name,
+      address: pet.address,
+      date: pet.date,
+      additionalInfo: pet.additionalInfo,
+      urgency: pet.urgency || "Normal",
+    }),
+  });
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const reporterId = user?.id || "";
-
-  // 3. Serialize metadata to JSON and store in ai_advice
-  const metadata = {
-    breed: pet.breed,
-    color: pet.color,
-    collarColor: pet.collarColor || "",
-    uniqueId: pet.uniqueId || "",
-    name: pet.name || "",
-    address: pet.address || "",
-    date: new Date().toISOString().split("T")[0],
-    description: pet.description || "",
-    additionalInfo: pet.additionalInfo || "",
-    contactNumber: pet.contactNumber || "",
-    reporterId,
-  };
-
-  const { data, error } = await supabase
-    .from("reports")
-    .insert([
-      {
-        image_url: imageUrl,
-        latitude,
-        longitude,
-        status: pet.type, // "lost" or "found"
-        animal_type: pet.animal,
-        ai_advice: JSON.stringify(metadata),
-      },
-    ])
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Failed to insert Lost & Found report:", error);
-    throw error;
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to create lost/found report");
   }
 
-  return {
-    id: data.id,
-    type: data.status as "lost" | "found",
-    animal: data.animal_type || "Other",
-    breed: metadata.breed,
-    color: metadata.color,
-    collarColor: metadata.collarColor,
-    uniqueId: metadata.uniqueId,
-    location: `${data.latitude}, ${data.longitude}`,
-    address: metadata.address,
-    date: metadata.date,
-    description: metadata.description,
-    image: data.image_url || "",
-    additionalInfo: metadata.additionalInfo,
-    name: metadata.name,
-    contactNumber: metadata.contactNumber,
-    reporterId: metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
-  };
+  return result.report;
 }
 
 export async function getLostFoundPets(): Promise<LostFoundPet[]> {
@@ -97,9 +78,14 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
     additionalInfo?: string;
     contactNumber?: string;
     reporterId?: string;
+    urgency?: string;
+    reunited?: boolean;
+    reunionPhotoUrl?: string;
+    reunitedAt?: string;
+    messages?: Array<{ senderId: string; senderName: string; text: string; timestamp: string }>;
   }
 
-  return reports.map((row: { id: string; status: string; animal_type?: string; latitude: number; longitude: number; created_at?: string; image_url?: string; ai_advice?: string }) => {
+  return reports.map((row: any) => {
     let metadata: PetMetadata = {};
     try {
       metadata = JSON.parse(row.ai_advice || "{}");
@@ -124,6 +110,155 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
       name: metadata.name || "",
       contactNumber: metadata.contactNumber || "",
       reporterId: metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
+      urgency: metadata.urgency || "Normal",
+      reunited: metadata.reunited || false,
+      reunionPhotoUrl: metadata.reunionPhotoUrl || "",
+      reunitedAt: metadata.reunitedAt || "",
+      messages: metadata.messages || [],
     };
   });
+}
+
+// Fetch all reports (active and reunited) for a specific user's history
+export async function getLostFoundPetsForUser(userId: string): Promise<LostFoundPet[]> {
+  const { data: reports, error } = await supabase
+    .from("reports")
+    .select("*");
+
+  if (error) throw error;
+  if (!reports) return [];
+
+  return reports
+    .map((row: any) => {
+      let metadata: any = {};
+      try {
+        metadata = JSON.parse(row.ai_advice || "{}");
+      } catch {}
+
+      return {
+        id: row.id,
+        type: (row.status === "reunited" ? metadata.originalType : row.status) as "lost" | "found",
+        animal: reportTypeToAnimal(row.animal_type),
+        breed: metadata.breed || "",
+        color: metadata.color || "",
+        collarColor: metadata.collarColor || "",
+        uniqueId: metadata.uniqueId || "",
+        location: `${row.latitude}, ${row.longitude}`,
+        address: metadata.address || "",
+        date: metadata.date || "",
+        description: metadata.description || "",
+        image: row.image_url || "",
+        additionalInfo: metadata.additionalInfo || "",
+        name: metadata.name || "",
+        reporterId: metadata.reporterId || "",
+        urgency: metadata.urgency || "Normal",
+        reunited: metadata.reunited || (row.status === "reunited"),
+        reunionPhotoUrl: metadata.reunionPhotoUrl || "",
+        reunitedAt: metadata.reunitedAt || "",
+        messages: metadata.messages || [],
+      };
+    })
+    .filter((p: any) => p.reporterId === userId);
+}
+
+function reportTypeToAnimal(type: string): string {
+  return type || "Other";
+}
+
+// Backend wrappers for sightings
+export async function submitSightingOnBackend(
+  reportId: string,
+  data: {
+    latitude: string;
+    longitude: string;
+    address?: string;
+    dateTimeSeen: string;
+    description?: string;
+  },
+  imageFile?: File
+) {
+  let photoUrl = "";
+  if (imageFile) {
+    photoUrl = await uploadImage(imageFile);
+  }
+
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/api/reports/${reportId}/sightings`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      ...data,
+      photoUrl,
+    }),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to submit sighting");
+  }
+  return result.sighting;
+}
+
+export async function getSightingsFromBackend(reportId: string) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/api/reports/${reportId}/sightings`, {
+    method: "GET",
+    headers,
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to fetch sightings");
+  }
+  return result.sightings || [];
+}
+
+// Backend wrappers for potential matching
+export async function getMatchesFromBackend(reportId: string) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/api/reports/${reportId}/matches`, {
+    method: "GET",
+    headers,
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to fetch matches");
+  }
+  return result.matches || [];
+}
+
+export async function dismissMatchOnBackend(reportId: string, matchId: string) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/api/reports/${reportId}/matches/${matchId}/dismiss`, {
+    method: "POST",
+    headers,
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to dismiss match");
+  }
+  return result;
+}
+
+// Mark reunited wrapper
+export async function markReunitedOnBackend(reportId: string, reunionPhotoFile?: File) {
+  let photoUrl = "";
+  if (reunionPhotoFile) {
+    photoUrl = await uploadImage(reunionPhotoFile);
+  }
+
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/api/reports/${reportId}/reunited`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ photoUrl }),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to mark as reunited");
+  }
+  return result;
 }

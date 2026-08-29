@@ -10,20 +10,28 @@ import { useNotification } from "../context/NotificationProvider";
 import { supabase } from "../lib/supabase";
 
 export default function LostFound() {
-  const { notifications, markAsRead } = useNotification();
+  const { notifications, markAsRead, addNotification, setActiveChat } = useNotification();
   const [filter, setFilter] = useState<"all" | "lost" | "found">("all");
 
   const lostFoundNotifications = notifications.filter(
     (n) => n.category === "lost_found" && !n.read
   );
 
-  const newReportNotifications = lostFoundNotifications;
+  const messageNotifications = lostFoundNotifications.filter(
+    (n) => n.title.includes("✉️")
+  );
+
+  const newReportNotifications = lostFoundNotifications.filter(
+    (n) => !n.title.includes("✉️")
+  );
   const [showLeftDropdown, setShowLeftDropdown] = useState(false);
+  const [showRightDropdown, setShowRightDropdown] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [pets, setPets] = useState<LostFoundPet[]>([]);
   const [loading, setLoading] = useState(true);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Get browser coordinates on mount
   useEffect(() => {
@@ -42,6 +50,44 @@ export default function LostFound() {
       );
     }
   }, []);
+
+  // Get logged-in user ID
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    });
+  }, []);
+
+  // Generate message notifications from fetched reports privately
+  useEffect(() => {
+    if (!currentUserId || pets.length === 0) return;
+
+    pets.forEach((pet) => {
+      // Only display messages sent to reports owned by this user
+      if (pet.reporterId === currentUserId && pet.messages && pet.messages.length > 0) {
+        pet.messages.forEach((msg) => {
+          // Avoid duplicate notifications locally
+          const messageText = `"${msg.text}" - sent by ${msg.senderName || "Someone"}`;
+          const exists = notifications.some(
+            (n) => n.category === "lost_found" && n.message === messageText
+          );
+
+          if (!exists) {
+            addNotification({
+              category: "lost_found",
+              title: `✉️ Message: ${pet.name ? `${pet.name} (${pet.breed})` : pet.breed}`,
+              message: messageText,
+              read: false,
+              imageUrl: pet.image,
+              linkUrl: "/lost-found",
+            });
+          }
+        });
+      }
+    });
+  }, [pets, currentUserId, notifications, addNotification]);
 
   // Listen for real-time updates to reports to trigger re-fetching of messages
   useEffect(() => {
@@ -238,7 +284,77 @@ export default function LostFound() {
           )}
         </div>
 
+        {/* TOP RIGHT: SECURE RELAY MESSAGE INDICATOR */}
+        <div className="fixed top-6 right-6 z-50 pointer-events-auto flex flex-col items-end gap-2">
+          <button
+            onClick={() => setShowRightDropdown(!showRightDropdown)}
+            className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${
+              messageNotifications.length > 0 ? "animate-pulse" : ""
+            }`}
+          >
+            <span>💬 Secure Messages</span>
+            {messageNotifications.length > 0 && (
+              <span className="bg-green-700 text-white font-black px-2 py-0.5 rounded-full text-[9px] min-w-5 text-center">
+                {messageNotifications.length}
+              </span>
+            )}
+          </button>
 
+          {showRightDropdown && messageNotifications.length > 0 && (
+            <div className="w-80 rounded-3xl bg-white/95 border border-slate-100 shadow-2xl p-4 space-y-2.5 backdrop-blur-md animate-slideLeft">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Messages</span>
+                <button onClick={() => setShowRightDropdown(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <X size={12} />
+                </button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {messageNotifications.map((notif) => (
+                  <div key={notif.id} className="p-2.5 rounded-2xl bg-emerald-50/50 border border-emerald-100/50 flex items-start gap-2.5 justify-between">
+                    <button
+                      onClick={() => {
+                        markAsRead(notif.id);
+                        if (messageNotifications.length <= 1) setShowRightDropdown(false);
+                        
+                        if (notif.meta?.reportId && notif.meta?.senderId) {
+                          // Set active chat to trigger details modal and chat thread in AnimalReportCard
+                          setActiveChat({
+                            reportId: notif.meta.reportId,
+                            senderId: notif.meta.senderId,
+                          });
+                          
+                          // Scroll to the card as well
+                          const element = document.getElementById(`report-card-${notif.meta.reportId}`);
+                          if (element) {
+                            element.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }
+                        }
+                      }}
+                      className="flex items-center gap-2 min-w-0 text-left hover:opacity-80 transition cursor-pointer flex-1"
+                    >
+                      {notif.imageUrl && (
+                        <img src={notif.imageUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-100" />
+                      )}
+                      <div className="min-w-0">
+                        <h5 className="text-[11px] font-bold text-slate-800 truncate">{notif.title}</h5>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        markAsRead(notif.id);
+                        if (messageNotifications.length <= 1) setShowRightDropdown(false);
+                      }}
+                      className="text-[9px] text-emerald-700 hover:text-emerald-950 font-extrabold cursor-pointer shrink-0 ml-1.5 self-center"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* 2. PRIMARY ACTION — PLACE THIS FIRST */}
         <div className="pt-2">

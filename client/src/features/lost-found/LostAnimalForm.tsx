@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { X, Camera, MapPin, Loader2, AlertCircle } from "lucide-react";
 import Button from "../../components/ui/Button";
 import { saveLostFoundPet } from "../../services/lost-found/lostFoundService";
@@ -7,6 +7,14 @@ interface LostAnimalFormProps {
   onClose: () => void;
   onSubmitSuccess: (newReport: any) => void;
 }
+
+const COMMON_BREEDS: Record<string, string[]> = {
+  Dog: ["Golden Retriever", "Beagle", "Labrador", "German Shepherd", "Indian Pariah", "Husky", "Pug"],
+  Cat: ["Persian Cat", "Siamese", "Bengal", "Maine Coon", "Indian Billi"],
+  Cow: ["Desi Cow", "Holstein Friesian", "Gir", "Sahiwal"],
+  Bird: ["Parrot", "Pigeon", "Sparrow", "Eagle"],
+  Other: ["Other Breed"],
+};
 
 export default function LostAnimalForm({
   onClose,
@@ -17,7 +25,12 @@ export default function LostAnimalForm({
   // Form Fields State
   const [type, setType] = useState<"lost" | "found">("lost");
   const [animal, setAnimal] = useState("Dog");
-  const [breed, setBreed] = useState("");
+  
+  // Breed Selection States
+  const [breedType, setBreedType] = useState<"common" | "custom" | "unknown">("common");
+  const [selectedCommonBreed, setSelectedCommonBreed] = useState("");
+  const [customBreed, setCustomBreed] = useState("");
+
   const [color, setColor] = useState("");
   const [uniqueId, setUniqueId] = useState("");
   const [collarColor, setCollarColor] = useState("");
@@ -25,7 +38,9 @@ export default function LostAnimalForm({
   const [contactNumber, setContactNumber] = useState("");
   const [location, setLocation] = useState("");
   const [address, setAddress] = useState("");
+  const [date, setDate] = useState("");
   const [additionalInfo, setAdditionalInfo] = useState("");
+  const [urgency, setUrgency] = useState("Normal");
 
   // File Preview States
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -35,6 +50,24 @@ export default function LostAnimalForm({
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+
+  // Set default datetime to local current time
+  useEffect(() => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    const localISO = new Date(now.getTime() - offset).toISOString().slice(0, 16);
+    setDate(localISO);
+  }, []);
+
+  // Update common breed when animal changes
+  useEffect(() => {
+    const list = COMMON_BREEDS[animal] || [];
+    if (list.length > 0) {
+      setSelectedCommonBreed(list[0]);
+    } else {
+      setSelectedCommonBreed("");
+    }
+  }, [animal]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (!e.target.files?.length) return;
@@ -51,7 +84,7 @@ export default function LostAnimalForm({
     }
 
     setLocating(true);
-    setErrors(prev => prev.filter(err => err !== "Last seen location is required."));
+    setErrors(prev => prev.filter(err => err !== "Location coordinates are required."));
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -75,16 +108,26 @@ export default function LostAnimalForm({
   async function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    // Determine finalized breed string
+    let finalBreed = "";
+    if (breedType === "common") {
+      finalBreed = selectedCommonBreed;
+    } else if (breedType === "custom") {
+      finalBreed = customBreed.trim();
+    } else {
+      finalBreed = "Unknown / Mixed";
+    }
+
     // Validation
     const validationErrors: string[] = [];
     if (!imageFile) validationErrors.push("Animal photo is required.");
-    if (!breed) validationErrors.push("Breed is required.");
-    if (!color) validationErrors.push("Animal color is required.");
-    if (!location) validationErrors.push("Last seen location is required.");
+    if (!finalBreed) validationErrors.push("Breed description is required.");
+    if (!color.trim()) validationErrors.push("Animal color is required.");
+    if (!location) validationErrors.push("Location coordinates are required.");
+    if (!date) validationErrors.push("Date and time are required.");
 
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
-      // Scroll modal container back to top to show errors
       const modalElement = document.getElementById("form-modal-container");
       if (modalElement) modalElement.scrollTop = 0;
       return;
@@ -98,16 +141,17 @@ export default function LostAnimalForm({
         {
           type,
           animal,
-          breed,
-          color,
+          breed: finalBreed,
+          color: color.trim(),
           location,
-          description: additionalInfo || `A ${color.toLowerCase()} ${breed.toLowerCase()} spotted in this area.`,
-          uniqueId: uniqueId || undefined,
-          collarColor: collarColor || undefined,
-          name: name || undefined,
-          address: address || undefined,
-          additionalInfo: additionalInfo || undefined,
-          contactNumber: contactNumber || undefined,
+          description: additionalInfo.trim() || `A ${color.toLowerCase()} ${finalBreed.toLowerCase()} was reported ${type === "lost" ? "missing" : "found"} here.`,
+          uniqueId: uniqueId.trim() || undefined,
+          collarColor: collarColor.trim() || undefined,
+          name: name.trim() || undefined,
+          address: address.trim() || undefined,
+          date,
+          additionalInfo: additionalInfo.trim() || undefined,
+          urgency,
         },
         imageFile!
       );
@@ -115,7 +159,7 @@ export default function LostAnimalForm({
       onSubmitSuccess(newReport);
     } catch (error: any) {
       console.error("Submission failed:", error);
-      setErrors([error?.message || "Failed to submit lost animal report."]);
+      setErrors([error?.message || "Failed to submit lost/found animal report."]);
     } finally {
       setSubmitting(false);
     }
@@ -137,15 +181,15 @@ export default function LostAnimalForm({
         </button>
 
         <h2 className="text-2xl font-black text-slate-900 mb-1 flex items-center gap-1.5">
-          📢 Report Lost Animal
+          🐾 Report Lost / Found Animal
         </h2>
         <p className="text-slate-500 text-xs mb-5">
-          Help reunite an animal by adding detailed description and sighting details.
+          Submit details about a missing or found animal to help coordinate reuniting them.
         </p>
 
         {/* Validation Errors Header */}
         {errors.length > 0 && (
-          <div className="mb-5 p-4 bg-red-50 border border-red-100 rounded-2xl space-y-1.5">
+          <div className="mb-5 p-4 bg-red-50 border border-red-100 rounded-2xl space-y-1.5 animate-fadeIn">
             <h4 className="text-xs font-black text-red-800 flex items-center gap-1.5">
               <AlertCircle size={15} /> Please resolve the following errors:
             </h4>
@@ -159,7 +203,7 @@ export default function LostAnimalForm({
 
         <form onSubmit={handleFormSubmit} className="space-y-4 text-left">
           
-          {/* SIGHTING CASE STATUS SELECTOR */}
+          {/* CASE STATUS SELECTOR */}
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">
               Case Status
@@ -168,7 +212,7 @@ export default function LostAnimalForm({
               <button
                 type="button"
                 onClick={() => setType("lost")}
-                className={`flex-1 py-2 rounded-xl border text-xs font-black transition cursor-pointer ${
+                className={`flex-1 py-2.5 rounded-xl border text-xs font-black transition cursor-pointer ${
                   type === "lost"
                     ? "bg-red-500 text-white border-red-500 shadow-sm"
                     : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
@@ -179,13 +223,13 @@ export default function LostAnimalForm({
               <button
                 type="button"
                 onClick={() => setType("found")}
-                className={`flex-1 py-2 rounded-xl border text-xs font-black transition cursor-pointer ${
+                className={`flex-1 py-2.5 rounded-xl border text-xs font-black transition cursor-pointer ${
                   type === "found"
                     ? "bg-blue-500 text-white border-blue-500 shadow-sm"
                     : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
                 }`}
               >
-                ✅ Found Sighting
+                🔍 Found Animal
               </button>
             </div>
           </div>
@@ -203,6 +247,7 @@ export default function LostAnimalForm({
                   type="button"
                   onClick={() => {
                     setImagePreview(null);
+                    setImageFile(null);
                   }}
                   className="absolute top-2 right-2 bg-black/70 hover:bg-black text-white p-1.5 rounded-full transition cursor-pointer"
                 >
@@ -229,8 +274,8 @@ export default function LostAnimalForm({
             />
           </div>
 
-          {/* ANIMAL TYPE & BREED */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* ANIMAL TYPE & BREED SELECTION */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
                 Animal Type
@@ -250,71 +295,119 @@ export default function LostAnimalForm({
             
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                Breed *
+                Breed Type
               </label>
-              <input
-                type="text"
-                placeholder="e.g. Beagle, Persian or Unknown / Mixed"
-                value={breed}
-                onChange={(e) => setBreed(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setBreed("Unknown / Mixed")}
-                className="text-[9px] text-green-700 hover:underline mt-1 font-bold block text-left"
-              >
-                Set as Unknown / Mixed
-              </button>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setBreedType("common")}
+                  className={`flex-1 py-1 text-[10px] rounded-lg font-bold border transition ${
+                    breedType === "common"
+                      ? "bg-slate-800 text-white border-slate-800"
+                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Common
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBreedType("custom")}
+                  className={`flex-1 py-1 text-[10px] rounded-lg font-bold border transition ${
+                    breedType === "custom"
+                      ? "bg-slate-800 text-white border-slate-800"
+                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Custom
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBreedType("unknown")}
+                  className={`flex-1 py-1 text-[10px] rounded-lg font-bold border transition ${
+                    breedType === "unknown"
+                      ? "bg-slate-800 text-white border-slate-800"
+                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Mixed
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* ANIMAL COLOR & UNIQUE IDENTIFIERS */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* DYNAMIC BREED VALUE FIELDS */}
+          {breedType === "common" && (
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                Select Breed *
+              </label>
+              <select
+                value={selectedCommonBreed}
+                onChange={(e) => setSelectedCommonBreed(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                {(COMMON_BREEDS[animal] || []).map((br) => (
+                  <option key={br} value={br}>{br}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {breedType === "custom" && (
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                Custom Breed Name *
+              </label>
+              <input
+                type="text"
+                placeholder="Enter custom breed name (e.g. Rottweiler)"
+                value={customBreed}
+                onChange={(e) => setCustomBreed(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+                required
+              />
+            </div>
+          )}
+
+          {/* COLOR & UNIQUE CHARACTERISTICS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
                 Animal Color *
               </label>
               <input
                 type="text"
-                placeholder="e.g. Brown with white patches"
+                placeholder="e.g. Golden brown with white patch"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
                 required
               />
-              <span className="text-[9px] text-slate-400 mt-1 block">
-                Describe main color and markings.
-              </span>
             </div>
             
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                Unique Markings (Optional)
+                Unique Features (Optional)
               </label>
               <input
                 type="text"
-                placeholder="e.g. Scars, patches, tail type"
+                placeholder="e.g. Spots, scars, floppy ears, markings"
                 value={uniqueId}
                 onChange={(e) => setUniqueId(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
-              <span className="text-[9px] text-slate-400 mt-1 block">
-                Spots, scars, eye color, etc.
-              </span>
             </div>
           </div>
 
           {/* COLLAR COLOR & ANIMAL NAME */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
                 Collar / Belt Color (Optional)
               </label>
               <input
                 type="text"
-                placeholder="e.g. Red collar with a black buckle"
+                placeholder="e.g. Red collar with brass tag"
                 value={collarColor}
                 onChange={(e) => setCollarColor(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -327,21 +420,18 @@ export default function LostAnimalForm({
               </label>
               <input
                 type="text"
-                placeholder="Name on collar tag if any"
+                placeholder="Name if written on collar/belt tag"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
-              <span className="text-[9px] text-slate-400 mt-1 block">
-                Name written on collar tag.
-              </span>
             </div>
           </div>
 
-          {/* LOCATION DETAILS */}
+          {/* COORDINATES LAST SEEN / FOUND */}
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-              Last Seen Location *
+              Last Seen / Found Coordinates *
             </label>
             <div className="flex gap-2">
               <input
@@ -361,61 +451,86 @@ export default function LostAnimalForm({
               >
                 {locating ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" /> Fetching...
+                    <Loader2 size={14} className="animate-spin" /> Locating...
                   </>
                 ) : (
                   <>
-                    <MapPin size={14} /> Get Coordinates
+                    <MapPin size={14} /> Get GPS Location
                   </>
                 )}
               </button>
             </div>
           </div>
 
-          {/* ADDRESS DESCRIPTION */}
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-              Address (Optional)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Near XYZ Market, ABC Colony"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-            <span className="text-[9px] text-slate-400 mt-1 block">
-              Street name, colony, landmark, nearby shop, etc.
-            </span>
+          {/* ADDRESS & DATE DETAILS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                Address Location (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="Street, landmark, colony name"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                Date & Time *
+              </label>
+              <input
+                type="datetime-local"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+                required
+              />
+            </div>
           </div>
 
-          {/* CONTACT NUMBER */}
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-              Contact Number (Optional)
-            </label>
-            <input
-              type="tel"
-              placeholder="e.g. +91 98765 43210 or local number"
-              value={contactNumber}
-              onChange={(e) => setContactNumber(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-            <span className="text-[9px] text-slate-400 mt-1 block">
-              Direct phone number if you wish to be reached directly.
-            </span>
+          {/* URGENCY & ADDITIONAL NOTES */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                Urgency Level
+              </label>
+              <select
+                value={urgency}
+                onChange={(e) => setUrgency(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="Normal">Normal</option>
+                <option value="Urgent">Urgent ⚠️</option>
+                <option value="Critical">Critical 🚨</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                Contact Number (Optional)
+              </label>
+              <input
+                type="tel"
+                placeholder="Phone number if you wish to share"
+                value={contactNumber}
+                onChange={(e) => setContactNumber(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
           </div>
 
-          {/* ADDITIONAL DESCRIPTION */}
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
               Additional Information (Optional)
             </label>
             <textarea
-              placeholder="e.g. Last seen wearing a red collar. Responds to the name Bruno."
+              placeholder="Responses to name, behavior notes, leash status, etc."
               value={additionalInfo}
               onChange={(e) => setAdditionalInfo(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 h-20 resize-none"
+              className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 h-16 resize-none"
             />
           </div>
 
@@ -426,10 +541,10 @@ export default function LostAnimalForm({
           >
             {submitting ? (
               <>
-                <Loader2 size={16} className="animate-spin" /> Submitting Case Report...
+                <Loader2 size={16} className="animate-spin" /> Uploading Sighting...
               </>
             ) : (
-              "Submit Lost Animal Report"
+              `Submit ${type === "lost" ? "Lost" : "Found"} Animal Report`
             )}
           </Button>
 

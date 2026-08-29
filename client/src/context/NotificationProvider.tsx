@@ -4,6 +4,8 @@ import { getReportById } from "../services/report/getReportById";
 import { updateAssignment } from "../services/rescue/updateAssignment";
 import type { Report } from "../types/report";
 import type { AppNotification } from "../types/notification";
+import { connectSocket, disconnectSocket, getSocket } from "../services/socket";
+import { getUnreadMessagesFromBackend } from "../services/lost-found/messageApiService";
 
 interface IncomingAssignmentData {
   assignment: {
@@ -29,6 +31,8 @@ interface NotificationContextType {
   deleteNotification: (id: string) => void;
   addNotification: (notification: Omit<AppNotification, "id" | "timestamp">) => void;
   simulateAlert: (type?: "lost_found" | "nearby_report" | "rescue_alert") => void;
+  activeChat: { reportId: string; senderId: string } | null;
+  setActiveChat: React.Dispatch<React.SetStateAction<{ reportId: string; senderId: string } | null>>;
 }
 
 const DEFAULT_NOTIFICATIONS: AppNotification[] = [
@@ -98,6 +102,32 @@ export default function NotificationProvider({
   const [incoming, setIncoming] = useState<IncomingAssignmentData | null>(null);
   const [updating, setUpdating] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>(DEFAULT_NOTIFICATIONS);
+  const [activeChat, setActiveChat] = useState<{ reportId: string; senderId: string } | null>(null);
+
+  const addMessageNotification = (msg: any) => {
+    const messageText = `"${msg.content}"`;
+    setNotifications((prev) => {
+      const exists = prev.some((n) => n.meta?.messageId === msg.id);
+      if (exists) return prev;
+
+      const newNotif: AppNotification = {
+        id: `msg-${msg.id}`,
+        category: "lost_found",
+        title: `✉️ New Secure Message`,
+        message: messageText,
+        read: msg.isRead,
+        timestamp: "Just now",
+        linkUrl: "/lost-found",
+        meta: {
+          messageId: msg.id,
+          reportId: msg.reportId,
+          senderId: msg.senderId,
+          content: msg.content,
+        },
+      };
+      return [newNotif, ...prev];
+    });
+  };
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -167,12 +197,37 @@ export default function NotificationProvider({
   };
 
   useEffect(() => {
+    let reportsChannel: any = null;
+    let rescueChannel: any = null;
+    let socketListener: ((data: any) => void) | null = null;
+    let socketAlertListener: ((data: any) => void) | null = null;
+
     async function initSubscription() {
+      // Clean up previous subscriptions first to prevent leaks
+      if (reportsChannel) {
+        reportsChannel.unsubscribe();
+        reportsChannel = null;
+      }
+      if (rescueChannel) {
+        rescueChannel.unsubscribe();
+        rescueChannel = null;
+      }
+      if (socketListener) {
+        const socket = getSocket();
+        socket.off("secure_message_received", socketListener);
+        socketListener = null;
+      }
+      if (socketAlertListener) {
+        const socket = getSocket();
+        socket.off("nearby_lost_found_alert", socketAlertListener);
+        socketAlertListener = null;
+      }
+
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
         // Subscribe to all new report insertions for real-time local notifications
-        const reportsChannel = supabase
+        reportsChannel = supabase
           .channel("realtime:reports_notifications")
           .on(
             "postgres_changes",
@@ -221,8 +276,41 @@ export default function NotificationProvider({
           .subscribe();
 
         if (!session?.user) {
-          return () => { reportsChannel.unsubscribe(); };
+          disconnectSocket();
+          return;
         }
+
+        // Connect Socket.IO client and join user room
+        connectSocket(session.user.id);
+
+        // Fetch unread messages from backend and add them to notifications
+        try {
+          const unreadMsgs = await getUnreadMessagesFromBackend();
+          unreadMsgs.forEach((msg: any) => {
+            addMessageNotification(msg);
+          });
+        } catch (err) {
+          console.error("Failed to fetch unread messages on login:", err);
+        }
+
+        // Setup real-time Socket.IO listener for messages
+        const socket = getSocket();
+        socketListener = (data: any) => {
+          console.log("📨 Real-time secure message received via socket:", data);
+          if (data && data.message) {
+            addMessageNotification(data.message);
+          }
+        };
+        socket.on("secure_message_received", socketListener);
+
+        // Setup real-time Socket.IO listener for alerts
+        socketAlertListener = (data: any) => {
+          console.log("📨 Real-time nearby Lost & Found alert received via socket:", data);
+          if (data && data.notification) {
+            addNotification(data.notification);
+          }
+        };
+        socket.on("nearby_lost_found_alert", socketAlertListener);
 
         // Fetch guardian profile if authenticated
         const { data: guardian } = await supabase
@@ -232,7 +320,7 @@ export default function NotificationProvider({
           .maybeSingle();
 
         if (guardian) {
-          const rescueChannel = supabase
+          rescueChannel = supabase
             .channel(`realtime:rescue_assignments:${guardian.id}`)
             .on(
               "postgres_changes",
@@ -266,16 +354,7 @@ export default function NotificationProvider({
               }
             )
             .subscribe();
-
-          return () => {
-            reportsChannel.unsubscribe();
-            rescueChannel.unsubscribe();
-          };
         }
-
-        return () => {
-          reportsChannel.unsubscribe();
-        };
       } catch (err) {
         console.error("Failed to initialize notification subscription:", err);
       }
@@ -289,6 +368,15 @@ export default function NotificationProvider({
 
     return () => {
       subscription.unsubscribe();
+      if (reportsChannel) reportsChannel.unsubscribe();
+      if (rescueChannel) rescueChannel.unsubscribe();
+      const socket = getSocket();
+      if (socketListener) {
+        socket.off("secure_message_received", socketListener);
+      }
+      if (socketAlertListener) {
+        socket.off("nearby_lost_found_alert", socketAlertListener);
+      }
     };
   }, []);
 
@@ -327,6 +415,8 @@ export default function NotificationProvider({
         deleteNotification,
         addNotification,
         simulateAlert,
+        activeChat,
+        setActiveChat,
       }}
     >
       {children}
