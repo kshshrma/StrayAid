@@ -31,8 +31,9 @@ interface NotificationContextType {
   deleteNotification: (id: string) => void;
   addNotification: (notification: Omit<AppNotification, "id" | "timestamp">) => void;
   simulateAlert: (type?: "lost_found" | "nearby_report" | "rescue_alert") => void;
-  activeChat: { reportId: string; senderId: string } | null;
-  setActiveChat: React.Dispatch<React.SetStateAction<{ reportId: string; senderId: string } | null>>;
+  activeChat: { reportId: string; senderId: string; conversationId?: string } | null;
+  setActiveChat: React.Dispatch<React.SetStateAction<{ reportId: string; senderId: string; conversationId?: string } | null>>;
+  markConversationNotificationsAsRead: (conversationId: string) => void;
 }
 
 const DEFAULT_NOTIFICATIONS: AppNotification[] = [
@@ -102,7 +103,7 @@ export default function NotificationProvider({
   const [incoming, setIncoming] = useState<IncomingAssignmentData | null>(null);
   const [updating, setUpdating] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>(DEFAULT_NOTIFICATIONS);
-  const [activeChat, setActiveChat] = useState<{ reportId: string; senderId: string } | null>(null);
+  const [activeChat, setActiveChat] = useState<{ reportId: string; senderId: string; conversationId?: string } | null>(null);
 
   const addMessageNotification = (msg: any) => {
     const messageText = `"${msg.content}"`;
@@ -123,10 +124,19 @@ export default function NotificationProvider({
           reportId: msg.reportId,
           senderId: msg.senderId,
           content: msg.content,
+          conversationId: msg.conversationId,
         },
       };
       return [newNotif, ...prev];
     });
+  };
+
+  const markConversationNotificationsAsRead = (conversationId: string) => {
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.meta?.conversationId === conversationId ? { ...n, read: true } : n
+      )
+    );
   };
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -417,6 +427,7 @@ export default function NotificationProvider({
         simulateAlert,
         activeChat,
         setActiveChat,
+        markConversationNotificationsAsRead,
       }}
     >
       {children}
