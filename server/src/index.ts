@@ -162,6 +162,34 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("join_conversation_room", (conversationId: string) => {
+    if (conversationId) {
+      const roomName = `conversation:${conversationId}`;
+      socket.join(roomName);
+      console.log(`👤 Socket ${socket.id} joined conversation room: ${roomName}`);
+    }
+  });
+
+  socket.on("leave_conversation_room", (conversationId: string) => {
+    if (conversationId) {
+      const roomName = `conversation:${conversationId}`;
+      socket.leave(roomName);
+      console.log(`👤 Socket ${socket.id} left conversation room: ${roomName}`);
+    }
+  });
+
+  socket.on("typing_start", ({ conversationId, userId, userName }) => {
+    if (conversationId) {
+      socket.to(`conversation:${conversationId}`).emit("typing_start", { conversationId, userId, userName });
+    }
+  });
+
+  socket.on("typing_stop", ({ conversationId, userId }) => {
+    if (conversationId) {
+      socket.to(`conversation:${conversationId}`).emit("typing_stop", { conversationId, userId });
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log(`🔌 Client disconnected: ${socket.id}`);
   });

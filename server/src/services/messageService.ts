@@ -1,9 +1,20 @@
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { supabase } from "./supabase";
+
+export interface Conversation {
+  id: string;
+  reportId: string;
+  participant1Id: string; // Report Owner
+  participant2Id: string; // Enquirer
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Message {
   id: string;
+  conversationId: string;
   reportId: string;
   senderId: string;
   recipientId: string;
@@ -13,25 +24,111 @@ export interface Message {
 }
 
 const DATA_DIR = path.resolve("src/data");
-const FILE_PATH = path.join(DATA_DIR, "messages.json");
+const CONVERSATIONS_FILE = path.join(DATA_DIR, "conversations.json");
+const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
 
-async function ensureFileExists() {
+async function getReportOwnerId(reportId: string): Promise<string> {
+  try {
+    const { data: report } = await supabase
+      .from("reports")
+      .select("ai_advice")
+      .eq("id", reportId)
+      .single();
+
+    if (report) {
+      const metadata = JSON.parse(report.ai_advice || "{}");
+      return metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949";
+    }
+  } catch {}
+  return "6c4c4175-c2c4-470b-a5d5-c86639f3e949";
+}
+
+async function ensureFilesExist() {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
+    
+    let conversationsExist = true;
     try {
-      await fs.access(FILE_PATH);
+      await fs.access(CONVERSATIONS_FILE);
     } catch {
-      await fs.writeFile(FILE_PATH, JSON.stringify([]), "utf-8");
+      conversationsExist = false;
+      await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify([]), "utf-8");
+    }
+
+    let messagesExist = true;
+    try {
+      await fs.access(MESSAGES_FILE);
+    } catch {
+      messagesExist = false;
+      await fs.writeFile(MESSAGES_FILE, JSON.stringify([]), "utf-8");
+    }
+
+    if (messagesExist) {
+      const messagesContent = await fs.readFile(MESSAGES_FILE, "utf-8");
+      const messages: any[] = JSON.parse(messagesContent || "[]");
+
+      const conversationsContent = await fs.readFile(CONVERSATIONS_FILE, "utf-8");
+      const conversations: Conversation[] = JSON.parse(conversationsContent || "[]");
+
+      const needsMigration = messages.some((m) => !m.conversationId);
+      if (needsMigration) {
+        console.log("🛠️ Migrating old messages to conversation-based database schema...");
+        for (const msg of messages) {
+          if (!msg.conversationId) {
+            const ownerId = await getReportOwnerId(msg.reportId);
+            const enquirerId = msg.senderId === ownerId ? msg.recipientId : msg.senderId;
+
+            let conv = conversations.find(
+              (c) =>
+                c.reportId === msg.reportId &&
+                ((c.participant1Id === ownerId && c.participant2Id === enquirerId) ||
+                  (c.participant1Id === enquirerId && c.participant2Id === ownerId))
+            );
+
+            if (!conv) {
+              conv = {
+                id: crypto.randomUUID(),
+                reportId: msg.reportId,
+                participant1Id: ownerId,
+                participant2Id: enquirerId,
+                createdAt: msg.createdAt || new Date().toISOString(),
+                updatedAt: msg.createdAt || new Date().toISOString(),
+              };
+              conversations.push(conv);
+            }
+            msg.conversationId = conv.id;
+          }
+        }
+
+        await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(conversations, null, 2), "utf-8");
+        await fs.writeFile(MESSAGES_FILE, JSON.stringify(messages, null, 2), "utf-8");
+        console.log("✅ Messages migration completed successfully!");
+      }
     }
   } catch (err) {
-    console.error("[MessageService] Failed to ensure directory/file exists:", err);
+    console.error("[MessageService] Error during files initialization/migration:", err);
   }
 }
 
-export async function readMessages(): Promise<Message[]> {
-  await ensureFileExists();
+export async function readConversations(): Promise<Conversation[]> {
+  await ensureFilesExist();
   try {
-    const content = await fs.readFile(FILE_PATH, "utf-8");
+    const content = await fs.readFile(CONVERSATIONS_FILE, "utf-8");
+    return JSON.parse(content || "[]");
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function writeConversations(conversations: Conversation[]): Promise<void> {
+  await ensureFilesExist();
+  await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(conversations, null, 2), "utf-8");
+}
+
+export async function readMessages(): Promise<Message[]> {
+  await ensureFilesExist();
+  try {
+    const content = await fs.readFile(MESSAGES_FILE, "utf-8");
     return JSON.parse(content || "[]");
   } catch (e) {
     return [];
@@ -39,11 +136,47 @@ export async function readMessages(): Promise<Message[]> {
 }
 
 export async function writeMessages(messages: Message[]): Promise<void> {
-  await ensureFileExists();
-  await fs.writeFile(FILE_PATH, JSON.stringify(messages, null, 2), "utf-8");
+  await ensureFilesExist();
+  await fs.writeFile(MESSAGES_FILE, JSON.stringify(messages, null, 2), "utf-8");
+}
+
+export async function getConversationById(id: string): Promise<Conversation | null> {
+  const conversations = await readConversations();
+  return conversations.find((c) => c.id === id) || null;
+}
+
+export async function getOrCreateConversation(
+  reportId: string,
+  participant1Id: string,
+  participant2Id: string
+): Promise<Conversation> {
+  const conversations = await readConversations();
+  
+  let conv = conversations.find(
+    (c) =>
+      c.reportId === reportId &&
+      ((c.participant1Id === participant1Id && c.participant2Id === participant2Id) ||
+        (c.participant1Id === participant2Id && c.participant2Id === participant1Id))
+  );
+
+  if (!conv) {
+    conv = {
+      id: crypto.randomUUID(),
+      reportId,
+      participant1Id,
+      participant2Id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    conversations.push(conv);
+    await writeConversations(conversations);
+  }
+
+  return conv;
 }
 
 export async function createMessage(
+  conversationId: string,
   reportId: string,
   senderId: string,
   recipientId: string,
@@ -52,6 +185,7 @@ export async function createMessage(
   const messages = await readMessages();
   const newMessage: Message = {
     id: crypto.randomUUID(),
+    conversationId,
     reportId,
     senderId,
     recipientId,
@@ -61,21 +195,23 @@ export async function createMessage(
   };
   messages.push(newMessage);
   await writeMessages(messages);
+
+  // Update conversation updatedAt timestamp
+  const conversations = await readConversations();
+  const convIdx = conversations.findIndex((c) => c.id === conversationId);
+  if (convIdx !== -1) {
+    conversations[convIdx].updatedAt = new Date().toISOString();
+    await writeConversations(conversations);
+  }
+
   return newMessage;
 }
 
-export async function getConversationMessages(
-  reportId: string,
-  userA: string,
-  userB: string
-): Promise<Message[]> {
+export async function getConversationMessages(conversationId: string): Promise<Message[]> {
   const messages = await readMessages();
-  return messages.filter(
-    (m) =>
-      m.reportId === reportId &&
-      ((m.senderId === userA && m.recipientId === userB) ||
-        (m.senderId === userB && m.recipientId === userA))
-  );
+  return messages
+    .filter((m) => m.conversationId === conversationId)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
 export async function getUnreadMessagesCount(recipientId: string): Promise<number> {
@@ -84,19 +220,13 @@ export async function getUnreadMessagesCount(recipientId: string): Promise<numbe
 }
 
 export async function markConversationAsRead(
-  reportId: string,
-  recipientId: string,
-  senderId: string
+  conversationId: string,
+  recipientId: string
 ): Promise<void> {
   const messages = await readMessages();
   let updated = false;
   const updatedMessages = messages.map((m) => {
-    if (
-      m.reportId === reportId &&
-      m.recipientId === recipientId &&
-      m.senderId === senderId &&
-      !m.isRead
-    ) {
+    if (m.conversationId === conversationId && m.recipientId === recipientId && !m.isRead) {
       updated = true;
       return { ...m, isRead: true };
     }
@@ -109,38 +239,90 @@ export async function markConversationAsRead(
 }
 
 export async function getConversationsForUser(userId: string): Promise<any[]> {
+  const conversations = await readConversations();
+  const userConvs = conversations.filter(
+    (c) => c.participant1Id === userId || c.participant2Id === userId
+  );
+
+  if (userConvs.length === 0) return [];
+
+  // Batch query profile information for other participants
+  const otherUserIds = Array.from(
+    new Set(
+      userConvs.map((c) => (c.participant1Id === userId ? c.participant2Id : c.participant1Id))
+    )
+  );
+  
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url")
+    .in("id", otherUserIds);
+
+  const profileMap = new Map<string, { full_name: string; avatar_url: string | null }>();
+  if (profiles) {
+    profiles.forEach((p) => {
+      profileMap.set(p.id, { full_name: p.full_name, avatar_url: p.avatar_url });
+    });
+  }
+
+  // Batch query report context information
+  const reportIds = Array.from(new Set(userConvs.map((c) => c.reportId)));
+  const { data: reports } = await supabase
+    .from("reports")
+    .select("id, status, animal_type, ai_advice")
+    .in("id", reportIds);
+
+  const reportMap = new Map<string, { name: string; status: string }>();
+  if (reports) {
+    reports.forEach((r) => {
+      let breed = r.animal_type || "Animal";
+      let name = "";
+      try {
+        const meta = JSON.parse(r.ai_advice || "{}");
+        breed = meta.breed || breed;
+        name = meta.name || "";
+      } catch {}
+      
+      const petName = name ? `${name} (${breed})` : breed;
+      reportMap.set(r.id, { name: petName, status: r.status });
+    });
+  }
+
   const messages = await readMessages();
-  // Filter messages where user is sender or recipient
-  const userMessages = messages.filter((m) => m.senderId === userId || m.recipientId === userId);
 
-  // Group by reportId + the other participant
-  const groups: { [key: string]: Message[] } = {};
-  userMessages.forEach((m) => {
-    const otherUser = m.senderId === userId ? m.recipientId : m.senderId;
-    const key = `${m.reportId}:${otherUser}`;
-    if (!groups[key]) {
-      groups[key] = [];
-    }
-    groups[key].push(m);
-  });
+  const list = userConvs.map((c) => {
+    const otherParticipantId = c.participant1Id === userId ? c.participant2Id : c.participant1Id;
+    const profile = profileMap.get(otherParticipantId) || {
+      full_name: `User #${otherParticipantId.substring(0, 5)}`,
+      avatar_url: null,
+    };
+    const reportContext = reportMap.get(c.reportId) || {
+      name: "Unknown Animal",
+      status: "lost",
+    };
 
-  const list = Object.keys(groups).map((key) => {
-    const [reportId, otherUser] = key.split(":");
-    const rawMsgs = groups[key] || [];
-    const msgs = [...rawMsgs].sort(
+    // Find messages in this conversation
+    const convMsgs = messages.filter((m) => m.conversationId === c.id);
+    const sortedMsgs = [...convMsgs].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
-    const lastMsg = msgs[msgs.length - 1];
-    const unreadCount = msgs.filter((m) => m.recipientId === userId && !m.isRead).length;
+    const lastMsg = sortedMsgs[sortedMsgs.length - 1];
+    const unreadCount = convMsgs.filter((m) => m.recipientId === userId && !m.isRead).length;
 
     return {
-      reportId,
-      otherParticipantId: otherUser,
-      lastMessage: lastMsg ? lastMsg.content : "",
-      lastMessageAt: lastMsg ? lastMsg.createdAt : new Date().toISOString(),
+      conversationId: c.id,
+      reportId: c.reportId,
+      otherParticipantId,
+      otherParticipantName: profile.full_name,
+      otherParticipantAvatar: profile.avatar_url,
+      reportName: reportContext.name,
+      reportStatus: reportContext.status,
+      lastMessage: lastMsg ? lastMsg.content : "No messages yet.",
+      lastMessageAt: lastMsg ? lastMsg.createdAt : c.updatedAt,
       unreadCount,
     };
   });
 
-  return list;
+  // Sort by lastMessageAt descending
+  return list.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
 }

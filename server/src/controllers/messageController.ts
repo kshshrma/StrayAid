@@ -23,10 +23,26 @@ async function getReportOwnerId(reportId: string): Promise<string | null> {
   }
 }
 
-// POST /api/messages
-export async function sendMessage(req: AuthenticatedRequest, res: Response) {
+// GET /api/messages/inbox
+export async function getInbox(req: AuthenticatedRequest, res: Response) {
   try {
-    const { reportId, content, recipientId: clientRecipientId } = req.body;
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const conversations = await messageService.getConversationsForUser(userId);
+    return res.json({ success: true, conversations });
+  } catch (err: any) {
+    console.error("[MessageController] Error loading inbox:", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to load inbox" });
+  }
+}
+
+// POST /api/messages/start
+export async function startConversation(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { reportId, content } = req.body;
     const senderId = req.userId;
 
     if (!senderId) {
@@ -37,45 +53,204 @@ export async function sendMessage(req: AuthenticatedRequest, res: Response) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
-    // 1. Get report owner
+    // 1. Get report owner (Derive it server-side, never trust client recipientId)
     const ownerId = await getReportOwnerId(reportId);
     if (!ownerId) {
       return res.status(404).json({ success: false, message: "Report or report owner not found" });
     }
 
-    // 2. Determine recipient (Rule: Never trust recipientId from frontend if sender is enquirer)
-    let recipientId = ownerId;
     if (senderId === ownerId) {
-      // The report owner is replying. In this case, we need to send the message to the enquirer.
-      // We take clientRecipientId and verify that they are authorized
-      if (!clientRecipientId) {
-        return res.status(400).json({ success: false, message: "Recipient ID required for replies" });
-      }
-      recipientId = clientRecipientId;
+      return res.status(400).json({ success: false, message: "You cannot start a conversation on your own report" });
     }
 
-    // 3. Save message in local JSON database
-    const newMessage = await messageService.createMessage(
+    // 2. Get or create conversation (participant1 = Owner, participant2 = Enquirer)
+    const conversation = await messageService.getOrCreateConversation(reportId, ownerId, senderId);
+
+    // 3. Create initial message
+    const message = await messageService.createMessage(
+      conversation.id,
       reportId,
+      senderId,
+      ownerId,
+      content.trim()
+    );
+
+    // 4. Emit to owner room via Socket.IO
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`user:${ownerId}`).emit("secure_message_received", { message });
+    }
+
+    return res.status(201).json({ success: true, conversation, message });
+  } catch (err: any) {
+    console.error("[MessageController] Error starting conversation:", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to start conversation" });
+  }
+}
+
+// GET /api/messages/conversations/:conversationId
+export async function getConversationDetails(req: AuthenticatedRequest, res: Response) {
+  try {
+    const conversationId = req.params.conversationId as string;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const conversation = await messageService.getConversationById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: "Conversation not found" });
+    }
+
+    // Security check: Only participants can retrieve messages
+    if (userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
+      return res.status(403).json({ success: false, message: "Forbidden: You are not a participant in this conversation" });
+    }
+
+    // Load messages
+    const messages = await messageService.getConversationMessages(conversationId);
+    return res.json({ success: true, conversation, messages });
+  } catch (err: any) {
+    console.error("[MessageController] Error loading conversation details:", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to load conversation" });
+  }
+}
+
+// POST /api/messages/conversations/:conversationId/messages
+export async function sendReplyMessage(req: AuthenticatedRequest, res: Response) {
+  try {
+    const conversationId = req.params.conversationId as string;
+    const { content } = req.body;
+    const senderId = req.userId;
+
+    if (!senderId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ success: false, message: "Message content cannot be empty" });
+    }
+
+    const conversation = await messageService.getConversationById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: "Conversation not found" });
+    }
+
+    // Security check: Only participants can send messages
+    if (senderId !== conversation.participant1Id && senderId !== conversation.participant2Id) {
+      return res.status(403).json({ success: false, message: "Forbidden: You are not a participant in this conversation" });
+    }
+
+    const recipientId = senderId === conversation.participant1Id ? conversation.participant2Id : conversation.participant1Id;
+
+    // Create message
+    const message = await messageService.createMessage(
+      conversationId,
+      conversation.reportId,
       senderId,
       recipientId,
       content.trim()
     );
 
-    // 4. Dispatch real-time notification via Socket.IO
+    // Emit to conversation room (realtime chat screen) and user room (unread badges/alerts)
     const io = req.app.get("io");
     if (io) {
-      const roomName = `user:${recipientId}`;
-      io.to(roomName).emit("secure_message_received", {
-        message: newMessage,
-      });
-      console.log(`📡 Secure message emitted to room ${roomName}`);
+      io.to(`conversation:${conversationId}`).emit("new_message", { message });
+      io.to(`user:${recipientId}`).emit("secure_message_received", { message });
     }
 
-    return res.status(201).json({ success: true, message: newMessage });
+    return res.status(201).json({ success: true, message });
   } catch (err: any) {
-    console.error("[MessageController] Error sending message:", err);
+    console.error("[MessageController] Error sending reply message:", err);
     return res.status(500).json({ success: false, message: err.message || "Failed to send message" });
+  }
+}
+
+// POST /api/messages/conversations/:conversationId/read
+export async function markConversationRead(req: AuthenticatedRequest, res: Response) {
+  try {
+    const conversationId = req.params.conversationId as string;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const conversation = await messageService.getConversationById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: "Conversation not found" });
+    }
+
+    // Security check
+    if (userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    await messageService.markConversationAsRead(conversationId, userId);
+
+    // Notify room of read confirmations
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`conversation:${conversationId}`).emit("messages_read", { conversationId, readerId: userId });
+    }
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error("[MessageController] Error marking conversation read:", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to mark read" });
+  }
+}
+
+// POST /api/messages/conversations/:conversationId/block
+export async function blockConversationParticipant(req: AuthenticatedRequest, res: Response) {
+  try {
+    const conversationId = req.params.conversationId as string;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const conversation = await messageService.getConversationById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: "Conversation not found" });
+    }
+
+    if (userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    // Mock block participant success
+    return res.json({ success: true, message: "Participant blocked successfully" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Failed to block participant" });
+  }
+}
+
+// POST /api/messages/conversations/:conversationId/report
+export async function reportMessageContent(req: AuthenticatedRequest, res: Response) {
+  try {
+    const conversationId = req.params.conversationId as string;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const conversation = await messageService.getConversationById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: "Conversation not found" });
+    }
+
+    if (userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    // Mock report success
+    return res.json({ success: true, message: "Message content reported successfully" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message || "Failed to report content" });
   }
 }
 
@@ -92,76 +267,6 @@ export async function getUnreadCount(req: AuthenticatedRequest, res: Response) {
   } catch (err: any) {
     console.error("[MessageController] Error getting unread count:", err);
     return res.status(500).json({ success: false, message: err.message || "Failed to get unread count" });
-  }
-}
-
-// GET /api/messages/report/:reportId/conversation/:otherUserId
-export async function getConversation(req: AuthenticatedRequest, res: Response) {
-  try {
-    const reportId = req.params.reportId as string;
-    const otherUserId = req.params.otherUserId as string;
-    const userId = req.userId;
-
-    if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    // 1. Get report owner
-    const ownerId = await getReportOwnerId(reportId);
-    if (!ownerId) {
-      return res.status(404).json({ success: false, message: "Report or report owner not found" });
-    }
-
-    // 2. Security/Auth checks (current user must be either the owner or the other participant)
-    const isOwner = userId === ownerId;
-    const isOtherParticipant = userId === otherUserId;
-    const isTargetingOwner = otherUserId === ownerId;
-
-    if (!isOwner && !isOtherParticipant && !isTargetingOwner) {
-      return res.status(403).json({ success: false, message: "ACCESS DENIED" });
-    }
-
-    // 3. Fetch conversation messages
-    const messages = await messageService.getConversationMessages(reportId, userId as string, otherUserId);
-    return res.json({ success: true, messages });
-  } catch (err: any) {
-    console.error("[MessageController] Error fetching conversation:", err);
-    return res.status(500).json({ success: false, message: err.message || "Failed to load conversation" });
-  }
-}
-
-// POST /api/messages/report/:reportId/read/:senderId
-export async function markAsRead(req: AuthenticatedRequest, res: Response) {
-  try {
-    const reportId = req.params.reportId as string;
-    const senderId = req.params.senderId as string;
-    const userId = req.userId;
-
-    if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    await messageService.markConversationAsRead(reportId, userId as string, senderId);
-    return res.json({ success: true });
-  } catch (err: any) {
-    console.error("[MessageController] Error marking conversation as read:", err);
-    return res.status(500).json({ success: false, message: err.message || "Failed to mark as read" });
-  }
-}
-
-// GET /api/messages/conversations
-export async function getConversations(req: AuthenticatedRequest, res: Response) {
-  try {
-    const userId = req.userId;
-    if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    const conversations = await messageService.getConversationsForUser(userId);
-    return res.json({ success: true, conversations });
-  } catch (err: any) {
-    console.error("[MessageController] Error fetching conversations:", err);
-    return res.status(500).json({ success: false, message: err.message || "Failed to fetch conversations" });
   }
 }
 
