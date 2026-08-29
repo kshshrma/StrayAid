@@ -338,57 +338,78 @@ export default function LostFound() {
             )}
           </button>
 
-          {showRightDropdown && messageNotifications.length > 0 && (
+          {showRightDropdown && (
             <div className="w-80 rounded-3xl bg-white/95 border border-slate-100 shadow-2xl p-4 space-y-2.5 backdrop-blur-md animate-slideLeft">
               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Messages</span>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Inbox Conversations</span>
                 <button onClick={() => setShowRightDropdown(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X size={12} />
                 </button>
               </div>
+              
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {messageNotifications.map((notif) => (
-                  <div key={notif.id} className="p-2.5 rounded-2xl bg-emerald-50/50 border border-emerald-100/50 flex items-start gap-2.5 justify-between">
-                    <button
-                      onClick={() => {
-                        markAsRead(notif.id);
-                        if (messageNotifications.length <= 1) setShowRightDropdown(false);
-                        
-                        if (notif.meta?.reportId && notif.meta?.senderId) {
-                          // Set active chat to trigger details modal and chat thread in AnimalReportCard
+                {loadingConvs ? (
+                  <div className="text-center py-4 text-slate-450 text-[10px] font-bold">Loading inbox...</div>
+                ) : conversations.length === 0 ? (
+                  <div className="text-center py-4 text-slate-400 text-[10px] font-bold">No conversations yet.</div>
+                ) : (
+                  conversations.map((conv) => {
+                    const pet = pets.find((p) => p.id === conv.reportId);
+                    const displayName = pet ? (pet.name ? `${pet.name} (${pet.breed})` : pet.breed) : `Report #${conv.reportId.substring(0, 5)}`;
+                    const imgUrl = pet ? pet.image : "";
+                    
+                    return (
+                      <button
+                        key={`${conv.reportId}-${conv.otherParticipantId}`}
+                        onClick={() => {
+                          setShowRightDropdown(false);
+                          
+                          // Mark notifications for this report as read locally
+                          messageNotifications.forEach((n) => {
+                            if (n.meta?.reportId === conv.reportId && n.meta?.senderId === conv.otherParticipantId) {
+                              markAsRead(n.id);
+                            }
+                          });
+
                           setActiveChat({
-                            reportId: notif.meta.reportId,
-                            senderId: notif.meta.senderId,
+                            reportId: conv.reportId,
+                            senderId: conv.otherParticipantId,
                           });
                           
-                          // Scroll to the card as well
-                          const element = document.getElementById(`report-card-${notif.meta.reportId}`);
+                          const element = document.getElementById(`report-card-${conv.reportId}`);
                           if (element) {
                             element.scrollIntoView({ behavior: "smooth", block: "center" });
                           }
-                        }
-                      }}
-                      className="flex items-center gap-2 min-w-0 text-left hover:opacity-80 transition cursor-pointer flex-1"
-                    >
-                      {notif.imageUrl && (
-                        <img src={notif.imageUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-100" />
-                      )}
-                      <div className="min-w-0">
-                        <h5 className="text-[11px] font-bold text-slate-800 truncate">{notif.title}</h5>
-                        <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        markAsRead(notif.id);
-                        if (messageNotifications.length <= 1) setShowRightDropdown(false);
-                      }}
-                      className="text-[9px] text-emerald-700 hover:text-emerald-950 font-extrabold cursor-pointer shrink-0 ml-1.5 self-center"
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                ))}
+                        }}
+                        className={`w-full p-2.5 rounded-2xl flex items-start gap-2.5 hover:bg-slate-50 transition text-left cursor-pointer border ${
+                          conv.unreadCount > 0 ? "bg-emerald-50/30 border-emerald-100" : "bg-white border-slate-100/50"
+                        }`}
+                      >
+                        {imgUrl ? (
+                          <img src={imgUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-150 shadow-xs" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 shrink-0 flex items-center justify-center text-xs">🐾</div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex justify-between items-start gap-1">
+                            <h5 className="text-[11px] font-extrabold text-slate-800 truncate">{displayName}</h5>
+                            {conv.unreadCount > 0 && (
+                              <span className="bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shrink-0">
+                                New
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[9px] text-slate-500 truncate mt-0.5" title={conv.lastMessage}>
+                            {conv.lastMessage}
+                          </p>
+                          <span className="text-[8px] text-slate-400 block mt-1">
+                            {new Date(conv.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}
