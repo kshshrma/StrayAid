@@ -198,9 +198,9 @@ export async function createMessage(
 
   // Update conversation updatedAt timestamp
   const conversations = await readConversations();
-  const convIdx = conversations.findIndex((c) => c.id === conversationId);
-  if (convIdx !== -1) {
-    conversations[convIdx].updatedAt = new Date().toISOString();
+  const conv = conversations.find((c) => c.id === conversationId);
+  if (conv) {
+    conv.updatedAt = new Date().toISOString();
     await writeConversations(conversations);
   }
 
