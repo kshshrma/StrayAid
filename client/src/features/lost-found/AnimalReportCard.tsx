@@ -177,26 +177,31 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
             const reportConvs = data.conversations.filter((c: any) => c.reportId === pet.id);
             const userIds = reportConvs.map((c: any) => c.otherParticipantId);
             setParticipants(userIds);
-            if (userIds.length > 0 && !selectedParticipantId) {
-              setSelectedParticipantId(userIds[0]);
-            } else if (userIds.length === 0) {
-              setSelectedParticipantId(pet.reporterId || null);
+            if (userIds.length > 0) {
+              if (!selectedParticipantId || selectedParticipantId === pet.reporterId) {
+                setSelectedParticipantId(userIds[0]);
+              }
+            } else {
+              setSelectedParticipantId(null);
             }
           }
         } catch (err) {
           console.error("Failed to load conversation participants:", err);
-          setSelectedParticipantId(pet.reporterId || null);
+          setSelectedParticipantId(null);
         }
       }
       fetchParticipants();
     } else {
       setSelectedParticipantId(pet.reporterId || null);
     }
-  }, [showDetails, currentUserId, pet.id, pet.reporterId, selectedParticipantId, isOwner]);
+  }, [showDetails, currentUserId, pet.id, pet.reporterId, isOwner]);
 
   // Fetch message thread when selectedParticipantId is resolved
   useEffect(() => {
-    if (!showDetails || !currentUserId || !selectedParticipantId) return;
+    if (!showDetails || !currentUserId || !selectedParticipantId) {
+      setMessages([]);
+      return;
+    }
 
     async function loadConversation() {
       try {
@@ -217,7 +222,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
 
   // Listen for real-time messages for this active chat in the card modal
   useEffect(() => {
-    if (!showDetails || !currentUserId || !selectedParticipantId) return;
+    if (!showDetails || !currentUserId) return;
 
     const socket = getSocket();
     
@@ -225,18 +230,31 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
       if (data && data.message) {
         const msg = data.message;
         const isThisReport = msg.reportId === pet.id;
-        const isFromParticipant = msg.senderId === selectedParticipantId;
         const isToMe = msg.recipientId === currentUserId;
         
-        if (isThisReport && isFromParticipant && isToMe) {
-          setMessages((prev) => {
-            const exists = prev.some((m) => m.id === msg.id);
-            if (exists) return prev;
-            return [...prev, msg];
-          });
+        if (isThisReport && isToMe) {
+          const senderId = msg.senderId;
           
-          // Mark it as read
-          markConversationAsReadOnBackend(pet.id, selectedParticipantId!);
+          if (isOwner) {
+            setParticipants((prev) => {
+              if (prev.includes(senderId)) return prev;
+              return [...prev, senderId];
+            });
+            setSelectedParticipantId((prev) => {
+              if (!prev || prev === pet.reporterId) return senderId;
+              return prev;
+            });
+          }
+          
+          // If the message matches our selected participant, append
+          if (senderId === selectedParticipantId || (!selectedParticipantId && senderId === pet.reporterId)) {
+            setMessages((prev) => {
+              const exists = prev.some((m) => m.id === msg.id);
+              if (exists) return prev;
+              return [...prev, msg];
+            });
+            markConversationAsReadOnBackend(pet.id, senderId);
+          }
         }
       }
     };
@@ -246,7 +264,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
     return () => {
       socket.off("secure_message_received", handleReceiveMessage);
     };
-  }, [showDetails, currentUserId, selectedParticipantId, pet.id]);
+  }, [showDetails, currentUserId, selectedParticipantId, pet.id, isOwner, pet.reporterId]);
 
   async function handleSendContactMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -392,7 +410,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
     setContactMessage(text);
   }
 
-  const showChat = true;
+  const showChat = !isOwner || (isOwner && selectedParticipantId !== null);
 
   return (
     <>
