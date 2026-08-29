@@ -60,6 +60,44 @@ export default function LostFound() {
     });
   }, []);
 
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [loadingConvs, setLoadingConvs] = useState(false);
+
+  // Fetch active conversations when Secure Messages dropdown is opened or new messages arrive
+  useEffect(() => {
+    if (!showRightDropdown || !currentUserId) return;
+
+    async function fetchConvs() {
+      try {
+        setLoadingConvs(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/messages/conversations`,
+          {
+            headers: {
+              Authorization: `Bearer ${session?.access_token || ""}`,
+            },
+          }
+        );
+        const data = await res.json();
+        if (data.success && data.conversations) {
+          const sorted = data.conversations.sort((a: any, b: any) => {
+            if (a.unreadCount !== b.unreadCount) {
+              return b.unreadCount - a.unreadCount;
+            }
+            return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+          });
+          setConversations(sorted);
+        }
+      } catch (err) {
+        console.error("Failed to load conversations:", err);
+      } finally {
+        setLoadingConvs(false);
+      }
+    }
+    fetchConvs();
+  }, [showRightDropdown, currentUserId, messageNotifications.length]);
+
   // Generate message notifications from fetched reports privately
   useEffect(() => {
     if (!currentUserId || pets.length === 0) return;
