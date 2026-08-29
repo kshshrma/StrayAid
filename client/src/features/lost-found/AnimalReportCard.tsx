@@ -8,7 +8,6 @@ import {
   Info,
   Share2,
   CheckCircle,
-  Ban,
   AlertTriangle,
   PlusCircle,
   Eye,
@@ -20,12 +19,6 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import { supabase } from "../../lib/supabase";
 import { useNotification } from "../../context/NotificationProvider";
-import { getSocket } from "../../services/socket";
-import {
-  sendMessageToBackend,
-  getConversationFromBackend,
-  markConversationAsReadOnBackend,
-} from "../../services/lost-found/messageApiService";
 import {
   submitSightingOnBackend,
   getSightingsFromBackend,
@@ -33,6 +26,10 @@ import {
   dismissMatchOnBackend,
   markReunitedOnBackend,
 } from "../../services/lost-found/lostFoundService";
+import {
+  startConversationOnBackend,
+  getInboxFromBackend,
+} from "../../services/lost-found/messageApiService";
 
 export interface LostFoundPet {
   id: string;
@@ -56,7 +53,6 @@ export interface LostFoundPet {
   reunited?: boolean;
   reunionPhotoUrl?: string;
   reunitedAt?: string;
-  messages?: Array<{ senderId: string; text: string; timestamp: string; senderName?: string }>;
 }
 
 interface AnimalReportCardProps {
@@ -66,12 +62,7 @@ interface AnimalReportCardProps {
 export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
   const { activeChat, setActiveChat } = useNotification();
   const [showDetails, setShowDetails] = useState(false);
-  const [contactMessage, setContactMessage] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [participants, setParticipants] = useState<string[]>([]);
-  const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
-  const [loadingMessages, setLoadingMessages] = useState(false);
 
   // Tabs and feature states
   const [activeTab, setActiveTab] = useState<"details" | "location" | "timeline" | "sightings" | "matches">("details");
@@ -97,6 +88,12 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
   const [sightingPhotoPreview, setSightingPhotoPreview] = useState<string | null>(null);
   const [submittingSighting, setSubmittingSighting] = useState(false);
   const [locatingSighting, setLocatingSighting] = useState(false);
+
+  // Private inbox & chat compose states
+  const [existingConversation, setExistingConversation] = useState<any | null>(null);
+  const [loadingConversationCheck, setLoadingConversationCheck] = useState(false);
+  const [composerMessage, setComposerMessage] = useState("");
+  const [sendingInitial, setSendingInitial] = useState(false);
   
   const isOwner = currentUserId === pet.reporterId;
 
@@ -116,15 +113,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
     const localISO = new Date(now.getTime() - offset).toISOString().slice(0, 16);
     setSightingTime(localISO);
   }, [showDetails]);
-
-  // Listen to activeChat triggers from notifications click
-  useEffect(() => {
-    if (activeChat && activeChat.reportId === pet.id) {
-      setShowDetails(true);
-      setSelectedParticipantId(activeChat.senderId);
-      setActiveChat(null); // Reset trigger
-    }
-  }, [activeChat, pet.id, setActiveChat]);
 
   // Fetch sightings and matches when details opens
   useEffect(() => {
@@ -156,129 +144,28 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
     loadDetails();
   }, [showDetails, pet.id, isOwner]);
 
-  // Load participant list if current user is owner, or set owner as selectedParticipantId if enquirer
+  // Check if conversation already exists when details modal opens
   useEffect(() => {
     if (!showDetails || !currentUserId) return;
 
-    if (isOwner) {
-      async function fetchParticipants() {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const res = await fetch(
-            `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/messages/conversations`,
-            {
-              headers: {
-                Authorization: `Bearer ${session?.access_token || ""}`,
-              },
-            }
-          );
-          const data = await res.json();
-          if (data.success && data.conversations) {
-            const reportConvs = data.conversations.filter((c: any) => c.reportId === pet.id);
-            const userIds = reportConvs.map((c: any) => c.otherParticipantId);
-            setParticipants(userIds);
-            if (userIds.length > 0) {
-              if (!selectedParticipantId || selectedParticipantId === pet.reporterId) {
-                setSelectedParticipantId(userIds[0]);
-              }
-            } else {
-              setSelectedParticipantId(null);
-            }
-          }
-        } catch (err) {
-          console.error("Failed to load conversation participants:", err);
-          setSelectedParticipantId(null);
-        }
-      }
-      fetchParticipants();
-    } else {
-      setSelectedParticipantId(pet.reporterId || null);
-    }
-  }, [showDetails, currentUserId, pet.id, pet.reporterId, isOwner]);
-
-  // Fetch message thread when selectedParticipantId is resolved
-  useEffect(() => {
-    if (!showDetails || !currentUserId || !selectedParticipantId) {
-      setMessages([]);
-      return;
-    }
-
-    async function loadConversation() {
+    async function checkConversation() {
       try {
-        setLoadingMessages(true);
-        const msgs = await getConversationFromBackend(pet.id, selectedParticipantId!);
-        setMessages(msgs);
-        
-        // Mark conversation as read on the backend
-        await markConversationAsReadOnBackend(pet.id, selectedParticipantId!);
+        setLoadingConversationCheck(true);
+        const inbox = await getInboxFromBackend();
+        const found = inbox.find(
+          (c: any) =>
+            c.reportId === pet.id &&
+            (c.otherParticipantId === currentUserId || c.otherParticipantId === pet.reporterId)
+        );
+        setExistingConversation(found || null);
       } catch (err) {
-        console.error("Failed to load message thread:", err);
+        console.error("Failed to check conversation status:", err);
       } finally {
-        setLoadingMessages(false);
+        setLoadingConversationCheck(false);
       }
     }
-    loadConversation();
-  }, [showDetails, currentUserId, selectedParticipantId, pet.id]);
-
-  // Listen for real-time messages for this active chat in the card modal
-  useEffect(() => {
-    if (!showDetails || !currentUserId) return;
-
-    const socket = getSocket();
-    
-    const handleReceiveMessage = (data: any) => {
-      if (data && data.message) {
-        const msg = data.message;
-        const isThisReport = msg.reportId === pet.id;
-        const isToMe = msg.recipientId === currentUserId;
-        
-        if (isThisReport && isToMe) {
-          const senderId = msg.senderId;
-          
-          if (isOwner) {
-            setParticipants((prev) => {
-              if (prev.includes(senderId)) return prev;
-              return [...prev, senderId];
-            });
-            setSelectedParticipantId((prev) => {
-              if (!prev || prev === pet.reporterId) return senderId;
-              return prev;
-            });
-          }
-          
-          // If the message matches our selected participant, append
-          if (senderId === selectedParticipantId || (!selectedParticipantId && senderId === pet.reporterId)) {
-            setMessages((prev) => {
-              const exists = prev.some((m) => m.id === msg.id);
-              if (exists) return prev;
-              return [...prev, msg];
-            });
-            markConversationAsReadOnBackend(pet.id, senderId);
-          }
-        }
-      }
-    };
-
-    socket.on("secure_message_received", handleReceiveMessage);
-
-    return () => {
-      socket.off("secure_message_received", handleReceiveMessage);
-    };
-  }, [showDetails, currentUserId, selectedParticipantId, pet.id, isOwner, pet.reporterId]);
-
-  async function handleSendContactMessage(e: React.FormEvent) {
-    e.preventDefault();
-    if (!contactMessage.trim() || !selectedParticipantId) return;
-
-    try {
-      const newMsg = await sendMessageToBackend(pet.id, contactMessage.trim(), selectedParticipantId);
-      setMessages((prev) => [...prev, newMsg]);
-      setContactMessage("");
-    } catch (err) {
-      console.error("Failed to send Secure Relay message:", err);
-      alert("Failed to send message. Please try again.");
-    }
-  }
+    checkConversation();
+  }, [showDetails, pet.id, currentUserId, pet.reporterId]);
 
   // Handle Sightings location fetching
   function handleGetSightingLocation() {
@@ -332,7 +219,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
       );
 
       setSightings((prev) => [...prev, newSighting].sort((a, b) => new Date(a.dateTimeSeen).getTime() - new Date(b.dateTimeSeen).getTime()));
-      // Reset form
       setSightingLat("");
       setSightingLon("");
       setSightingAddress("");
@@ -340,7 +226,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
       setSightingPhoto(null);
       setSightingPhotoPreview(null);
       alert("Sighting report submitted successfully!");
-      setActiveTab("timeline"); // Switch to timeline to show progress
+      setActiveTab("timeline");
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Failed to submit sighting report.");
@@ -389,28 +275,37 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
     }
   }
 
+  // Start Conversation compose form handler
+  async function handleStartConversation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!composerMessage.trim() || sendingInitial) return;
+
+    setSendingInitial(true);
+    try {
+      const result = await startConversationOnBackend(pet.id, composerMessage.trim());
+      setShowDetails(false); // Close details modal
+      
+      // Select the conversation and launch Inbox View
+      setActiveChat({
+        reportId: pet.id,
+        senderId: pet.reporterId || "",
+        conversationId: result.conversation.id,
+      });
+      alert("Conversation started! Redirecting to chat screen in your Inbox.");
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to start conversation.");
+    } finally {
+      setSendingInitial(false);
+    }
+  }
+
   // Share report details
   function handleShareReport() {
     const text = `🐾 StrayAid Case Report #${pet.id}\nStatus: ${pet.type.toUpperCase()}\nAnimal: ${pet.animal}\nBreed: ${pet.breed}\nColor: ${pet.color}\nLocation: ${pet.address || pet.location}\nDate: ${pet.date}\nHelp bring them home!`;
     navigator.clipboard.writeText(text);
     alert("Report text copied to clipboard!");
   }
-
-  // Block and report templates
-  function handleBlockUser() {
-    alert("User blocked! They will no longer be able to send you relay messages.");
-  }
-
-  function handleReportMessage() {
-    alert("Relay conversation reported to StrayAid moderation services.");
-  }
-
-  // Message quick actions templates
-  function selectQuickMessage(text: string) {
-    setContactMessage(text);
-  }
-
-  const showChat = !isOwner || (isOwner && selectedParticipantId !== null);
 
   return (
     <>
@@ -525,7 +420,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                   </span>
                 )}
               </div>
-              <h2 className="text-2xl font-black text-slate-900 leading-snug truncate">
+              <h2 className="text-2xl font-black text-slate-900 leading-snug truncate font-sans">
                 {pet.name ? `${pet.name} — ${pet.breed}` : `${pet.breed}`}
               </h2>
             </div>
@@ -700,7 +595,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
             {/* TAB CONTENT: LOCATION */}
             {activeTab === "location" && (
               <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl space-y-2 font-semibold text-xs text-slate-600">
+                <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl space-y-2 font-semibold text-xs text-slate-650">
                   <div className="flex justify-between">
                     <span>GPS Coordinates:</span>
                     <span className="text-slate-800 font-mono font-bold">{pet.location}</span>
@@ -719,11 +614,10 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                   )}
                 </div>
 
-                {/* Map Placeholder grid */}
                 <div className="relative h-44 rounded-2xl overflow-hidden bg-emerald-50/50 border border-emerald-100/50 flex flex-col justify-center items-center gap-1.5 shadow-inner">
                   <div className="absolute inset-0 bg-[linear-gradient(#e6fbf2_1px,transparent_1px),linear-gradient(90deg,#e6fbf2_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
                   <MapPin className="text-red-500 animate-bounce" size={32} fill="currentColor" />
-                  <span className="text-[10px] font-black text-slate-500 bg-white/85 px-3 py-1 rounded-full border border-slate-150 shadow-sm uppercase tracking-wider">
+                  <span className="text-[10px] font-black text-slate-500 bg-white/85 px-3 py-1 rounded-full border border-slate-155 shadow-sm uppercase tracking-wider">
                     {pet.address || pet.location}
                   </span>
                 </div>
@@ -733,17 +627,15 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
             {/* TAB CONTENT: TIMELINE */}
             {activeTab === "timeline" && (
               <div className="space-y-5 animate-fadeIn py-2">
-                <h4 className="text-xs font-black text-slate-800">Case Sighting Timeline</h4>
+                <h4 className="text-xs font-black text-slate-850">Case Sighting Timeline</h4>
                 
-                <div className="relative border-l-2 border-slate-200 ml-3 pl-5 space-y-6">
-                  
-                  {/* Step 1: Created */}
+                <div className="relative border-l-2 border-slate-200 ml-3 pl-5 space-y-6 font-sans">
                   <div className="relative">
                     <span className="absolute -left-[27px] top-0.5 bg-green-700 text-white rounded-full p-0.5 border-2 border-white shadow-sm">
                       <Clock size={10} />
                     </span>
                     <div>
-                      <h5 className="text-xs font-black text-slate-800">Case Created</h5>
+                      <h5 className="text-xs font-black text-slate-850">Case Created</h5>
                       <span className="text-[9px] font-semibold text-slate-400 block">{pet.date}</span>
                       <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
                         Report registered as <span className="font-extrabold text-slate-700">{pet.type.toUpperCase()}</span>. Initial search radius established.
@@ -751,7 +643,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                     </div>
                   </div>
 
-                  {/* Sightings in between */}
                   {loadingSightings ? (
                     <div className="text-[10px] font-bold text-slate-400">Loading sightings timeline...</div>
                   ) : (
@@ -777,7 +668,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                     ))
                   )}
 
-                  {/* Final Step: Searching or Reunited */}
                   {reunitedState ? (
                     <div className="relative">
                       <span className="absolute -left-[27px] top-0.5 bg-emerald-600 text-white rounded-full p-0.5 border-2 border-white shadow-sm animate-pulse">
@@ -804,7 +694,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                       </div>
                     </div>
                   )}
-
                 </div>
               </div>
             )}
@@ -942,9 +831,9 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                     {matches.map((m) => (
                       <div key={m.reportId} className="p-3 bg-slate-50/50 border border-slate-150 rounded-2xl flex items-center gap-3 justify-between">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <img src={m.image} alt="" className="w-12 h-12 rounded-xl object-cover border border-slate-150 shadow-xs" />
+                          <img src={m.image} alt="" className="w-12 h-12 rounded-xl object-cover border border-slate-155 shadow-xs" />
                           <div className="min-w-0 leading-tight">
-                            <h5 className="text-[11px] font-black text-slate-850 truncate">{m.breed}</h5>
+                            <h5 className="text-[11px] font-black text-slate-855 truncate">{m.breed}</h5>
                             <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full inline-block mt-1 font-sans">
                               {m.score}% Match
                             </span>
@@ -955,7 +844,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                         <div className="flex gap-1.5 shrink-0">
                           <button
                             onClick={() => {
-                              // Scroll directly or show confirmation alert
                               alert(`Match details for ${m.breed}:\nLocation: ${m.address || m.location}\nDate: ${m.date}\nColor: ${m.color}\nMatching Score: ${m.score}%`);
                             }}
                             className="py-1 px-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-[9px] font-black text-slate-700 rounded-lg cursor-pointer transition shadow-xs"
@@ -976,137 +864,85 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
               </div>
             )}
 
-            {/* Messaging Section */}
-            <div className="border-t border-slate-100 pt-5 mt-5 space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <ShieldAlert size={14} className="text-green-600" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Secure Relay Messaging
-                  </span>
+            {/* Messaging Section (Integrated with Inbox DMS panel workflow) */}
+            <div className="border-t border-slate-100 pt-5 mt-5">
+              {loadingConversationCheck ? (
+                <div className="text-center py-4 text-slate-400 text-xs font-semibold animate-pulse">
+                  Checking messaging history...
                 </div>
-                
-                {/* Participant Selector for Owner */}
-                {isOwner && participants.length > 0 && (
-                  <select
-                    value={selectedParticipantId || ""}
-                    onChange={(e) => setSelectedParticipantId(e.target.value)}
-                    className="text-[10px] border border-slate-200 rounded-lg px-2 py-1 text-slate-700 bg-white font-bold focus:outline-none focus:ring-1 focus:ring-green-500"
+              ) : isOwner ? (
+                /* Report Owner Messaging View */
+                <div className="space-y-3.5 text-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                  <h4 className="text-xs font-black text-slate-800 flex items-center justify-center gap-1.5">
+                    <ShieldAlert size={15} className="text-green-700 animate-pulse" /> Private secure messaging
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-semibold leading-relaxed max-w-sm mx-auto">
+                    You are the creator of this report. All private conversations and enquirers' chats are handled inside your Inbox.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowDetails(false);
+                      setActiveChat({
+                        reportId: pet.id,
+                        senderId: existingConversation ? existingConversation.otherParticipantId : pet.reporterId,
+                      });
+                    }}
+                    className="w-full py-2.5 bg-green-700 hover:bg-green-800 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-green-100 border border-green-700"
                   >
-                    {participants.map((pid, idx) => (
-                      <option key={pid} value={pid}>
-                        Enquirer #{idx + 1} ({pid.substring(0, 5)})
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {/* Block and report buttons inside messenger */}
-                {!isOwner && (
-                  <div className="flex gap-2 text-[9px] font-black">
-                    <button onClick={handleBlockUser} type="button" className="text-red-600 hover:underline flex items-center gap-0.5 cursor-pointer">
-                      <Ban size={10} /> Block
-                    </button>
-                    <button onClick={handleReportMessage} type="button" className="text-slate-500 hover:underline flex items-center gap-0.5 cursor-pointer">
-                      <AlertTriangle size={10} /> Report
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Chat Thread History */}
-              {loadingMessages ? (
-                <div className="text-center py-6 text-slate-400 text-xs font-semibold animate-pulse">
-                  Loading message history...
+                    Open Inbox Chats
+                  </button>
                 </div>
-              ) : showChat ? (
-                <>
-                  <div className="space-y-2.5 max-h-40 overflow-y-auto mb-3 p-3 bg-slate-50 rounded-2xl border border-slate-100/80 flex flex-col shadow-inner">
-                    {messages.length === 0 ? (
-                      <div className="text-center py-4 text-slate-400 text-xs font-semibold my-auto">
-                        No messages yet. Send a message below to start the conversation!
-                      </div>
-                    ) : (
-                      messages.map((m) => {
-                        const isMe = m.senderId === currentUserId;
-                        return (
-                          <div
-                            key={m.id}
-                            className={`flex flex-col ${isMe ? "items-end" : "items-start"} space-y-0.5`}
-                          >
-                            <div
-                              className={`rounded-2xl px-3.5 py-2 text-xs font-semibold max-w-[85%] leading-relaxed shadow-sm ${
-                                isMe
-                                  ? "bg-green-700 text-white rounded-br-none"
-                                  : "bg-white border border-slate-100 text-slate-800 rounded-bl-none"
-                              }`}
-                            >
-                              {m.content}
-                            </div>
-                            <span className="text-[8px] text-slate-400 px-1 select-none font-medium">
-                              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {/* Message templates Quick Actions */}
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 animate-fadeIn select-none">
-                    <button
-                      type="button"
-                      onClick={() => selectQuickMessage("👀 I saw this animal nearby!")}
-                      className="py-1 px-2.5 rounded-lg border border-slate-200 hover:border-slate-300 text-[9px] font-bold text-slate-650 bg-white hover:bg-slate-50 transition cursor-pointer shrink-0"
-                    >
-                      👀 I saw this animal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => selectQuickMessage("📍 I know this location.")}
-                      className="py-1 px-2.5 rounded-lg border border-slate-200 hover:border-slate-300 text-[9px] font-bold text-slate-650 bg-white hover:bg-slate-50 transition cursor-pointer shrink-0"
-                    >
-                      📍 I know this location
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => selectQuickMessage("🐾 I found this animal!")}
-                      className="py-1 px-2.5 rounded-lg border border-slate-200 hover:border-slate-300 text-[9px] font-bold text-slate-650 bg-white hover:bg-slate-50 transition cursor-pointer shrink-0"
-                    >
-                      🐾 I found this animal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => selectQuickMessage("🤝 I can help with handover.")}
-                      className="py-1 px-2.5 rounded-lg border border-slate-200 hover:border-slate-300 text-[9px] font-bold text-slate-650 bg-white hover:bg-slate-50 transition cursor-pointer shrink-0"
-                    >
-                      🤝 I can help
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleSendContactMessage} className="space-y-3">
-                    <textarea
-                      placeholder={
-                        pet.type === "lost"
-                          ? "I think I spotted this animal nearby! Please reach out..."
-                          : "I am the owner of this animal. Let's arrange a secure handover..."
-                      }
-                      value={contactMessage}
-                      onChange={(e) => setContactMessage(e.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 p-3 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 h-16 resize-none"
-                      required
-                    />
-                    <Button
-                      type="submit"
-                      className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-xs cursor-pointer shadow-md shadow-green-100"
-                    >
-                      <MessageSquare size={14} /> Send Secure Message
-                    </Button>
-                  </form>
-                </>
+              ) : existingConversation ? (
+                /* Enquirer with existing conversation */
+                <div className="space-y-3 text-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                  <h4 className="text-xs font-black text-slate-800 flex items-center justify-center gap-1.5">
+                    <ShieldAlert size={15} className="text-green-700 animate-pulse" /> Active chat found
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-semibold leading-relaxed max-w-sm mx-auto">
+                    You have an existing private conversation with the owner. Tapping below will redirect you to the chat.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowDetails(false);
+                      setActiveChat({
+                        reportId: pet.id,
+                        senderId: pet.reporterId || "",
+                      });
+                    }}
+                    className="w-full py-2.5 bg-green-700 hover:bg-green-800 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-green-100 border border-green-700"
+                  >
+                    Open Chat in Inbox
+                  </button>
+                </div>
               ) : (
-                <div className="text-center py-6 text-slate-400 text-xs font-semibold bg-slate-50 rounded-2xl border border-slate-100">
-                  No active inquiries for this case yet.
+                /* Enquirer starting new conversation */
+                <div className="space-y-3.5 bg-slate-50/30 p-4 rounded-2xl border border-slate-150">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <MessageSquare size={14} className="text-green-700" /> Start conversation with owner
+                    </h4>
+                    <p className="text-[10px] text-slate-450 font-semibold leading-relaxed mt-0.5">
+                      Your message will open a secure private conversation in both of your Inboxes.
+                    </p>
+                  </div>
+                  
+                  <form onSubmit={handleStartConversation} className="space-y-3 text-left">
+                    <textarea
+                      placeholder="Type your message here (e.g. I found your dog Bruno! Let's connect)..."
+                      value={composerMessage}
+                      onChange={(e) => setComposerMessage(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 p-3 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 h-20 resize-none"
+                      required
+                      disabled={sendingInitial}
+                    />
+                    <button
+                      type="submit"
+                      disabled={sendingInitial}
+                      className="w-full bg-green-700 hover:bg-green-800 text-white font-extrabold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 text-xs cursor-pointer shadow-md shadow-green-100 border border-green-700 disabled:opacity-50"
+                    >
+                      {sendingInitial ? "Starting conversation..." : "Send Initial Message"}
+                    </button>
+                  </form>
                 </div>
               )}
             </div>
