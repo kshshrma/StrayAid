@@ -75,11 +75,18 @@ export default function LostFound() {
 
   // Get logged-in user ID
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setCurrentUserId(user.id);
+    async function getUserId() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setCurrentUserId(session.user.id);
+      } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUserId(user.id);
+        }
       }
-    });
+    }
+    getUserId();
   }, []);
 
   // Listen to activeChat notifications click to launch Inbox View
@@ -605,7 +612,7 @@ export default function LostFound() {
                     })()}
 
                     {/* Chat Messages Logs */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[40vh] max-h-[44vh] flex flex-col">
+                    <div className="flex-1 overflow-y-auto p-4 min-h-[40vh] max-h-[44vh] flex flex-col">
                       {loadingMessages ? (
                         <div className="text-center py-8 text-slate-400 text-xs font-bold my-auto animate-pulse">
                           Loading message history...
@@ -615,15 +622,24 @@ export default function LostFound() {
                           No messages yet. Send a message below to start private chat thread.
                         </div>
                       ) : (
-                        messages.map((m) => {
-                          const isMe = m.senderId === currentUserId;
+                        messages.map((m, idx) => {
+                          const isMe = String(m.senderId).toLowerCase() === String(currentUserId).toLowerCase();
+                          
+                          // Custom grouping spacing
+                          const prevMsg = idx > 0 ? messages[idx - 1] : null;
+                          const isSameSender = prevMsg && String(prevMsg.senderId).toLowerCase() === String(m.senderId).toLowerCase();
+                          const mtClass = isSameSender ? "mt-1.5" : "mt-4";
+
                           return (
-                            <div key={m.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"} space-y-0.5`}>
+                            <div
+                              key={m.id}
+                              className={`flex flex-col ${isMe ? "items-end" : "items-start"} ${mtClass} space-y-0.5`}
+                            >
                               <div
-                                className={`rounded-2xl px-4 py-2.5 text-xs font-semibold max-w-[80%] leading-relaxed shadow-sm ${
+                                className={`rounded-2xl px-4 py-2.5 text-xs font-semibold max-w-[75%] md:max-w-[80%] leading-relaxed shadow-xs ${
                                   isMe
-                                    ? "bg-green-700 text-white rounded-br-none"
-                                    : "bg-white border border-slate-200/50 text-slate-800 rounded-bl-none"
+                                    ? "bg-green-700 text-white rounded-tr-none"
+                                    : "bg-white border border-slate-200/50 text-slate-800 rounded-tl-none"
                                 }`}
                               >
                                 {m.content}
@@ -632,7 +648,7 @@ export default function LostFound() {
                                 {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 {isMe && (
                                   <span className="ml-1 font-bold">
-                                    {m.isRead ? "✓✓ Read" : "✓ Sent"}
+                                    {m.isRead ? " • Read" : " • Sent"}
                                   </span>
                                 )}
                               </span>
