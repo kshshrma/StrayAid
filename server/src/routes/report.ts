@@ -7,6 +7,7 @@ import {
   getPossibleMatches,
   dismissMatch,
   markAsReunited,
+  getMyReports,
 } from "../controllers/lostFoundController";
 import { requireAuth } from "../middleware/auth";
 
@@ -14,6 +15,7 @@ const router = Router();
 
 router.get("/immediate", requireAuth, getImmediateRescues);
 router.get("/nearby", requireAuth, getNearbyReports);
+router.get("/my", requireAuth, getMyReports);
 
 router.post("/lost-found", requireAuth, createLostFoundReport);
 router.post("/:reportId/sightings", requireAuth, submitSighting);

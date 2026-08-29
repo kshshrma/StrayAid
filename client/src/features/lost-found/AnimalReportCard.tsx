@@ -386,6 +386,9 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                 <Calendar size={13} className="text-slate-400 shrink-0" />
                 <span>Reported: {pet.date}</span>
               </span>
+              <span className="flex items-center gap-1.5 text-slate-500 font-extrabold text-[10px] mt-1 bg-slate-50 p-1.5 px-2.5 rounded-xl border border-slate-100 w-fit select-none font-sans">
+                <span>👤 Reported by {isOwner ? "You" : (pet.ownerName || "Unknown")}</span>
+              </span>
             </div>
 
             <Button
@@ -438,6 +441,9 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
               <h2 className="text-2xl font-black text-slate-900 leading-snug truncate font-sans">
                 {pet.name ? `${pet.name} — ${pet.breed}` : `${pet.breed}`}
               </h2>
+              <span className="text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-150 p-1 px-2.5 rounded-xl inline-block mt-1 font-sans">
+                👤 Reported by {isOwner ? "You" : (pet.ownerName || "Unknown")}
+              </span>
             </div>
 
             {/* Detail Tabs */}

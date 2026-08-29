@@ -66,32 +66,40 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
 
   if (!reports) return [];
 
-  interface PetMetadata {
-    breed?: string;
-    color?: string;
-    collarColor?: string;
-    uniqueId?: string;
-    name?: string;
-    address?: string;
-    date?: string;
-    description?: string;
-    additionalInfo?: string;
-    contactNumber?: string;
-    reporterId?: string;
-    urgency?: string;
-    reunited?: boolean;
-    reunionPhotoUrl?: string;
-    reunitedAt?: string;
-    messages?: Array<{ senderId: string; senderName: string; text: string; timestamp: string }>;
+  // Batch query profile display names for reporters
+  const reporterIds = reports
+    .map((row: any) => {
+      try {
+        const metadata = JSON.parse(row.ai_advice || "{}");
+        return metadata.reporterId;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean) as string[];
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", Array.from(new Set(reporterIds)));
+
+  const profileMap = new Map<string, string>();
+  if (profiles) {
+    profiles.forEach((p) => {
+      profileMap.set(p.id, p.full_name);
+    });
   }
 
   return reports.map((row: any) => {
-    let metadata: PetMetadata = {};
+    let metadata: any = {};
     try {
       metadata = JSON.parse(row.ai_advice || "{}");
     } catch (e) {
       console.warn("Failed to parse ai_advice for Lost & Found item:", row.id, e);
     }
+
+    const reporterId = metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949";
+    const ownerName = profileMap.get(reporterId) || "Unknown User";
 
     return {
       id: row.id,
@@ -109,7 +117,9 @@ export async function getLostFoundPets(): Promise<LostFoundPet[]> {
       additionalInfo: metadata.additionalInfo || "",
       name: metadata.name || "",
       contactNumber: metadata.contactNumber || "",
-      reporterId: metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
+      reporterId,
+      ownerId: reporterId,
+      ownerName,
       urgency: metadata.urgency || "Normal",
       reunited: metadata.reunited || false,
       reunionPhotoUrl: metadata.reunionPhotoUrl || "",
@@ -279,6 +289,17 @@ export async function getLostFoundPetById(reportId: string): Promise<LostFoundPe
     metadata = JSON.parse(row.ai_advice || "{}");
   } catch (e) {}
 
+  const reporterId = metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949";
+  
+  // Hydrate display name
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", reporterId)
+    .single();
+
+  const ownerName = profile?.full_name || "Unknown User";
+
   return {
     id: row.id,
     type: (row.status === "reunited" ? (metadata.originalType || "lost") : row.status) as "lost" | "found",
@@ -295,10 +316,61 @@ export async function getLostFoundPetById(reportId: string): Promise<LostFoundPe
     additionalInfo: metadata.additionalInfo || "",
     name: metadata.name || "",
     contactNumber: metadata.contactNumber || "",
-    reporterId: metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
+    reporterId,
+    ownerId: reporterId,
+    ownerName,
     urgency: metadata.urgency || "Normal",
     reunited: metadata.reunited || (row.status === "reunited"),
     reunionPhotoUrl: metadata.reunionPhotoUrl || "",
     reunitedAt: metadata.reunitedAt || "",
   };
+}
+
+export async function getMyLostFoundPets(): Promise<LostFoundPet[]> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/api/reports/my`, {
+    method: "GET",
+    headers,
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to load your reports");
+  }
+
+  const reports = result.reports || [];
+
+  return reports.map((row: any) => {
+    let metadata: any = {};
+    try {
+      metadata = JSON.parse(row.ai_advice || "{}");
+    } catch (e) {}
+
+    const reporterId = metadata.reporterId || "6c4c4175-c2c4-470b-a5d5-c86639f3e949";
+
+    return {
+      id: row.id,
+      type: (row.status === "reunited" ? (metadata.originalType || "lost") : row.status) as "lost" | "found",
+      animal: row.animal_type || "Other",
+      breed: metadata.breed || "",
+      color: metadata.color || "",
+      collarColor: metadata.collarColor || "",
+      uniqueId: metadata.uniqueId || "",
+      location: `${row.latitude}, ${row.longitude}`,
+      address: metadata.address || "",
+      date: metadata.date || (row.created_at ? row.created_at.split("T")[0] : ""),
+      description: metadata.description || "",
+      image: row.image_url || "",
+      additionalInfo: metadata.additionalInfo || "",
+      name: metadata.name || "",
+      contactNumber: metadata.contactNumber || "",
+      reporterId,
+      ownerId: reporterId,
+      ownerName: "You", // Explicitly show "You" for reports owned by the logged-in user
+      urgency: metadata.urgency || "Normal",
+      reunited: metadata.reunited || (row.status === "reunited"),
+      reunionPhotoUrl: metadata.reunionPhotoUrl || "",
+      reunitedAt: metadata.reunitedAt || "",
+    };
+  });
 }

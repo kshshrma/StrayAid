@@ -4,7 +4,7 @@ import AnimalReportCard, { type LostFoundPet } from "../features/lost-found/Anim
 import LostFoundFilters from "../features/lost-found/LostFoundFilters";
 import LostAnimalForm from "../features/lost-found/LostAnimalForm";
 import Button from "../components/ui/Button";
-import { getLostFoundPets, getLostFoundPetById } from "../services/lost-found/lostFoundService";
+import { getLostFoundPets, getLostFoundPetById, getMyLostFoundPets } from "../services/lost-found/lostFoundService";
 import { calculateDistance } from "../utils/distance";
 import { useNotification } from "../context/NotificationProvider";
 import { supabase } from "../lib/supabase";
@@ -52,6 +52,11 @@ export default function LostFound() {
   const [replyText, setReplyText] = useState("");
   const [typingUser, setTypingUser] = useState<{ userId: string; userName: string } | null>(null);
   const [typingTimeoutId, setTypingTimeoutId] = useState<any>(null);
+
+  // My Reports States
+  const [showMyReportsView, setShowMyReportsView] = useState(false);
+  const [myPets, setMyPets] = useState<LostFoundPet[]>([]);
+  const [loadingMyReports, setLoadingMyReports] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -132,6 +137,24 @@ export default function LostFound() {
     }
     loadInbox();
   }, [showInboxView, currentUserId, messageNotifications.length]);
+
+  // Load My Reports
+  useEffect(() => {
+    if (!showMyReportsView || !currentUserId) return;
+
+    async function loadMyReports() {
+      try {
+        setLoadingMyReports(true);
+        const data = await getMyLostFoundPets();
+        setMyPets(data);
+      } catch (err) {
+        console.error("Failed to load my reports:", err);
+      } finally {
+        setLoadingMyReports(false);
+      }
+    }
+    loadMyReports();
+  }, [showMyReportsView, currentUserId]);
 
   // Scroll messages to bottom on new message
   useEffect(() => {
@@ -437,6 +460,7 @@ export default function LostFound() {
   }, [coords]);
 
   const filteredPets = filter === "all" ? pets : pets.filter((pet) => pet.type === filter);
+  const filteredMyPets = filter === "all" ? myPets : myPets.filter((pet) => pet.type === filter);
 
   function handleFormSubmitSuccess(newReport: LostFoundPet) {
     let petWithDistance = { ...newReport };
@@ -458,6 +482,10 @@ export default function LostFound() {
       }
       return updatedList;
     });
+
+    if (showMyReportsView) {
+      getMyLostFoundPets().then((data) => setMyPets(data));
+    }
 
     setIsFormOpen(false);
     setShowSuccessPopup(true);
@@ -746,6 +774,91 @@ export default function LostFound() {
             </div>
 
           </div>
+        ) : showMyReportsView ? (
+          /* My Reports View */
+          <>
+            {/* 1. PAGE HEADER */}
+            <div className="text-center md:text-left space-y-1 pb-2 border-b border-slate-100 relative">
+              <button
+                onClick={() => {
+                  setShowMyReportsView(false);
+                  setShowInboxView(false);
+                }}
+                className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-xs font-black cursor-pointer transition mb-2"
+              >
+                <ArrowLeft size={16} /> Back to All Reports
+              </button>
+              <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center justify-center md:justify-start gap-2">
+                📋 My Reports
+              </h1>
+              <p className="text-xs font-semibold text-slate-500">
+                Manage and trace Lost & Found cases you reported.
+              </p>
+            </div>
+
+            {/* 2. PRIMARY ACTIONS */}
+            <div className="pt-2 flex flex-col sm:flex-row gap-3">
+              <Button
+                onClick={() => setIsFormOpen(true)}
+                className="w-full sm:w-auto bg-green-700 hover:bg-green-800 text-white font-extrabold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition shadow-md shadow-green-100/80 hover:shadow-lg text-xs uppercase tracking-wider"
+              >
+                <PlusCircle size={16} /> Report Lost Animal
+              </Button>
+              
+              <Button
+                onClick={() => {
+                  setShowMyReportsView(false);
+                  setShowInboxView(false);
+                }}
+                className="w-full sm:w-auto bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-350 text-slate-750 font-extrabold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition shadow-md text-xs uppercase tracking-wider"
+              >
+                📋 View All Reports
+              </Button>
+            </div>
+
+            {/* 3. FILTERS */}
+            <div className="max-w-md">
+              <LostFoundFilters filter={filter} setFilter={setFilter} />
+            </div>
+
+            {/* 4. MY REPORTS GRID */}
+            <div>
+              {loadingMyReports ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 bg-white rounded-3xl border border-slate-100 shadow-sm animate-fadeIn">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-700 border-t-transparent" />
+                  <p className="text-xs font-semibold text-slate-500">Retrieving your reports...</p>
+                </div>
+              ) : filteredMyPets.length === 0 ? (
+                <div className="text-center py-12 px-4 bg-white rounded-3xl border border-slate-150 shadow-xs max-w-lg mx-auto space-y-4 my-6 animate-fadeIn">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-slate-50 text-slate-450 flex items-center justify-center text-lg">
+                    📋
+                  </div>
+                  <div className="space-y-1.5">
+                    <h3 className="text-sm font-black text-slate-800 leading-tight">
+                      You haven't created any Lost & Found reports yet.
+                    </h3>
+                    <p className="text-[11px] text-slate-450 font-semibold leading-relaxed">
+                      If an animal is missing or you've found one, you can create a report and help bring them home.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => setIsFormOpen(true)}
+                    className="bg-green-700 hover:bg-green-800 text-white font-extrabold py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider mx-auto"
+                  >
+                    Report Animal
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 animate-fadeIn">
+                  {filteredMyPets.map((pet) => (
+                    <div key={pet.id} id={`report-card-${pet.id}`} className="h-full transition-all duration-300 rounded-3xl">
+                      <AnimalReportCard pet={pet} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
         ) : (
           /* Lost & Found main feed layout */
           <>
@@ -830,8 +943,11 @@ export default function LostFound() {
             {/* TOP RIGHT: INBOX BUTTON INSTEAD OF SECURE MESSAGES */}
             <div className="fixed top-6 right-6 z-50 pointer-events-auto flex flex-col items-end gap-2">
               <button
-                onClick={() => setShowInboxView(true)}
-                className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${
+                onClick={() => {
+                  setShowInboxView(true);
+                  setShowMyReportsView(false);
+                }}
+                className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/85 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${
                   inboxUnreadTotal > 0 ? "animate-pulse border-emerald-350" : ""
                 }`}
               >
@@ -845,12 +961,22 @@ export default function LostFound() {
             </div>
 
             {/* 2. PRIMARY ACTION — PLACE THIS FIRST */}
-            <div className="pt-2">
+            <div className="pt-2 flex flex-col sm:flex-row gap-3">
               <Button
                 onClick={() => setIsFormOpen(true)}
-                className="w-full md:w-auto bg-green-700 hover:bg-green-800 text-white font-extrabold py-3.5 px-8 rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition shadow-md shadow-green-100/80 hover:shadow-lg text-sm uppercase tracking-wider"
+                className="w-full sm:w-auto bg-green-700 hover:bg-green-800 text-white font-extrabold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition shadow-md shadow-green-100/80 hover:shadow-lg text-xs uppercase tracking-wider"
               >
-                <PlusCircle size={18} /> Report Lost Animal
+                <PlusCircle size={16} /> Report Lost Animal
+              </Button>
+              
+              <Button
+                onClick={() => {
+                  setShowMyReportsView(true);
+                  setShowInboxView(false);
+                }}
+                className="w-full sm:w-auto bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-350 text-slate-750 font-extrabold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition shadow-md text-xs uppercase tracking-wider"
+              >
+                📋 My Reports
               </Button>
             </div>
 

@@ -417,3 +417,37 @@ export async function markAsReunited(req: AuthenticatedRequest, res: Response) {
     return res.status(500).json({ success: false, message: err.message || "Failed to mark as reunited" });
   }
 }
+
+// GET /api/reports/my
+export async function getMyReports(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { data: reports, error } = await supabase
+      .from("reports")
+      .select("*");
+
+    if (error) {
+      console.error("[LostFoundController] Error loading my reports:", error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    // Filter reports created by the current user based on reporterId in metadata
+    const myReports = (reports || []).filter((r: any) => {
+      try {
+        const metadata = JSON.parse(r.ai_advice || "{}");
+        return String(metadata.reporterId).toLowerCase() === String(userId).toLowerCase();
+      } catch (e) {
+        return false;
+      }
+    });
+
+    return res.status(200).json({ success: true, reports: myReports });
+  } catch (err: any) {
+    console.error("[LostFoundController] Exception loading my reports:", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to load my reports" });
+  }
+}
