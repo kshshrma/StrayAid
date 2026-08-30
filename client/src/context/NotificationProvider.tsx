@@ -260,14 +260,17 @@ export default function NotificationProvider({
 
                 if (!isOwnReport) {
                   if (newReport.status === "lost" || newReport.status === "found") {
-                    addNotification({
-                      category: "lost_found",
-                      title: "🐾 New Lost & Found Report",
-                      message: "A new animal report has been posted nearby.",
-                      read: false,
-                      linkUrl: "/lost-found",
-                      meta: { reportId: newReport.id },
-                    });
+                    const isSilenced = localStorage.getItem("strayaid_lostfound_silenced") === "true";
+                    if (!isSilenced) {
+                      addNotification({
+                        category: "lost_found",
+                        title: "🐾 New Lost & Found Report",
+                        message: "A new animal report has been posted nearby.",
+                        read: false,
+                        linkUrl: "/lost-found",
+                        meta: { reportId: newReport.id },
+                      });
+                    }
                   } else {
                     addNotification({
                       category: "nearby_report",
@@ -317,7 +320,10 @@ export default function NotificationProvider({
         socketAlertListener = (data: any) => {
           console.log("📨 Real-time nearby Lost & Found alert received via socket:", data);
           if (data && data.notification) {
-            addNotification(data.notification);
+            const isSilenced = localStorage.getItem("strayaid_lostfound_silenced") === "true";
+            if (!isSilenced) {
+              addNotification(data.notification);
+            }
           }
         };
         socket.on("nearby_lost_found_alert", socketAlertListener);

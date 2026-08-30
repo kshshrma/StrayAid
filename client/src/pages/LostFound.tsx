@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Heart, Search, PlusCircle, X, ArrowLeft, Send, MapPin, Compass, AlertCircle, ShieldAlert, Ban, AlertTriangle } from "lucide-react";
+import { Heart, Search, PlusCircle, X, ArrowLeft, Send, MapPin, Compass, AlertCircle, ShieldAlert, Ban, AlertTriangle, Bell, BellOff, Trash2, CheckSquare, Square } from "lucide-react";
 import AnimalReportCard, { type LostFoundPet } from "../features/lost-found/AnimalReportCard";
 import LostFoundFilters from "../features/lost-found/LostFoundFilters";
 import LostAnimalForm from "../features/lost-found/LostAnimalForm";
@@ -19,7 +19,7 @@ import {
 } from "../services/lost-found/messageApiService";
 
 export default function LostFound() {
-  const { notifications, markAsRead, addNotification, activeChat, setActiveChat, markConversationNotificationsAsRead } = useNotification();
+  const { notifications, markAsRead, addNotification, activeChat, setActiveChat, markConversationNotificationsAsRead, deleteNotification } = useNotification();
   const [filter, setFilter] = useState<"all" | "lost" | "found">("all");
 
   const lostFoundNotifications = notifications.filter(
@@ -57,6 +57,38 @@ export default function LostFound() {
   const [showMyReportsView, setShowMyReportsView] = useState(false);
   const [myPets, setMyPets] = useState<LostFoundPet[]>([]);
   const [loadingMyReports, setLoadingMyReports] = useState(false);
+
+  // Notification dropdown states
+  const [isSilenced, setIsSilenced] = useState(localStorage.getItem("strayaid_lostfound_silenced") === "true");
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedNotifIds, setSelectedNotifIds] = useState<string[]>([]);
+
+  const toggleSilence = () => {
+    const newVal = !isSilenced;
+    setIsSilenced(newVal);
+    localStorage.setItem("strayaid_lostfound_silenced", String(newVal));
+  };
+
+  const handleClearAllNotifs = () => {
+    newReportNotifications.forEach((n) => {
+      markAsRead(n.id);
+    });
+    setShowLeftDropdown(false);
+  };
+
+  const handleToggleSelectNotif = (id: string) => {
+    setSelectedNotifIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelectedNotifs = () => {
+    selectedNotifIds.forEach((id) => {
+      deleteNotification(id);
+    });
+    setSelectedNotifIds([]);
+    setIsSelectMode(false);
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -868,11 +900,7 @@ export default function LostFound() {
                 <Search className="text-green-700 shrink-0" size={32} /> Lost & Found
               </h1>
               <p className="text-xs font-semibold text-slate-500">
-                Help reunite lost animals with the people who love them.
-              </p>
-            </div>
-
-            {/* TOP LEFT: LOST & FOUND ALERTS INDICATOR */}
+                Help reunite lost animals with the             {/* TOP LEFT: LOST & FOUND ALERTS INDICATOR */}
             <div className="fixed top-6 left-6 z-50 pointer-events-auto flex flex-col items-start gap-2">
               <button
                 onClick={() => setShowLeftDropdown(!showLeftDropdown)}
@@ -888,53 +916,177 @@ export default function LostFound() {
                 )}
               </button>
 
-              {showLeftDropdown && newReportNotifications.length > 0 && (
-                <div className="w-80 rounded-3xl bg-white/95 border border-slate-100 shadow-2xl p-4 space-y-2.5 backdrop-blur-md animate-slideRight">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">New Reports</span>
-                    <button onClick={() => setShowLeftDropdown(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                      <X size={12} />
+              {showLeftDropdown && (
+                <div className="w-80 rounded-3xl bg-white/95 border border-slate-100 shadow-2xl p-4 space-y-3.5 backdrop-blur-md animate-slideRight">
+                  
+                  {/* Dropdown Header */}
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                      🐾 Notification Alerts
+                    </span>
+                    <button
+                      onClick={() => {
+                        setShowLeftDropdown(false);
+                        setIsSelectMode(false);
+                        setSelectedNotifIds([]);
+                      }}
+                      className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5 hover:bg-slate-100 rounded-full transition"
+                    >
+                      <X size={14} />
                     </button>
                   </div>
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {newReportNotifications.map((notif) => (
-                      <div key={notif.id} className="p-2.5 rounded-2xl bg-red-50/50 border border-red-100/50 flex items-start gap-2.5 justify-between">
-                        <button
-                          onClick={() => {
-                            markAsRead(notif.id);
-                            if (newReportNotifications.length <= 1) setShowLeftDropdown(false);
-                            if (notif.meta?.reportId) {
-                              const element = document.getElementById(`report-card-${notif.meta.reportId}`);
-                              if (element) {
-                                element.scrollIntoView({ behavior: "smooth", block: "center" });
-                                element.classList.add("ring-4", "ring-red-500/20");
-                                setTimeout(() => {
-                                  element.classList.remove("ring-4", "ring-red-500/20");
-                                }, 3000);
-                              }
-                            }
-                          }}
-                          className="flex items-center gap-2 min-w-0 text-left hover:opacity-80 transition cursor-pointer flex-1"
-                        >
-                          {notif.imageUrl && (
-                            <img src={notif.imageUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-100" />
-                          )}
-                          <div className="min-w-0">
-                            <h5 className="text-[11px] font-bold text-slate-800 truncate">{notif.title}</h5>
-                            <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
-                          </div>
-                        </button>
-                        <button
-                          onClick={() => {
-                            markAsRead(notif.id);
-                            if (newReportNotifications.length <= 1) setShowLeftDropdown(false);
-                          }}
-                          className="text-[9px] text-red-600 hover:text-red-800 font-extrabold cursor-pointer shrink-0 ml-1.5 self-center"
-                        >
-                          Dismiss
-                        </button>
+
+                  {/* Actions Bar */}
+                  <div className="flex flex-col gap-2 pt-0.5">
+                    
+                    {/* Silence Toggle Switch */}
+                    <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-650 flex items-center gap-1.5 select-none">
+                        {isSilenced ? (
+                          <BellOff size={13} className="text-red-500 shrink-0" />
+                        ) : (
+                          <Bell size={13} className="text-green-600 shrink-0 animate-pulse" />
+                        )}
+                        Silence Lost/Found Alerts
+                      </span>
+                      <button
+                        onClick={toggleSilence}
+                        className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                          isSilenced ? "bg-red-500" : "bg-slate-200"
+                        }`}
+                      >
+                        <div
+                          className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ${
+                            isSilenced ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Notification Toolbar (if notifications exist) */}
+                    {newReportNotifications.length > 0 && (
+                      <div className="flex items-center gap-2 justify-end text-[10px] font-extrabold text-slate-500 select-none">
+                        {isSelectMode ? (
+                          <>
+                            <button
+                              onClick={handleDeleteSelectedNotifs}
+                              disabled={selectedNotifIds.length === 0}
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl transition ${
+                                selectedNotifIds.length > 0
+                                  ? "bg-red-50 hover:bg-red-100 text-red-600 cursor-pointer"
+                                  : "text-slate-350 bg-slate-50 cursor-not-allowed"
+                              }`}
+                            >
+                              <Trash2 size={12} /> Delete ({selectedNotifIds.length})
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsSelectMode(false);
+                                setSelectedNotifIds([]);
+                              }}
+                              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => setIsSelectMode(true)}
+                              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-655 hover:text-slate-850 cursor-pointer flex items-center gap-1"
+                            >
+                              Select Option
+                            </button>
+                            <button
+                              onClick={handleClearAllNotifs}
+                              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-655 hover:text-slate-855 cursor-pointer"
+                            >
+                              Clear All
+                            </button>
+                          </>
+                        )}
                       </div>
-                    ))}
+                    )}
+                  </div>
+
+                  {/* List Content */}
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {newReportNotifications.length === 0 ? (
+                      <div className="text-center py-6 text-slate-400 text-[10px] font-bold">
+                        No new report notifications.
+                      </div>
+                    ) : (
+                      newReportNotifications.map((notif) => {
+                        const isSelected = selectedNotifIds.includes(notif.id);
+                        return (
+                          <div
+                            key={notif.id}
+                            className={`p-2.5 rounded-2xl border transition flex items-center gap-2 justify-between ${
+                              isSelectMode
+                                ? "bg-slate-50/50 hover:bg-slate-50 border-slate-100"
+                                : "bg-red-50/40 border-red-100/40"
+                            }`}
+                          >
+                            {/* Checkbox for selection mode */}
+                            {isSelectMode && (
+                              <button
+                                onClick={() => handleToggleSelectNotif(notif.id)}
+                                className="text-slate-400 hover:text-slate-600 shrink-0 cursor-pointer p-0.5"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare size={16} className="text-red-500 fill-red-100" />
+                                ) : (
+                                  <Square size={16} className="text-slate-350" />
+                                )}
+                              </button>
+                            )}
+
+                            {/* Alert Content Card */}
+                            <button
+                              onClick={() => {
+                                if (isSelectMode) {
+                                  handleToggleSelectNotif(notif.id);
+                                  return;
+                                }
+                                markAsRead(notif.id);
+                                if (newReportNotifications.length <= 1) setShowLeftDropdown(false);
+                                if (notif.meta?.reportId) {
+                                  const element = document.getElementById(`report-card-${notif.meta.reportId}`);
+                                  if (element) {
+                                    element.scrollIntoView({ behavior: "smooth", block: "center" });
+                                    element.classList.add("ring-4", "ring-red-500/20");
+                                    setTimeout(() => {
+                                      element.classList.remove("ring-4", "ring-red-500/20");
+                                    }, 3000);
+                                  }
+                                }
+                              }}
+                              className="flex items-center gap-2 min-w-0 text-left hover:opacity-80 transition cursor-pointer flex-1"
+                            >
+                              {notif.imageUrl && (
+                                <img src={notif.imageUrl} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0 border border-slate-100" />
+                              )}
+                              <div className="min-w-0">
+                                <h5 className="text-[11px] font-bold text-slate-800 truncate">{notif.title}</h5>
+                                <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
+                              </div>
+                            </button>
+
+                            {/* Dismiss button (hidden in select mode) */}
+                            {!isSelectMode && (
+                              <button
+                                onClick={() => {
+                                  deleteNotification(notif.id);
+                                }}
+                                className="text-[9px] text-red-650 hover:text-red-800 font-extrabold cursor-pointer shrink-0 ml-1.5 self-center bg-red-50/50 hover:bg-red-55 px-2 py-1 rounded-lg border border-red-100"
+                              >
+                                Dismiss
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               )}
