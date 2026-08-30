@@ -900,7 +900,11 @@ export default function LostFound() {
                 <Search className="text-green-700 shrink-0" size={32} /> Lost & Found
               </h1>
               <p className="text-xs font-semibold text-slate-500">
-                Help reunite lost animals with the             {/* TOP LEFT: LOST & FOUND ALERTS INDICATOR */}
+                Help reunite lost animals with the people who love them.
+              </p>
+            </div>
+
+            {/* TOP LEFT: LOST & FOUND ALERTS INDICATOR */}
             <div className="fixed top-6 left-6 z-50 pointer-events-auto flex flex-col items-start gap-2">
               <button
                 onClick={() => setShowLeftDropdown(!showLeftDropdown)}
