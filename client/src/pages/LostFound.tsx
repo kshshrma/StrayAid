@@ -564,7 +564,7 @@ export default function LostFound() {
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conversations</h3>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-[58vh]">
+                <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-[35vh]">
                   {loadingInbox ? (
                     <div className="text-center py-8 text-slate-400 text-xs font-bold animate-pulse">Loading inbox...</div>
                   ) : conversations.length === 0 ? (
@@ -620,6 +620,66 @@ export default function LostFound() {
                       );
                     })
                   )}
+                </div>
+
+                {/* Inbox Notifications Section */}
+                <div className="border-t border-slate-100 p-4 bg-slate-50/50 flex-none">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                      🔔 Message Alerts {messageNotifications.length > 0 && (
+                        <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-sans">
+                          {messageNotifications.length}
+                        </span>
+                      )}
+                    </h3>
+                    {messageNotifications.length > 0 && (
+                      <button
+                        onClick={() => {
+                          messageNotifications.forEach((n) => markAsRead(n.id));
+                        }}
+                        className="text-[9px] font-black text-slate-405 hover:text-slate-600 transition cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2 max-h-[22vh] overflow-y-auto pr-1">
+                    {messageNotifications.length === 0 ? (
+                      <div className="text-center py-4 text-slate-400 text-[10px] font-bold">
+                        No unread message alerts.
+                      </div>
+                    ) : (
+                      messageNotifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          className="p-2.5 rounded-xl border border-slate-150 bg-white shadow-xs flex items-center gap-2 justify-between animate-fadeIn text-xs"
+                        >
+                          <button
+                            onClick={() => {
+                              markAsRead(notif.id);
+                              if (notif.meta?.conversationId) {
+                                setActiveConversationId(notif.meta.conversationId);
+                              }
+                            }}
+                            className="flex-1 text-left min-w-0 hover:opacity-85 transition cursor-pointer"
+                          >
+                            <h5 className="font-extrabold text-slate-800 text-[10px] truncate">{notif.title}</h5>
+                            <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              deleteNotification(notif.id);
+                            }}
+                            className="text-[9px] text-red-500 hover:text-red-700 font-extrabold cursor-pointer shrink-0 ml-1 bg-red-50 hover:bg-red-100 p-1 px-2 rounded-lg border border-red-100"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
 
