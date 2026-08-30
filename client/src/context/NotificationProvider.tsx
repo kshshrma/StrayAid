@@ -102,17 +102,24 @@ export default function NotificationProvider({
 }) {
   const [incoming, setIncoming] = useState<IncomingAssignmentData | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [notifications, setNotifications] = useState<AppNotification[]>(DEFAULT_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    const deletedIds = JSON.parse(localStorage.getItem("strayaid_deleted_notification_ids") || "[]");
+    return DEFAULT_NOTIFICATIONS.filter((n) => !deletedIds.includes(n.id));
+  });
   const [activeChat, setActiveChat] = useState<{ reportId: string; senderId: string; conversationId?: string; showReportDetails?: boolean } | null>(null);
 
   const addMessageNotification = (msg: any) => {
+    const id = `msg-${msg.id}`;
+    const deletedIds = JSON.parse(localStorage.getItem("strayaid_deleted_notification_ids") || "[]");
+    if (deletedIds.includes(id)) return;
+
     const messageText = `"${msg.content}"`;
     setNotifications((prev) => {
       const exists = prev.some((n) => n.meta?.messageId === msg.id);
       if (exists) return prev;
 
       const newNotif: AppNotification = {
-        id: `msg-${msg.id}`,
+        id,
         category: "lost_found",
         title: `✉️ New Secure Message`,
         message: messageText,
@@ -157,6 +164,11 @@ export default function NotificationProvider({
   };
 
   const deleteNotification = (id: string) => {
+    const deletedIds = JSON.parse(localStorage.getItem("strayaid_deleted_notification_ids") || "[]");
+    if (!deletedIds.includes(id)) {
+      deletedIds.push(id);
+      localStorage.setItem("strayaid_deleted_notification_ids", JSON.stringify(deletedIds));
+    }
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
