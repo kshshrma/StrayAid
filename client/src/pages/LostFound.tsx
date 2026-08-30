@@ -35,6 +35,7 @@ export default function LostFound() {
   );
 
   const [showLeftDropdown, setShowLeftDropdown] = useState(false);
+  const [showInboxAlertsDropdown, setShowInboxAlertsDropdown] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [pets, setPets] = useState<LostFoundPet[]>([]);
@@ -546,9 +547,89 @@ export default function LostFound() {
               >
                 <ArrowLeft size={16} /> Back to Lost & Found
               </button>
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
-                📥 Inbox {inboxUnreadTotal > 0 && <span className="bg-green-700 text-white text-[9px] px-2 py-0.5 rounded-full">{inboxUnreadTotal}</span>}
-              </h2>
+              
+              <div className="flex items-center gap-4 relative">
+                
+                {/* 🔔 Message Alerts Dropdown Trigger */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowInboxAlertsDropdown(!showInboxAlertsDropdown)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-350 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-extrabold cursor-pointer transition-all shadow-xs"
+                  >
+                    <Bell size={13} className="text-slate-500 shrink-0" />
+                    <span>Alerts</span>
+                    {messageNotifications.length > 0 && (
+                      <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 font-sans">
+                        {messageNotifications.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Message Alerts Dropdown List */}
+                  {showInboxAlertsDropdown && (
+                    <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-white border border-slate-150 shadow-2xl p-4 space-y-3 z-50 animate-slideRight">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                        <span className="text-[10px] font-black text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                          🔔 Message Alerts
+                        </span>
+                        {messageNotifications.length > 0 && (
+                          <button
+                            onClick={() => {
+                              messageNotifications.forEach((n) => markAsRead(n.id));
+                              setShowInboxAlertsDropdown(false);
+                            }}
+                            className="text-[9px] font-black text-slate-405 hover:text-slate-650 transition cursor-pointer font-sans"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {messageNotifications.length === 0 ? (
+                          <div className="text-center py-4 text-slate-400 text-[10px] font-bold">
+                            No unread message alerts.
+                          </div>
+                        ) : (
+                          messageNotifications.map((notif) => (
+                            <div
+                              key={notif.id}
+                              className="p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition flex items-center gap-2 justify-between animate-fadeIn text-xs"
+                            >
+                              <button
+                                onClick={() => {
+                                  markAsRead(notif.id);
+                                  setShowInboxAlertsDropdown(false);
+                                  if (notif.meta?.conversationId) {
+                                    setActiveConversationId(notif.meta.conversationId);
+                                  }
+                                }}
+                                className="flex-1 text-left min-w-0 hover:opacity-85 transition cursor-pointer"
+                              >
+                                <h5 className="font-extrabold text-slate-800 text-[10px] truncate">{notif.title}</h5>
+                                <p className="text-[10px] text-slate-550 truncate mt-0.5" title={notif.message}>{notif.message}</p>
+                              </button>
+                              
+                              <button
+                                onClick={() => {
+                                  deleteNotification(notif.id);
+                                }}
+                                className="text-[9px] text-red-500 hover:text-red-700 font-extrabold cursor-pointer shrink-0 ml-1 bg-red-50 hover:bg-red-100 p-1 px-2 rounded-lg border border-red-100"
+                              >
+                                Dismiss
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5 animate-fadeIn">
+                  📥 Inbox {inboxUnreadTotal > 0 && <span className="bg-green-700 text-white text-[9px] px-2 py-0.5 rounded-full shrink-0 font-sans">{inboxUnreadTotal}</span>}
+                </h2>
+              </div>
             </div>
 
             {/* Content Inbox Grid split */}
@@ -564,7 +645,7 @@ export default function LostFound() {
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conversations</h3>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-[35vh]">
+                <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-[58vh]">
                   {loadingInbox ? (
                     <div className="text-center py-8 text-slate-400 text-xs font-bold animate-pulse">Loading inbox...</div>
                   ) : conversations.length === 0 ? (
@@ -602,7 +683,7 @@ export default function LostFound() {
                                 {conv.otherParticipantName}
                               </h4>
                               {conv.unreadCount > 0 && !isActive && (
-                                <span className="bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shrink-0 animate-pulse">
+                                <span className="bg-emerald-650 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shrink-0 animate-pulse">
                                   New
                                 </span>
                               )}
@@ -620,66 +701,6 @@ export default function LostFound() {
                       );
                     })
                   )}
-                </div>
-
-                {/* Inbox Notifications Section */}
-                <div className="border-t border-slate-100 p-4 bg-slate-50/50 flex-none">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                      🔔 Message Alerts {messageNotifications.length > 0 && (
-                        <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-sans">
-                          {messageNotifications.length}
-                        </span>
-                      )}
-                    </h3>
-                    {messageNotifications.length > 0 && (
-                      <button
-                        onClick={() => {
-                          messageNotifications.forEach((n) => markAsRead(n.id));
-                        }}
-                        className="text-[9px] font-black text-slate-405 hover:text-slate-600 transition cursor-pointer"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2 max-h-[22vh] overflow-y-auto pr-1">
-                    {messageNotifications.length === 0 ? (
-                      <div className="text-center py-4 text-slate-400 text-[10px] font-bold">
-                        No unread message alerts.
-                      </div>
-                    ) : (
-                      messageNotifications.map((notif) => (
-                        <div
-                          key={notif.id}
-                          className="p-2.5 rounded-xl border border-slate-150 bg-white shadow-xs flex items-center gap-2 justify-between animate-fadeIn text-xs"
-                        >
-                          <button
-                            onClick={() => {
-                              markAsRead(notif.id);
-                              if (notif.meta?.conversationId) {
-                                setActiveConversationId(notif.meta.conversationId);
-                              }
-                            }}
-                            className="flex-1 text-left min-w-0 hover:opacity-85 transition cursor-pointer"
-                          >
-                            <h5 className="font-extrabold text-slate-800 text-[10px] truncate">{notif.title}</h5>
-                            <p className="text-[10px] text-slate-500 truncate mt-0.5" title={notif.message}>{notif.message}</p>
-                          </button>
-                          
-                          <button
-                            onClick={() => {
-                              deleteNotification(notif.id);
-                            }}
-                            className="text-[9px] text-red-500 hover:text-red-700 font-extrabold cursor-pointer shrink-0 ml-1 bg-red-50 hover:bg-red-100 p-1 px-2 rounded-lg border border-red-100"
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
                 </div>
               </div>
 
