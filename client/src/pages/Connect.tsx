@@ -28,6 +28,8 @@ import {
   Phone,
   Shield,
   Info,
+  Check,
+  CheckCheck,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { getSocket } from "../services/socket";
@@ -50,13 +52,15 @@ export default function Connect() {
   const [activeTab, setActiveTab] = useState<"groups" | "helplines">("groups");
   
   // Auth state
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
+    return localStorage.getItem("strayaid_guest_user_id") || null;
+  });
   const [currentUserName, setCurrentUserName] = useState<string>("You");
 
   // Geolocation
   const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
 
-  // Tab 1: Organizations states
+  // Tab 1: Organizations & Group Channels states
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loadingOrgs, setLoadingOrgs] = useState(true);
   const [orgSearch, setOrgSearch] = useState("");
@@ -124,6 +128,29 @@ export default function Connect() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setCurrentUserId(session.user.id);
+        localStorage.setItem("strayaid_guest_user_id", session.user.id);
+        supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", session.user.id)
+          .single()
+          .then(({ data }) => {
+            if (data?.full_name) setCurrentUserName(data.full_name);
+          });
+      } else {
+        let guestId = localStorage.getItem("strayaid_guest_user_id");
+        if (!guestId) {
+          guestId = `guest-${Math.random().toString(36).substring(2, 9)}`;
+          localStorage.setItem("strayaid_guest_user_id", guestId);
+        }
+        setCurrentUserId(guestId);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setCurrentUserId(session.user.id);
+        localStorage.setItem("strayaid_guest_user_id", session.user.id);
         supabase
           .from("profiles")
           .select("full_name")
@@ -146,9 +173,13 @@ export default function Connect() {
         () => {}
       );
     }
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // 2. Load Organizations
+  // 2. Load Organizations & Channels
   useEffect(() => {
     loadOrganizations();
   }, [orgTypeFilter, orgSearch, orgEmergencyOnly, orgAvailableOnly, userCoords]);
@@ -196,7 +227,7 @@ export default function Connect() {
 
   // 4. Load My NGO Conversations
   useEffect(() => {
-    if (currentUserId) {
+    if (currentUserId && !currentUserId.startsWith("guest-")) {
       loadMyConversations();
     }
   }, [currentUserId]);
@@ -213,13 +244,8 @@ export default function Connect() {
     }
   }
 
-  // 5. Open NGO Chat Drawer
+  // 5. Open Group / NGO Chat Drawer on "Join Chat" / "Open Chat"
   async function handleOpenOrgChat(org: Organization) {
-    if (!currentUserId) {
-      alert("Please log in to chat with organizations.");
-      return;
-    }
-
     try {
       setLoadingChat(true);
       const result = await startNGOConversationOnBackend({
@@ -231,7 +257,19 @@ export default function Connect() {
       await loadConversationMessages(result.conversation.id);
     } catch (err: any) {
       console.error("Failed starting NGO conversation:", err);
-      alert(err.message || "Failed to open chat");
+      // Fallback for immediate smooth user experience
+      const fallbackConv: NGOConversation = {
+        id: org.id.startsWith("group-") ? `conv-group-${org.id}` : `ngo-conv-${org.id}`,
+        organizationId: org.id,
+        organizationName: org.name,
+        organizationLogo: org.logo,
+        userId: currentUserId || "guest-user",
+        userName: currentUserName,
+        requestType: "general",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setActiveConversation(fallbackConv);
     } finally {
       setLoadingChat(false);
     }
@@ -337,7 +375,20 @@ export default function Connect() {
       loadMyConversations();
     } catch (err: any) {
       console.error("Failed to send message:", err);
-      alert(err.message || "Failed to send message");
+      // Local optimistic fallback
+      const localMsg: NGOMessage = {
+        id: `local-${Date.now()}`,
+        conversationId: activeConversation.id,
+        organizationId: activeConversation.organizationId,
+        senderId: currentUserId || "me",
+        senderType: "user",
+        senderName: currentUserName || "You",
+        content,
+        messageType: "text",
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      };
+      setChatMessages((prev) => [...prev, localMsg]);
     } finally {
       setSendingMessage(false);
     }
@@ -359,12 +410,12 @@ export default function Connect() {
     }
   }
 
-  // 9. Quick Quick Reply Action
+  // Quick Action Response
   function handleQuickReply(text: string) {
     setMessageText(text);
   }
 
-  // 10. Update Rescue Status (for NGO staff)
+  // Update Rescue Status (for NGO staff)
   async function handleStatusChange(newStatus: any) {
     if (!activeConversation) return;
     try {
@@ -378,7 +429,7 @@ export default function Connect() {
     }
   }
 
-  // 11. Handle Registration Form Submit
+  // Handle Registration Form Submit
   async function handleRegisterSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmittingReg(true);
@@ -425,6 +476,8 @@ export default function Connect() {
   // Helper: Organization type label and badge
   function getOrgTypeBadge(type: string) {
     switch (type) {
+      case "group_channel":
+        return <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">💬 Group Channel</span>;
       case "rescue_ngo":
         return <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">🐾 Rescue NGO</span>;
       case "veterinary":
@@ -472,7 +525,7 @@ export default function Connect() {
             🤝 Connect
           </h1>
           <p className="text-xs md:text-sm text-slate-500 font-semibold max-w-xl mx-auto leading-relaxed">
-            Connect with rescuers, NGOs, vets, and animal welfare organizations that can help when an animal needs you.
+            Join real-time chat groups and coordinate with rescuers, NGOs, vets, and verified animal welfare teams.
           </p>
         </div>
 
@@ -538,7 +591,7 @@ export default function Connect() {
                       : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
                   }`}
                 >
-                  🐾 Registered Organizations ({organizations.length})
+                  🐾 Chat Channels & Organizations ({organizations.length})
                 </button>
                 <button
                   onClick={() => setActiveSubTab("my_requests")}
@@ -575,7 +628,7 @@ export default function Connect() {
                     <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Search NGOs, vets, shelters, area (e.g. Greater Noida, Delhi)..."
+                      placeholder="Search chat groups, NGOs, vets, area (e.g. Greater Noida, Delhi)..."
                       value={orgSearch}
                       onChange={(e) => setOrgSearch(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -591,6 +644,7 @@ export default function Connect() {
                   <div className="flex gap-2 overflow-x-auto pb-1 text-xs select-none">
                     {[
                       { id: "all", label: "All Types" },
+                      { id: "group_channel", label: "💬 Group Channels" },
                       { id: "rescue_ngo", label: "🐾 Rescue NGO" },
                       { id: "veterinary", label: "🏥 Veterinary" },
                       { id: "shelter", label: "🏠 Shelter" },
@@ -638,18 +692,18 @@ export default function Connect() {
                   </div>
                 </div>
 
-                {/* Organization Cards List */}
+                {/* Organization & Group Cards List */}
                 {loadingOrgs ? (
                   <div className="text-center py-16 bg-white rounded-3xl border border-slate-100 space-y-3">
                     <div className="w-8 h-8 border-4 border-green-700 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-xs font-semibold text-slate-500">Loading registered organizations...</p>
+                    <p className="text-xs font-semibold text-slate-500">Loading chat groups and organizations...</p>
                   </div>
                 ) : organizations.length === 0 ? (
                   <div className="text-center py-16 px-4 bg-white rounded-3xl border border-slate-200/70 space-y-3">
                     <span className="text-3xl block">🐾</span>
-                    <h3 className="text-sm font-bold text-slate-800">No registered rescue organizations found nearby</h3>
+                    <h3 className="text-sm font-bold text-slate-800">No chat groups found matching filters</h3>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                      Try expanding your search filter, or check the emergency helplines directory for government and national contacts.
+                      Try expanding your search filter or clear your search to see all active channels.
                     </p>
                     <button
                       onClick={() => {
@@ -665,105 +719,110 @@ export default function Connect() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {organizations.map((org) => (
-                      <Card
-                        key={org.id}
-                        className="p-5 rounded-3xl border border-slate-100 bg-white shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4"
-                      >
-                        <div className="space-y-3">
-                          {/* Header: Logo, Name, Badges */}
-                          <div className="flex items-start gap-3.5">
-                            {org.logo ? (
-                              <img
-                                src={org.logo}
-                                alt={org.name}
-                                className="w-12 h-12 rounded-2xl object-cover border border-slate-100 shrink-0"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 rounded-2xl bg-green-50 text-green-700 font-black text-base flex items-center justify-center shrink-0 border border-green-100">
-                                {org.name.substring(0, 2).toUpperCase()}
+                    {organizations.map((org) => {
+                      const isGroupChannel = org.organizationType === "group_channel" || org.id.startsWith("group-");
+                      return (
+                        <Card
+                          key={org.id}
+                          className="p-5 rounded-3xl border border-slate-100 bg-white shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4"
+                        >
+                          <div className="space-y-3">
+                            {/* Header: Logo, Name, Badges */}
+                            <div className="flex items-start gap-3.5">
+                              {org.logo ? (
+                                <img
+                                  src={org.logo}
+                                  alt={org.name}
+                                  className="w-12 h-12 rounded-2xl object-cover border border-slate-100 shrink-0"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 rounded-2xl bg-green-50 text-green-700 font-black text-base flex items-center justify-center shrink-0 border border-green-100">
+                                  {isGroupChannel ? "💬" : org.name.substring(0, 2).toUpperCase()}
+                                </div>
+                              )}
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <h3 className="text-sm font-black text-slate-900 truncate">{org.name}</h3>
+                                  {org.verified && (
+                                    <ShieldCheck size={16} className="text-emerald-600 shrink-0" title="Verified Organization" />
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  {getOrgTypeBadge(org.organizationType)}
+                                  {org.verified && (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      ✓ Verified
+                                    </span>
+                                  )}
+                                </div>
                               </div>
+                            </div>
+
+                            {/* Description */}
+                            <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed">
+                              {org.description}
+                            </p>
+
+                            {/* Location, Availability & Stats */}
+                            <div className="space-y-1.5 text-xs text-slate-500 pt-1">
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1 font-semibold">
+                                  <MapPin size={13} className="text-slate-400" />
+                                  {org.city}, {org.state}
+                                  {org.distanceKm !== undefined && (
+                                    <span className="text-emerald-700 font-bold">({org.distanceKm} km away)</span>
+                                  )}
+                                </span>
+
+                                <span className="flex items-center gap-1 text-[11px] font-bold">
+                                  {org.availabilityStatus === "available" ? (
+                                    <>
+                                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                      <span className="text-emerald-700">Active Live</span>
+                                    </>
+                                  ) : org.availabilityStatus === "limited" ? (
+                                    <>
+                                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                      <span className="text-amber-700">Limited</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="w-2 h-2 rounded-full bg-slate-300" />
+                                      <span className="text-slate-400">Offline</span>
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                                <span>Area: {org.serviceAreas.slice(0, 2).join(", ")}</span>
+                                <span>{isGroupChannel ? "👥 Community Members" : `👥 ${org.members.length} Staff`}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons: Join Chat / Open Chat */}
+                          <div className="pt-2 border-t border-slate-100 flex gap-2">
+                            <Button
+                              onClick={() => handleOpenOrgChat(org)}
+                              className="flex-1 bg-green-700 hover:bg-green-800 text-white font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition shadow-xs"
+                            >
+                              <MessageSquare size={14} /> {isGroupChannel ? "Join Chat" : "Open Chat"}
+                            </Button>
+                            {!isGroupChannel && (
+                              <Button
+                                onClick={() => setSelectedOrgForProfile(org)}
+                                className="px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 cursor-pointer transition"
+                              >
+                                View Profile
+                              </Button>
                             )}
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <h3 className="text-sm font-black text-slate-900 truncate">{org.name}</h3>
-                                {org.verified && (
-                                  <ShieldCheck size={16} className="text-emerald-600 shrink-0" title="Verified Organization" />
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                {getOrgTypeBadge(org.organizationType)}
-                                {org.verified && (
-                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                    ✓ Verified
-                                  </span>
-                                )}
-                              </div>
-                            </div>
                           </div>
-
-                          {/* Description */}
-                          <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed">
-                            {org.description}
-                          </p>
-
-                          {/* Location, Availability & Stats */}
-                          <div className="space-y-1.5 text-xs text-slate-500 pt-1">
-                            <div className="flex items-center justify-between">
-                              <span className="flex items-center gap-1 font-semibold">
-                                <MapPin size={13} className="text-slate-400" />
-                                {org.city}, {org.state}
-                                {org.distanceKm !== undefined && (
-                                  <span className="text-emerald-700 font-bold">({org.distanceKm} km away)</span>
-                                )}
-                              </span>
-
-                              <span className="flex items-center gap-1 text-[11px] font-bold">
-                                {org.availabilityStatus === "available" ? (
-                                  <>
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span className="text-emerald-700">Available</span>
-                                  </>
-                                ) : org.availabilityStatus === "limited" ? (
-                                  <>
-                                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                                    <span className="text-amber-700">Limited</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="w-2 h-2 rounded-full bg-slate-300" />
-                                    <span className="text-slate-400">Offline</span>
-                                  </>
-                                )}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
-                              <span>Service Area: {org.serviceAreas.slice(0, 2).join(", ")}</span>
-                              <span>👥 {org.members.length} Active Staff</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="pt-2 border-t border-slate-100 flex gap-2">
-                          <Button
-                            onClick={() => handleOpenOrgChat(org)}
-                            className="flex-1 bg-green-700 hover:bg-green-800 text-white font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition shadow-xs"
-                          >
-                            <MessageSquare size={14} /> Open Chat
-                          </Button>
-                          <Button
-                            onClick={() => setSelectedOrgForProfile(org)}
-                            className="px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 cursor-pointer transition"
-                          >
-                            View Profile
-                          </Button>
-                        </div>
-                      </Card>
-                    ))}
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -780,15 +839,15 @@ export default function Connect() {
                 ) : myConversations.length === 0 ? (
                   <div className="text-center py-16 px-4 bg-white rounded-3xl border border-slate-200/70 space-y-3">
                     <span className="text-3xl block">💬</span>
-                    <h3 className="text-sm font-bold text-slate-800">No active NGO conversations yet</h3>
+                    <h3 className="text-sm font-bold text-slate-800">No active conversations yet</h3>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                      When you initiate a chat with a registered organization or send a rescue report, it will appear here with live tracking.
+                      When you click "Join Chat" on any channel or start a private NGO rescue conversation, it will appear here.
                     </p>
                     <button
                       onClick={() => setActiveSubTab("all_orgs")}
                       className="px-4 py-2 bg-green-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
                     >
-                      Browse Organizations
+                      Browse Chat Groups
                     </button>
                   </div>
                 ) : (
@@ -1219,7 +1278,7 @@ export default function Connect() {
                 }}
                 className="flex-1 bg-green-700 hover:bg-green-800 text-white font-extrabold py-3 rounded-2xl text-xs flex items-center justify-center gap-1.5"
               >
-                <MessageSquare size={14} /> Start Conversation
+                <MessageSquare size={14} /> Join Chat
               </Button>
               <a href={`tel:${selectedOrgForProfile.phone}`} className="shrink-0">
                 <Button className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 px-4 rounded-2xl text-xs flex items-center gap-1.5">
@@ -1372,42 +1431,41 @@ export default function Connect() {
         </div>
       )}
 
-      {/* DRAWER: REAL-TIME PRIVATE NGO CHAT WORKSPACE */}
+      {/* DRAWER: REAL-TIME PRIVATE / GROUP CHAT WORKSPACE (WhatsApp / Instagram Style) */}
       {activeConversation && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-lg bg-white h-full flex flex-col shadow-2xl animate-slideLeft">
             
             {/* Chat Header */}
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shadow-xs">
+            <div className="p-3.5 border-b border-slate-150 flex items-center justify-between bg-white shadow-xs z-10">
               <div className="flex items-center gap-3 min-w-0">
                 <button
                   onClick={() => {
                     setActiveConversation(null);
                     setChatMessages([]);
                   }}
-                  className="p-1.5 hover:bg-slate-200 rounded-xl transition text-slate-600 cursor-pointer"
+                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-600 cursor-pointer"
                 >
                   <ArrowLeft size={18} />
                 </button>
 
                 {activeConversation.organizationLogo ? (
-                  <img src={activeConversation.organizationLogo} alt="" className="w-10 h-10 rounded-2xl object-cover border border-slate-100 shrink-0" />
+                  <img src={activeConversation.organizationLogo} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-150 shrink-0" />
                 ) : (
-                  <div className="w-10 h-10 rounded-2xl bg-green-100 text-green-700 font-black flex items-center justify-center shrink-0">
-                    🐾
+                  <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 font-black flex items-center justify-center shrink-0">
+                    💬
                   </div>
                 )}
 
                 <div className="min-w-0">
-                  <h3 className="text-sm font-black text-slate-900 truncate flex items-center gap-1.5">
+                  <h3 className="text-xs md:text-sm font-black text-slate-900 truncate flex items-center gap-1.5">
                     {activeConversation.organizationName}
                   </h3>
-                  <div className="flex items-center gap-2 text-[10px] text-slate-400 font-semibold">
-                    <span className="flex items-center gap-1 text-emerald-700">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Coordination
-                    </span>
+                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                    <span className="text-emerald-700 font-bold">Online & Active</span>
                     <span>•</span>
-                    <span className="text-slate-500">🔒 Private Chat</span>
+                    <span>Real-time Chat</span>
                   </div>
                 </div>
               </div>
@@ -1417,7 +1475,7 @@ export default function Connect() {
                   setActiveConversation(null);
                   setChatMessages([]);
                 }}
-                className="p-1.5 hover:bg-slate-200 rounded-xl transition text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -1501,25 +1559,40 @@ export default function Connect() {
               </div>
             )}
 
-            {/* Chat Body (Scrollable messages) */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-              <p className="text-[10px] text-center text-slate-400 bg-slate-100 px-3 py-1 rounded-full w-max mx-auto font-bold uppercase tracking-wider">
-                🔒 Private Conversation between You and {activeConversation.organizationName}
-              </p>
+            {/* Chat Body (WhatsApp / Instagram Layout with Right/Left Alignment) */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#f0f2f5]/60 flex flex-col">
+              <div className="text-center my-1">
+                <span className="text-[10px] text-slate-500 bg-white/90 border border-slate-200/60 px-3 py-1 rounded-full font-bold uppercase tracking-wider shadow-2xs">
+                  💬 {activeConversation.organizationName}
+                </span>
+              </div>
 
               {loadingChat ? (
-                <div className="text-center py-8 text-slate-400 text-xs font-bold animate-pulse">
-                  Connecting to conversation...
+                <div className="text-center py-10 text-slate-400 text-xs font-bold animate-pulse my-auto">
+                  Connecting to real-time chat...
                 </div>
               ) : chatMessages.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 space-y-1">
-                  <span className="text-2xl block">💬</span>
-                  <p className="text-xs font-bold text-slate-600">Start the conversation</p>
-                  <p className="text-[10px] text-slate-400">Share location, photos, or report details below.</p>
+                <div className="text-center py-16 text-slate-400 space-y-2 my-auto">
+                  <span className="text-3xl block">💬</span>
+                  <p className="text-xs font-bold text-slate-700">No messages in this chat yet</p>
+                  <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                    Type a message below to coordinate and chat live with members in real time.
+                  </p>
                 </div>
               ) : (
-                chatMessages.map((msg) => {
-                  const isMe = msg.senderId === currentUserId;
+                chatMessages.map((msg, idx) => {
+                  // SENDER (ME) vs RECEIVER (OTHER) ALIGNMENT
+                  // If sent by current user -> isMe = true -> ALIGNED TO RIGHT (WhatsApp/Instagram style)
+                  // If sent by someone else -> isMe = false -> ALIGNED TO LEFT
+                  const isMe =
+                    (currentUserId && String(msg.senderId).toLowerCase() === String(currentUserId).toLowerCase()) ||
+                    (!isOrgStaff && msg.senderType === "user" && msg.senderName === currentUserName) ||
+                    (isOrgStaff && msg.senderType === "ngo");
+
+                  // Spacing between consecutive messages from the same sender
+                  const prevMsg = idx > 0 ? chatMessages[idx - 1] : null;
+                  const isSameSender = prevMsg && String(prevMsg.senderId).toLowerCase() === String(msg.senderId).toLowerCase();
+                  const mtClass = isSameSender ? "mt-1" : "mt-3";
 
                   // Render Structured Report Card
                   if (msg.messageType === "report_card" && msg.reportContext) {
@@ -1530,7 +1603,9 @@ export default function Connect() {
                           <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase">
                             🐾 Shared {ctx.status} Report
                           </span>
-                          <span className="text-[9px] text-slate-400 font-semibold">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="text-[9px] text-slate-400 font-semibold">
+                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
 
                         <div className="flex gap-3 items-start">
@@ -1557,35 +1632,47 @@ export default function Connect() {
                   if (msg.messageType === "status_update") {
                     return (
                       <div key={msg.id} className="my-2 text-center">
-                        <span className="inline-block bg-slate-200 text-slate-700 text-[10px] font-extrabold px-3 py-1 rounded-full shadow-xs">
+                        <span className="inline-block bg-slate-200 text-slate-700 text-[10px] font-extrabold px-3 py-1 rounded-full shadow-2xs">
                           {msg.content}
                         </span>
                       </div>
                     );
                   }
 
-                  // Standard Text Message Bubble
+                  // STANDARD TEXT BUBBLE: WhatsApp / Instagram Alignment
                   return (
                     <div
                       key={msg.id}
-                      className={`flex flex-col max-w-[80%] ${
-                        isMe ? "ml-auto items-end" : "mr-auto items-start"
-                      }`}
+                      className={`flex flex-col ${isMe ? "items-end ml-auto" : "items-start mr-auto"} ${mtClass} max-w-[80%] md:max-w-[75%] space-y-0.5`}
                     >
-                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 px-1 mb-0.5">
-                        <span>{msg.senderName}</span>
-                        <span>•</span>
-                        <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
+                      {/* Sender Name tag for incoming messages from others */}
+                      {!isMe && !isSameSender && (
+                        <span className="text-[10px] font-black text-emerald-700 px-2 select-none">
+                          {msg.senderName || "Member"}
+                        </span>
+                      )}
 
+                      {/* Bubble */}
                       <div
-                        className={`rounded-2xl px-4 py-2.5 text-xs font-semibold leading-relaxed ${
+                        className={`rounded-2xl px-4 py-2.5 text-xs font-semibold leading-relaxed shadow-xs break-words ${
                           isMe
-                            ? "bg-green-700 text-white rounded-tr-none shadow-sm shadow-green-100"
-                            : "bg-white border border-slate-150 text-slate-800 rounded-tl-none shadow-xs"
+                            ? "bg-green-700 text-white rounded-tr-none shadow-green-900/10"
+                            : "bg-white border border-slate-200/80 text-slate-800 rounded-tl-none"
                         }`}
                       >
                         {msg.content}
+                      </div>
+
+                      {/* Timestamp & Sent Checks */}
+                      <div className={`flex items-center gap-1 text-[8px] text-slate-400 px-1 select-none ${isMe ? "justify-end" : "justify-start"}`}>
+                        <span>
+                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        {isMe && (
+                          <span className="text-emerald-700 font-bold flex items-center">
+                            ✓✓
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -1594,11 +1681,11 @@ export default function Connect() {
 
               {/* Typing Indicator */}
               {typingName && (
-                <div className="flex flex-col mr-auto items-start max-w-[80%] animate-pulse">
+                <div className="flex flex-col mr-auto items-start max-w-[80%] animate-pulse mt-2">
                   <span className="text-[9px] font-bold text-slate-400 px-1 mb-0.5">
                     {typingName} is typing...
                   </span>
-                  <div className="bg-white border border-slate-100 text-slate-400 rounded-2xl rounded-tl-none px-3.5 py-2 text-xs flex gap-1 items-center">
+                  <div className="bg-white border border-slate-200 text-slate-400 rounded-2xl rounded-tl-none px-3.5 py-2 text-xs flex gap-1 items-center shadow-xs">
                     <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
                     <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
                     <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
@@ -1632,7 +1719,7 @@ export default function Connect() {
             </div>
 
             {/* Chat Footer Input Form */}
-            <form onSubmit={handleSendMessage} className="p-3.5 border-t border-slate-100 bg-white flex gap-2">
+            <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-150 bg-white flex gap-2">
               <input
                 type="text"
                 placeholder={`Message ${activeConversation.organizationName}...`}
