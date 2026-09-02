@@ -34,10 +34,10 @@ import {
 import { supabase } from "../lib/supabase";
 import { getSocket } from "../services/socket";
 import {
-  Organization,
-  Helpline,
-  NGOConversation,
-  NGOMessage,
+  type Organization,
+  type Helpline,
+  type NGOConversation,
+  type NGOMessage,
   fetchOrganizations,
   fetchHelplines,
   startNGOConversationOnBackend,
