@@ -321,15 +321,15 @@ function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: num
 }
 
 export interface GetOrganizationsQuery {
-  search?: string;
-  type?: string;
-  state?: string;
-  city?: string;
-  emergencyOnly?: boolean;
-  availableOnly?: boolean;
-  userLat?: number;
-  userLon?: number;
-  includePending?: boolean;
+  search?: string | undefined;
+  type?: string | undefined;
+  state?: string | undefined;
+  city?: string | undefined;
+  emergencyOnly?: boolean | undefined;
+  availableOnly?: boolean | undefined;
+  userLat?: number | undefined;
+  userLon?: number | undefined;
+  includePending?: boolean | undefined;
 }
 
 export async function getOrganizations(query: GetOrganizationsQuery = {}): Promise<any[]> {

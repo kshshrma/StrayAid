@@ -274,11 +274,11 @@ export async function readHelplines(): Promise<Helpline[]> {
 }
 
 export interface GetHelplinesQuery {
-  search?: string;
-  category?: string;
-  state?: string;
-  city?: string;
-  emergencyOnly?: boolean;
+  search?: string | undefined;
+  category?: string | undefined;
+  state?: string | undefined;
+  city?: string | undefined;
+  emergencyOnly?: boolean | undefined;
 }
 
 export async function getHelplines(query: GetHelplinesQuery = {}): Promise<{

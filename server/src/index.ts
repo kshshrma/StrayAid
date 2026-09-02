@@ -10,6 +10,7 @@ import rescueRoutes from "./routes/rescue";
 import adminRoutes from "./routes/admin";
 import reportRoutes from "./routes/report";
 import messageRoutes from "./routes/message";
+import connectRoutes from "./routes/connect";
 import { supabase } from "./services/supabase";
 import http from "http";
 import { Server } from "socket.io";
@@ -26,6 +27,7 @@ app.use("/api/rescue", rescueRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/connect", connectRoutes);
 
 // Home Route
 app.get("/", (_, res) => {
@@ -187,6 +189,43 @@ io.on("connection", (socket) => {
   socket.on("typing_stop", ({ conversationId, userId }) => {
     if (conversationId) {
       socket.to(`conversation:${conversationId}`).emit("typing_stop", { conversationId, userId });
+    }
+  });
+
+  // NGO Socket.IO Room Handlers
+  socket.on("join_ngo_room", (organizationId: string) => {
+    if (organizationId) {
+      const roomName = `org:${organizationId}`;
+      socket.join(roomName);
+      console.log(`🏢 Socket ${socket.id} joined NGO room: ${roomName}`);
+    }
+  });
+
+  socket.on("join_ngo_conversation", (conversationId: string) => {
+    if (conversationId) {
+      const roomName = `ngo_conv:${conversationId}`;
+      socket.join(roomName);
+      console.log(`💬 Socket ${socket.id} joined NGO conversation room: ${roomName}`);
+    }
+  });
+
+  socket.on("leave_ngo_conversation", (conversationId: string) => {
+    if (conversationId) {
+      const roomName = `ngo_conv:${conversationId}`;
+      socket.leave(roomName);
+      console.log(`💬 Socket ${socket.id} left NGO conversation room: ${roomName}`);
+    }
+  });
+
+  socket.on("ngo_typing_start", ({ conversationId, senderName }) => {
+    if (conversationId) {
+      socket.to(`ngo_conv:${conversationId}`).emit("ngo_typing_start", { conversationId, senderName });
+    }
+  });
+
+  socket.on("ngo_typing_stop", ({ conversationId }) => {
+    if (conversationId) {
+      socket.to(`ngo_conv:${conversationId}`).emit("ngo_typing_stop", { conversationId });
     }
   });
 
