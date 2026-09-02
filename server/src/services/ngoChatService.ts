@@ -130,6 +130,29 @@ export async function getOrCreateNGOConversation(
 
   const convs = await readNGOConversations();
 
+  // If this is a public group channel, all users share the same channel conversation!
+  if (organizationId.startsWith("group-") || org.organizationType === "group_channel") {
+    const channelConvId = `conv-group-${org.id}`;
+    let groupConv = convs.find((c) => c.id === channelConvId || c.organizationId === organizationId);
+    if (!groupConv) {
+      groupConv = {
+        id: channelConvId,
+        organizationId: org.id,
+        organizationName: org.name,
+        organizationLogo: org.logo,
+        userId: "community",
+        userName: "Community Group",
+        userAvatar: org.logo,
+        requestType: "general",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      convs.push(groupConv);
+      await writeNGOConversations(convs);
+    }
+    return groupConv;
+  }
+
   // Find existing conversation between this user and NGO
   // If reportId is provided, check if a conversation for that specific report exists
   let conv = convs.find((c) => {
@@ -347,6 +370,11 @@ export async function canUserAccessNGOConversation(
   const conv = await getNGOConversationById(conversationId);
   if (!conv) {
     return { canAccess: false, isOrgMember: false, conversation: null };
+  }
+
+  // Check 0: Public Group Channel
+  if (conv.id.startsWith("conv-group-") || conv.organizationId.startsWith("group-")) {
+    return { canAccess: true, isOrgMember: false, conversation: conv };
   }
 
   // Check 1: User is the citizen who started the conversation

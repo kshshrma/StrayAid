@@ -19,7 +19,8 @@ export interface Organization {
     | "shelter"
     | "rescue_team"
     | "wildlife"
-    | "animal_welfare";
+    | "animal_welfare"
+    | "group_channel";
   city: string;
   state: string;
   serviceAreas: string[];

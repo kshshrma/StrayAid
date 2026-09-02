@@ -19,7 +19,8 @@ export interface Organization {
     | "shelter"
     | "rescue_team"
     | "wildlife"
-    | "animal_welfare";
+    | "animal_welfare"
+    | "group_channel";
   city: string;
   state: string;
   serviceAreas: string[];
@@ -48,6 +49,84 @@ export interface Organization {
 }
 
 const DEFAULT_ORGANIZATIONS: Organization[] = [
+  {
+    id: "group-emergency",
+    name: "🚨 Emergency Rescuers (Delhi NCR & UP)",
+    description: "Public real-time group coordination for urgent street animal rescues, accident responses, and on-site volunteer support.",
+    logo: "https://images.unsplash.com/photo-1548767797-d8c844163c4c?auto=format&fit=crop&q=80&w=300",
+    organizationType: "group_channel",
+    city: "Delhi NCR",
+    state: "Delhi",
+    serviceAreas: ["Delhi NCR", "Noida", "Greater Noida", "Gurugram", "Ghaziabad", "Faridabad"],
+    verified: true,
+    verificationStatus: "verified",
+    active: true,
+    emergencyAvailable: true,
+    availabilityStatus: "available",
+    emergencyResponseEnabled: true,
+    operatingHours: "24x7 Live Community Chat",
+    phone: "1962",
+    email: "emergency@strayaid.org",
+    address: "Delhi NCR Emergency Volunteer Network",
+    members: [
+      { userId: "system-mod-1", role: "admin", name: "StrayAid Emergency Bot" }
+    ],
+    stats: { casesResolved: 420, activeRescues: 18 },
+    createdAt: "2024-01-01T00:00:00.000Z",
+    lastVerifiedAt: "2026-08-30T00:00:00.000Z",
+  },
+  {
+    id: "group-vet",
+    name: "🏥 Vet & First-Aid Advice Network",
+    description: "Connect with veterinarians, vet students, and experienced first-aid volunteers for triage guidance on injured strays.",
+    logo: "https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?auto=format&fit=crop&q=80&w=300",
+    organizationType: "group_channel",
+    city: "National",
+    state: "All India",
+    serviceAreas: ["All India", "Delhi NCR", "Uttar Pradesh", "Maharashtra", "Karnataka"],
+    verified: true,
+    verificationStatus: "verified",
+    active: true,
+    emergencyAvailable: true,
+    availabilityStatus: "available",
+    emergencyResponseEnabled: true,
+    operatingHours: "8:00 AM - 11:00 PM Active",
+    phone: "011-23967555",
+    email: "vetcare@strayaid.org",
+    address: "StrayAid Tele-Vet Support",
+    members: [
+      { userId: "system-vet-1", role: "vet", name: "Dr. Aniruddh Rao (Chief Vet)" }
+    ],
+    stats: { casesResolved: 890, activeRescues: 9 },
+    createdAt: "2024-01-01T00:00:00.000Z",
+    lastVerifiedAt: "2026-08-30T00:00:00.000Z",
+  },
+  {
+    id: "group-welfare",
+    name: "🐕 Community Animal Feeders & Advocates",
+    description: "Local feeder coordination, sterilization (ABC program) discussions, community care, and legal protection advice.",
+    logo: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&q=80&w=300",
+    organizationType: "group_channel",
+    city: "Delhi NCR",
+    state: "Delhi",
+    serviceAreas: ["Delhi NCR", "Greater Noida", "Noida", "South Delhi"],
+    verified: true,
+    verificationStatus: "verified",
+    active: true,
+    emergencyAvailable: false,
+    availabilityStatus: "available",
+    emergencyResponseEnabled: false,
+    operatingHours: "Community 24/7",
+    phone: "+91 98184 34479",
+    email: "feeders@strayaid.org",
+    address: "Community Feeder Association",
+    members: [
+      { userId: "system-feeder-1", role: "coordinator", name: "Kaveri Rana" }
+    ],
+    stats: { casesResolved: 310, activeRescues: 4 },
+    createdAt: "2024-01-01T00:00:00.000Z",
+    lastVerifiedAt: "2026-08-30T00:00:00.000Z",
+  },
   {
     id: "org-friendicoes",
     name: "Friendicoes SECA",
