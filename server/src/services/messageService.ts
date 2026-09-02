@@ -2,25 +2,40 @@ import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { supabase } from "./supabase";
+import { getRegisteredNgoById, REGISTERED_NGOS, RegisteredNGO } from "./ngoService";
 
 export interface Conversation {
   id: string;
-  reportId: string;
-  participant1Id: string; // Report Owner
-  participant2Id: string; // Enquirer
+  type?: "report" | "ngo";
+  organizationId?: string;
+  reportId?: string;
+  participant1Id: string; // Citizen User ID
+  participant2Id: string; // Report Owner or Authorized NGO Member User ID
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MessageMetadata {
+  type?: "text" | "report_attachment";
+  reportId?: string;
+  animalType?: string;
+  breed?: string;
+  status?: "lost" | "found";
+  location?: string;
+  urgency?: string;
+  imageUrl?: string;
 }
 
 export interface Message {
   id: string;
   conversationId: string;
-  reportId: string;
+  reportId?: string;
   senderId: string;
   recipientId: string;
   content: string;
   createdAt: string;
   isRead: boolean;
+  metadata?: MessageMetadata;
 }
 
 const DATA_DIR = path.resolve("src/data");
@@ -88,6 +103,7 @@ async function ensureFilesExist() {
             if (!conv) {
               conv = {
                 id: crypto.randomUUID(),
+                type: "report",
                 reportId: msg.reportId,
                 participant1Id: ownerId,
                 participant2Id: enquirerId,
@@ -162,6 +178,7 @@ export async function getOrCreateConversation(
   if (!conv) {
     conv = {
       id: crypto.randomUUID(),
+      type: "report",
       reportId,
       participant1Id,
       participant2Id,
@@ -175,23 +192,63 @@ export async function getOrCreateConversation(
   return conv;
 }
 
+export async function getOrCreateNgoConversation(
+  userId: string,
+  organizationId: string
+): Promise<{ conversation: Conversation; ngo: RegisteredNGO }> {
+  const ngo = getRegisteredNgoById(organizationId);
+  if (!ngo) {
+    throw new Error(`Invalid organization ID: ${organizationId}`);
+  }
+
+  const conversations = await readConversations();
+  const representativeUserId = ngo.representativeUserId;
+
+  let conv = conversations.find(
+    (c) =>
+      c.type === "ngo" &&
+      c.organizationId === organizationId &&
+      ((c.participant1Id === userId && c.participant2Id === representativeUserId) ||
+        (c.participant1Id === representativeUserId && c.participant2Id === userId))
+  );
+
+  if (!conv) {
+    conv = {
+      id: crypto.randomUUID(),
+      type: "ngo",
+      organizationId,
+      reportId: "",
+      participant1Id: userId,
+      participant2Id: representativeUserId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    conversations.push(conv);
+    await writeConversations(conversations);
+  }
+
+  return { conversation: conv, ngo };
+}
+
 export async function createMessage(
   conversationId: string,
   reportId: string,
   senderId: string,
   recipientId: string,
-  content: string
+  content: string,
+  metadata?: MessageMetadata
 ): Promise<Message> {
   const messages = await readMessages();
   const newMessage: Message = {
     id: crypto.randomUUID(),
     conversationId,
-    reportId,
+    reportId: reportId || "",
     senderId,
     recipientId,
     content,
     createdAt: new Date().toISOString(),
     isRead: false,
+    ...(metadata ? { metadata } : {}),
   };
   messages.push(newMessage);
   await writeMessages(messages);
@@ -265,41 +322,65 @@ export async function getConversationsForUser(userId: string): Promise<any[]> {
     });
   }
 
-  // Batch query report context information
-  const reportIds = Array.from(new Set(userConvs.map((c) => c.reportId)));
-  const { data: reports } = await supabase
-    .from("reports")
-    .select("id, status, animal_type, ai_advice")
-    .in("id", reportIds);
-
+  // Batch query report context information for report conversations
+  const reportIds = Array.from(
+    new Set(userConvs.filter((c) => c.reportId && c.type !== "ngo").map((c) => c.reportId as string))
+  );
+  
   const reportMap = new Map<string, { name: string; status: string }>();
-  if (reports) {
-    reports.forEach((r) => {
-      let breed = r.animal_type || "Animal";
-      let name = "";
-      try {
-        const meta = JSON.parse(r.ai_advice || "{}");
-        breed = meta.breed || breed;
-        name = meta.name || "";
-      } catch {}
-      
-      const petName = name ? `${name} (${breed})` : breed;
-      reportMap.set(r.id, { name: petName, status: r.status });
-    });
+  if (reportIds.length > 0) {
+    const { data: reports } = await supabase
+      .from("reports")
+      .select("id, status, animal_type, ai_advice")
+      .in("id", reportIds);
+
+    if (reports) {
+      reports.forEach((r) => {
+        let breed = r.animal_type || "Animal";
+        let name = "";
+        try {
+          const meta = JSON.parse(r.ai_advice || "{}");
+          breed = meta.breed || breed;
+          name = meta.name || "";
+        } catch {}
+        
+        const petName = name ? `${name} (${breed})` : breed;
+        reportMap.set(r.id, { name: petName, status: r.status });
+      });
+    }
   }
 
   const messages = await readMessages();
 
   const list = userConvs.map((c) => {
+    const isNgo = c.type === "ngo";
+    const ngo = isNgo && c.organizationId ? getRegisteredNgoById(c.organizationId) : null;
     const otherParticipantId = c.participant1Id === userId ? c.participant2Id : c.participant1Id;
-    const profile = profileMap.get(otherParticipantId) || {
-      full_name: `User #${otherParticipantId.substring(0, 5)}`,
-      avatar_url: null,
-    };
-    const reportContext = reportMap.get(c.reportId) || {
-      name: "Unknown Animal",
-      status: "lost",
-    };
+
+    let otherParticipantName = "";
+    let otherParticipantAvatar: string | null = null;
+    let reportName = "";
+    let reportStatus = "";
+
+    if (isNgo && ngo) {
+      otherParticipantName = ngo.name;
+      otherParticipantAvatar = ngo.avatarUrl || null;
+      reportName = `🐾 NGO • ${ngo.categories[0] || "Rescue"}`;
+      reportStatus = ngo.availability;
+    } else {
+      const profile = profileMap.get(otherParticipantId) || {
+        full_name: `User #${otherParticipantId.substring(0, 5)}`,
+        avatar_url: null,
+      };
+      const reportContext = (c.reportId && reportMap.get(c.reportId)) || {
+        name: "Unknown Animal",
+        status: "lost",
+      };
+      otherParticipantName = profile.full_name;
+      otherParticipantAvatar = profile.avatar_url;
+      reportName = reportContext.name;
+      reportStatus = reportContext.status;
+    }
 
     // Find messages in this conversation
     const convMsgs = messages.filter((m) => m.conversationId === c.id);
@@ -311,12 +392,25 @@ export async function getConversationsForUser(userId: string): Promise<any[]> {
 
     return {
       conversationId: c.id,
+      type: c.type || "report",
+      organizationId: c.organizationId,
       reportId: c.reportId,
+      isNgo,
+      ngoDetails: ngo ? {
+        id: ngo.id,
+        name: ngo.name,
+        isVerified: ngo.isVerified,
+        availability: ngo.availability,
+        location: ngo.location,
+        categories: ngo.categories,
+        serviceArea: ngo.serviceArea,
+        phone: ngo.phone,
+      } : null,
       otherParticipantId,
-      otherParticipantName: profile.full_name,
-      otherParticipantAvatar: profile.avatar_url,
-      reportName: reportContext.name,
-      reportStatus: reportContext.status,
+      otherParticipantName,
+      otherParticipantAvatar,
+      reportName,
+      reportStatus,
       lastMessage: lastMsg ? lastMsg.content : "No messages yet.",
       lastMessageAt: lastMsg ? lastMsg.createdAt : c.updatedAt,
       unreadCount,

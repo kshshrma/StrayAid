@@ -13,6 +13,69 @@ async function getAuthHeaders() {
   };
 }
 
+export interface RegisteredNGO {
+  id: string;
+  name: string;
+  isVerified: boolean;
+  availability: "available" | "busy" | "offline";
+  location: string;
+  categories: string[];
+  description: string;
+  phone: string;
+  activeMembers: number;
+  serviceArea: string;
+  avatarUrl?: string | null;
+}
+
+export interface EmergencyHelpline {
+  id: string;
+  name: string;
+  description: string;
+  phone: string;
+  isAvailable247: boolean;
+  type: "helpline";
+}
+
+export interface ReportAttachmentMetadata {
+  type: "report_attachment";
+  reportId: string;
+  animalType: string;
+  breed?: string;
+  status: "lost" | "found";
+  location: string;
+  urgency?: string;
+  imageUrl?: string;
+}
+
+export async function getRegisteredNgos(): Promise<{ ngos: RegisteredNGO[]; helplines: EmergencyHelpline[] }> {
+  const response = await fetch(`${API_URL}/api/messages/ngos`, {
+    method: "GET",
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to load NGOs list");
+  }
+  return {
+    ngos: result.ngos || [],
+    helplines: result.helplines || [],
+  };
+}
+
+export async function startNgoConversationOnBackend(organizationId: string, initialMessage?: string) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/api/messages/ngo/start`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ organizationId, initialMessage }),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to start NGO conversation");
+  }
+  return result; // contains { conversation, ngo, messages, createdMessage }
+}
+
 export async function getInboxFromBackend() {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_URL}/api/messages/inbox`, {
@@ -53,15 +116,15 @@ export async function getConversationMessagesFromBackend(conversationId: string)
   if (!response.ok) {
     throw new Error(result.message || "Failed to load conversation details");
   }
-  return result; // contains { conversation, messages }
+  return result; // contains { conversation, messages, ngoDetails }
 }
 
-export async function sendMessageToConversation(conversationId: string, content: string) {
+export async function sendMessageToConversation(conversationId: string, content: string, metadata?: any) {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_URL}/api/messages/conversations/${conversationId}/messages`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, metadata }),
   });
   
   const result = await response.json();

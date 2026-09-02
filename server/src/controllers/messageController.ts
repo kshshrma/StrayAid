@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { supabase } from "../services/supabase";
 import * as messageService from "../services/messageService";
+import { REGISTERED_NGOS, EMERGENCY_HELPLINES, getRegisteredNgoById } from "../services/ngoService";
 
 // Helper to fetch report owner ID from Supabase
 async function getReportOwnerId(reportId: string): Promise<string | null> {
@@ -23,6 +24,20 @@ async function getReportOwnerId(reportId: string): Promise<string | null> {
   }
 }
 
+// GET /api/messages/ngos
+export async function getNgosList(_req: AuthenticatedRequest, res: Response) {
+  try {
+    return res.json({
+      success: true,
+      ngos: REGISTERED_NGOS,
+      helplines: EMERGENCY_HELPLINES,
+    });
+  } catch (err: any) {
+    console.error("[MessageController] Error loading NGOs list:", err);
+    return res.status(500).json({ success: false, message: "Failed to load NGOs list" });
+  }
+}
+
 // GET /api/messages/inbox
 export async function getInbox(req: AuthenticatedRequest, res: Response) {
   try {
@@ -39,7 +54,72 @@ export async function getInbox(req: AuthenticatedRequest, res: Response) {
   }
 }
 
-// POST /api/messages/start
+// POST /api/messages/ngo/start
+export async function startNgoConversation(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { organizationId, initialMessage } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!organizationId) {
+      return res.status(400).json({ success: false, message: "organizationId is required" });
+    }
+
+    const ngo = getRegisteredNgoById(organizationId);
+    if (!ngo) {
+      return res.status(404).json({ success: false, message: "Registered NGO not found" });
+    }
+
+    // Get or create conversation between current user and authorized NGO representative account
+    const { conversation } = await messageService.getOrCreateNgoConversation(userId, organizationId);
+
+    let createdMessage = null;
+    if (initialMessage && initialMessage.trim()) {
+      createdMessage = await messageService.createMessage(
+        conversation.id,
+        "",
+        userId,
+        ngo.representativeUserId,
+        initialMessage.trim()
+      );
+
+      const io = req.app.get("io");
+      if (io) {
+        io.to(`conversation:${conversation.id}`).emit("new_message", { message: createdMessage });
+        io.to(`user:${ngo.representativeUserId}`).emit("secure_message_received", { message: createdMessage });
+      }
+    }
+
+    const messages = await messageService.getConversationMessages(conversation.id);
+
+    return res.status(200).json({
+      success: true,
+      conversation,
+      ngo: {
+        id: ngo.id,
+        name: ngo.name,
+        isVerified: ngo.isVerified,
+        availability: ngo.availability,
+        location: ngo.location,
+        categories: ngo.categories,
+        description: ngo.description,
+        phone: ngo.phone,
+        activeMembers: ngo.activeMembers,
+        serviceArea: ngo.serviceArea,
+      },
+      messages,
+      createdMessage,
+    });
+  } catch (err: any) {
+    console.error("[MessageController] Error starting NGO conversation:", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to start NGO conversation" });
+  }
+}
+
+// POST /api/messages/start (Lost & Found report conversation)
 export async function startConversation(req: AuthenticatedRequest, res: Response) {
   try {
     const { reportId, content } = req.body;
@@ -110,7 +190,27 @@ export async function getConversationDetails(req: AuthenticatedRequest, res: Res
 
     // Load messages
     const messages = await messageService.getConversationMessages(conversationId);
-    return res.json({ success: true, conversation, messages });
+
+    let ngoDetails = null;
+    if (conversation.type === "ngo" && conversation.organizationId) {
+      const ngo = getRegisteredNgoById(conversation.organizationId);
+      if (ngo) {
+        ngoDetails = {
+          id: ngo.id,
+          name: ngo.name,
+          isVerified: ngo.isVerified,
+          availability: ngo.availability,
+          location: ngo.location,
+          categories: ngo.categories,
+          description: ngo.description,
+          phone: ngo.phone,
+          activeMembers: ngo.activeMembers,
+          serviceArea: ngo.serviceArea,
+        };
+      }
+    }
+
+    return res.json({ success: true, conversation, messages, ngoDetails });
   } catch (err: any) {
     console.error("[MessageController] Error loading conversation details:", err);
     return res.status(500).json({ success: false, message: err.message || "Failed to load conversation" });
@@ -121,7 +221,7 @@ export async function getConversationDetails(req: AuthenticatedRequest, res: Res
 export async function sendReplyMessage(req: AuthenticatedRequest, res: Response) {
   try {
     const conversationId = req.params.conversationId as string;
-    const { content } = req.body;
+    const { content, metadata } = req.body;
     const senderId = req.userId;
 
     if (!senderId) {
@@ -144,13 +244,14 @@ export async function sendReplyMessage(req: AuthenticatedRequest, res: Response)
 
     const recipientId = senderId === conversation.participant1Id ? conversation.participant2Id : conversation.participant1Id;
 
-    // Create message
+    // Create message with optional report attachment metadata
     const message = await messageService.createMessage(
       conversationId,
-      conversation.reportId,
+      conversation.reportId || "",
       senderId,
       recipientId,
-      content.trim()
+      content.trim(),
+      metadata
     );
 
     // Emit to conversation room (realtime chat screen) and user room (unread badges/alerts)
@@ -221,7 +322,6 @@ export async function blockConversationParticipant(req: AuthenticatedRequest, re
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    // Mock block participant success
     return res.json({ success: true, message: "Participant blocked successfully" });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Failed to block participant" });
@@ -247,7 +347,6 @@ export async function reportMessageContent(req: AuthenticatedRequest, res: Respo
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    // Mock report success
     return res.json({ success: true, message: "Message content reported successfully" });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message || "Failed to report content" });

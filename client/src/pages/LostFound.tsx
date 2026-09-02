@@ -745,12 +745,14 @@ export default function LostFound() {
                           </div>
                           
                           <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => handleContextViewReport(activeConv.reportId, activeConv.otherParticipantId)}
-                              className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-[9px] font-black text-slate-700 cursor-pointer shadow-xs transition"
-                            >
-                              View Report
-                            </button>
+                            {activeConv.reportId && (
+                              <button
+                                onClick={() => handleContextViewReport(activeConv.reportId, activeConv.otherParticipantId)}
+                                className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-[9px] font-black text-slate-700 cursor-pointer shadow-xs transition"
+                              >
+                                View Report
+                              </button>
+                            )}
                             
                             <button
                               onClick={() => handleBlockInbox(activeConversationId)}

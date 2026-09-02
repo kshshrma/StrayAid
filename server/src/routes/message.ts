@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth";
 import {
+  getNgosList,
+  startNgoConversation,
   getInbox,
   startConversation,
   getConversationDetails,
@@ -14,6 +16,11 @@ import {
 
 const router = Router();
 
+// NGO Registry & NGO Conversations
+router.get("/ngos", getNgosList);
+router.post("/ngo/start", requireAuth, startNgoConversation);
+
+// Inbox & Report Conversations
 router.get("/inbox", requireAuth, getInbox);
 router.post("/start", requireAuth, startConversation);
 router.get("/conversations/:conversationId", requireAuth, getConversationDetails);

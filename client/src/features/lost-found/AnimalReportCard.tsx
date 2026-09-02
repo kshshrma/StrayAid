@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   MapPin,
   Calendar,
@@ -14,11 +13,7 @@ import {
   Eye,
   Compass,
   Clock,
-  Award,
-  Send,
-  Building,
-  ShieldCheck,
-  Check,
+  Award
 } from "lucide-react";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -35,11 +30,6 @@ import {
   startConversationOnBackend,
   getInboxFromBackend,
 } from "../../services/lost-found/messageApiService";
-import type { Organization } from "../../types/connect";
-import {
-  fetchOrganizations,
-  startNGOConversationOnBackend,
-} from "../../services/connect/connectService";
 
 export interface LostFoundPet {
   id: string;
@@ -99,21 +89,11 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
   const [submittingSighting, setSubmittingSighting] = useState(false);
   const [locatingSighting, setLocatingSighting] = useState(false);
 
-  const navigate = useNavigate();
+  // Private inbox & chat compose states
   const [existingConversation, setExistingConversation] = useState<any | null>(null);
   const [loadingConversationCheck, setLoadingConversationCheck] = useState(false);
   const [composerMessage, setComposerMessage] = useState("");
   const [sendingInitial, setSendingInitial] = useState(false);
-
-  // Send to NGO states
-  const [showSendToNGOModal, setShowSendToNGOModal] = useState(false);
-  const [ngosList, setNgosList] = useState<Organization[]>([]);
-  const [loadingNGOs, setLoadingNGOs] = useState(false);
-  const [selectedNGO, setSelectedNGO] = useState<Organization | null>(null);
-  const [ngoSearchQuery, setNgoSearchQuery] = useState("");
-  const [ngoNote, setNgoNote] = useState("");
-  const [sendingToNGO, setSendingToNGO] = useState(false);
-  const [sendNGOSuccess, setSendNGOSuccess] = useState(false);
   
   const isOwner = currentUserId === pet.reporterId;
 
@@ -342,57 +322,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
     alert("Report text copied to clipboard!");
   }
 
-  // Open Send-to-NGO modal
-  async function handleOpenSendToNGO() {
-    setShowSendToNGOModal(true);
-    setSendNGOSuccess(false);
-    setSelectedNGO(null);
-    setNgoNote(`Reporting ${pet.type.toUpperCase()} animal (${pet.breed}) at ${pet.address || pet.location}. Requesting NGO assistance.`);
-    try {
-      setLoadingNGOs(true);
-      const orgs = await fetchOrganizations();
-      setNgosList(orgs);
-    } catch (err) {
-      console.error("Failed to load organizations for share modal:", err);
-    } finally {
-      setLoadingNGOs(false);
-    }
-  }
-
-  // Send Report to selected NGO
-  async function handleSendReportToNGO(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedNGO || sendingToNGO) return;
-
-    setSendingToNGO(true);
-    try {
-      await startNGOConversationOnBackend({
-        organizationId: selectedNGO.id,
-        requestType: pet.type === "lost" ? "lost_report" : "found_report",
-        reportId: pet.id,
-        initialMessage: ngoNote.trim() || undefined,
-        reportContext: {
-          reportId: pet.id,
-          animalType: pet.animal,
-          breed: pet.breed,
-          name: pet.name,
-          color: pet.color,
-          status: pet.type,
-          location: pet.address || pet.location,
-          image: pet.image,
-          urgency: pet.urgency,
-        },
-      });
-
-      setSendNGOSuccess(true);
-    } catch (err: any) {
-      console.error("Failed sending report to NGO:", err);
-      alert(err.message || "Failed to send report to NGO");
-    } finally {
-      setSendingToNGO(false);
-    }
-  }
-
   return (
     <>
       <Card className="overflow-hidden p-0 rounded-3xl border border-slate-100 bg-white shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 flex flex-col h-full group">
@@ -462,23 +391,14 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
               </span>
             </div>
 
-            <div className="flex gap-2">
-              <Button
-                onClick={() => setShowDetails(true)}
-                variant="outline"
-                size="sm"
-                className="flex-1 text-xs font-bold py-2 rounded-xl transition cursor-pointer border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-1"
-              >
-                <Info size={13} /> View Details
-              </Button>
-              <Button
-                onClick={handleOpenSendToNGO}
-                size="sm"
-                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold py-2 px-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 shrink-0"
-              >
-                <Send size={12} /> Send to NGO
-              </Button>
-            </div>
+            <Button
+              onClick={() => setShowDetails(true)}
+              variant="outline"
+              size="sm"
+              className="w-full text-xs font-bold py-2 rounded-xl transition cursor-pointer border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-1"
+            >
+              <Info size={13} /> View Details
+            </Button>
           </div>
         </div>
       </Card>
@@ -615,19 +535,12 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                       )}
                     </div>
 
-                    <div className="flex gap-2 pt-2 flex-wrap">
+                    <div className="flex gap-2 pt-2">
                       <button
                         onClick={handleShareReport}
                         className="flex-1 py-1.5 px-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 text-[10px] flex items-center justify-center gap-1 cursor-pointer"
                       >
                         <Share2 size={12} /> Share Report
-                      </button>
-
-                      <button
-                        onClick={handleOpenSendToNGO}
-                        className="flex-1 py-1.5 px-3 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold text-[10px] flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <Send size={12} /> Send to NGO
                       </button>
                       
                       {isOwner && !reunitedState && (
@@ -1054,185 +967,6 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                 </div>
               )}
             </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* SEND REPORT TO NGO MODAL */}
-      {showSendToNGOModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 animate-scaleIn max-h-[90vh] overflow-y-auto font-sans space-y-4">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-1.5">
-                  <Send size={16} className="text-emerald-600" /> Send Report to NGO
-                </h3>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Share this case with a registered rescue organization or animal hospital.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowSendToNGOModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Case Summary Pill */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center gap-3">
-              <img src={pet.image} alt="" className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0" />
-              <div className="min-w-0">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full inline-block mb-0.5">
-                  {pet.type.toUpperCase()} • {pet.animal}
-                </span>
-                <h4 className="text-xs font-black text-slate-800 truncate">{pet.name ? `${pet.name} (${pet.breed})` : pet.breed}</h4>
-                <p className="text-[10px] text-slate-450 truncate">📍 {pet.address || pet.location}</p>
-              </div>
-            </div>
-
-            {sendNGOSuccess ? (
-              <div className="py-6 text-center space-y-3 animate-fadeIn">
-                <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto text-xl">
-                  ✓
-                </div>
-                <h4 className="text-sm font-black text-slate-900">Report Transmitted to {selectedNGO?.name}!</h4>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                  A structured case card has been created in your private conversation with the organization team.
-                </p>
-                <div className="pt-2 flex gap-2">
-                  <button
-                    onClick={() => {
-                      setShowSendToNGOModal(false);
-                      navigate("/connect");
-                    }}
-                    className="flex-1 bg-green-700 hover:bg-green-800 text-white font-extrabold py-2.5 rounded-xl text-xs transition cursor-pointer"
-                  >
-                    Open Connect Chat &rarr;
-                  </button>
-                  <button
-                    onClick={() => setShowSendToNGOModal(false)}
-                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleSendReportToNGO} className="space-y-4 text-xs">
-                {/* Search NGO */}
-                <div>
-                  <label className="block text-[11px] font-black text-slate-700 mb-1">
-                    1. Choose an Organization *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Search NGOs by name, city, service area..."
-                    value={ngoSearchQuery}
-                    onChange={(e) => setNgoSearchQuery(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500 mb-2"
-                  />
-
-                  {loadingNGOs ? (
-                    <div className="text-center py-6 text-slate-400 font-bold animate-pulse text-xs">
-                      Loading verified organizations...
-                    </div>
-                  ) : (
-                    <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                      {ngosList
-                        .filter((org) => {
-                          if (!ngoSearchQuery) return true;
-                          const q = ngoSearchQuery.toLowerCase();
-                          return (
-                            org.name.toLowerCase().includes(q) ||
-                            org.city.toLowerCase().includes(q) ||
-                            org.serviceAreas.some((a) => a.toLowerCase().includes(q))
-                          );
-                        })
-                        .map((org) => (
-                          <div
-                            key={org.id}
-                            onClick={() => setSelectedNGO(org)}
-                            className={`p-3 rounded-2xl border transition cursor-pointer flex items-center justify-between gap-3 ${
-                              selectedNGO?.id === org.id
-                                ? "bg-emerald-50/80 border-emerald-500 shadow-xs"
-                                : "bg-white border-slate-200 hover:bg-slate-50"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {org.logo ? (
-                                <img src={org.logo} alt="" className="w-9 h-9 rounded-xl object-cover border border-slate-100 shrink-0" />
-                              ) : (
-                                <div className="w-9 h-9 rounded-xl bg-green-50 text-green-700 font-bold flex items-center justify-center shrink-0">
-                                  🐾
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <h5 className="text-xs font-black text-slate-900 truncate flex items-center gap-1">
-                                  {org.name}
-                                  {org.verified && <ShieldCheck size={12} className="text-emerald-600 shrink-0" />}
-                                </h5>
-                                <span className="text-[10px] text-slate-500 block truncate">
-                                  📍 {org.city} • {org.serviceAreas.slice(0, 2).join(", ")}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="shrink-0">
-                              {selectedNGO?.id === org.id ? (
-                                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center">
-                                  ✓
-                                </span>
-                              ) : (
-                                <span className="w-5 h-5 rounded-full border border-slate-300 inline-block" />
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Optional Message Note */}
-                <div>
-                  <label className="block text-[11px] font-black text-slate-700 mb-1">
-                    2. Add a Note or Emergency Details
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={ngoNote}
-                    onChange={(e) => setNgoNote(e.target.value)}
-                    placeholder="Add details about animal condition, urgency, or immediate location..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-                  />
-                </div>
-
-                <div className="bg-slate-50 p-2.5 rounded-xl text-[10px] text-slate-500 leading-relaxed">
-                  🔒 Privacy Note: Transmitting this report only shares the pet metadata and public location. Your private personal email or credentials are never exposed.
-                </div>
-
-                {/* Submit button */}
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowSendToNGOModal(false)}
-                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!selectedNGO || sendingToNGO}
-                    className="flex-1 bg-green-700 hover:bg-green-800 text-white font-extrabold py-2.5 rounded-xl text-xs transition cursor-pointer disabled:opacity-50 shadow-sm"
-                  >
-                    {sendingToNGO ? "Sending Report..." : `Send Report to ${selectedNGO ? selectedNGO.name : "NGO"}`}
-                  </button>
-                </div>
-              </form>
-            )}
 
           </div>
         </div>
