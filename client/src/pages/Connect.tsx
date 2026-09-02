@@ -180,8 +180,8 @@ export default function Connect() {
     };
   }, [activeConversationId, currentUserId]);
 
-  // 4. Handle Join Chat for Selected NGO
-  async function handleJoinChat(ngo: RegisteredNGO) {
+  // 4. Handle Join Chat / Send Message for Selected NGO
+  async function handleJoinChat(ngo: RegisteredNGO, initialMessage?: string) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
       alert("Please log in to start a private chat with registered NGOs.");
@@ -196,7 +196,7 @@ export default function Connect() {
       setMessages([]);
 
       // Start or get existing conversation between user and this NGO
-      const result = await startNgoConversationOnBackend(ngo.id);
+      const result = await startNgoConversationOnBackend(ngo.id, initialMessage);
       
       if (result.conversation) {
         setActiveConversationId(result.conversation.id);
@@ -467,7 +467,7 @@ export default function Connect() {
                   </div>
                 </div>
 
-                {/* Card Footer: Rescuers count + Join Chat button */}
+                {/* Card Footer: Rescuers count + Send Message / Join Chat button */}
                 <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-450 flex items-center gap-1">
                     <Users size={13} /> {ngo.activeMembers} Rescuers
@@ -477,7 +477,7 @@ export default function Connect() {
                     onClick={() => handleJoinChat(ngo)}
                     className="py-2 px-4 text-xs font-extrabold bg-green-700 hover:bg-green-800 text-white rounded-xl cursor-pointer shadow-sm shadow-green-100 transition-all flex items-center gap-1.5"
                   >
-                    <MessageSquare size={13} /> Join Chat
+                    <Send size={12} /> Send Message
                   </Button>
                 </div>
               </Card>
@@ -627,19 +627,44 @@ export default function Connect() {
                   </Button>
                 </div>
               ) : messages.length === 0 ? (
-                /* Empty Chat Welcome Card */
-                <div className="text-center py-12 px-4 space-y-3 bg-white rounded-3xl border border-slate-150/80 shadow-xs max-w-sm mx-auto my-auto animate-fadeIn">
+                /* Empty Chat Welcome Card with Quick Send Message Starters */
+                <div className="py-8 px-4 space-y-4 bg-white rounded-3xl border border-slate-150/80 shadow-xs max-w-sm mx-auto my-auto animate-fadeIn text-center">
                   <div className="w-12 h-12 rounded-full bg-green-50 text-green-700 flex items-center justify-center font-black text-xl mx-auto border border-green-100">
                     🐾
                   </div>
                   <div className="space-y-1">
                     <h4 className="text-xs font-black text-slate-800">
-                      Start a conversation
+                      Send a message to {selectedNgo.name}
                     </h4>
                     <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
-                      You are connected with <span className="font-bold text-slate-700">{selectedNgo.name}</span>.
-                      Ask about rescue help, animal emergencies, or share a Lost & Found report.
+                      Type your message below or click a quick starter to contact NGO coordinators immediately.
                     </p>
+                  </div>
+
+                  {/* Quick Starter Message Buttons */}
+                  <div className="space-y-1.5 pt-2 text-left">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
+                      Quick Messages:
+                    </span>
+                    {[
+                      "🚨 Emergency: Injured stray animal needs rescue",
+                      "📍 Sighted a lost pet in my neighborhood",
+                      "🩺 Need veterinary first-aid medical guidance",
+                      "🚐 Requesting animal rescue transport assistance",
+                    ].map((starter, sIdx) => (
+                      <button
+                        key={sIdx}
+                        type="button"
+                        onClick={() => {
+                          setMessageText(starter);
+                          setTimeout(() => inputRef.current?.focus(), 50);
+                        }}
+                        className="w-full text-left text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-green-50 hover:text-green-800 border border-slate-200/80 hover:border-green-300 rounded-xl p-2.5 transition flex items-center justify-between group cursor-pointer"
+                      >
+                        <span className="truncate">{starter}</span>
+                        <Send size={11} className="text-slate-400 group-hover:text-green-700 shrink-0 ml-1.5" />
+                      </button>
+                    ))}
                   </div>
                 </div>
               ) : (
