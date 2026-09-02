@@ -33,11 +33,13 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { getSocket } from "../services/socket";
+import type {
+  Organization,
+  Helpline,
+  NGOConversation,
+  NGOMessage,
+} from "../types/connect";
 import {
-  type Organization,
-  type Helpline,
-  type NGOConversation,
-  type NGOMessage,
   fetchOrganizations,
   fetchHelplines,
   startNGOConversationOnBackend,

@@ -35,8 +35,8 @@ import {
   startConversationOnBackend,
   getInboxFromBackend,
 } from "../../services/lost-found/messageApiService";
+import type { Organization } from "../../types/connect";
 import {
-  type Organization,
   fetchOrganizations,
   startNGOConversationOnBackend,
 } from "../../services/connect/connectService";
