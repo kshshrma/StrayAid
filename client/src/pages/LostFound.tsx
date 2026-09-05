@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Heart, Search, PlusCircle, X, ArrowLeft, Send, MapPin, Compass, AlertCircle, ShieldAlert, Ban, AlertTriangle, Bell, BellOff, Trash2, CheckSquare, Square } from "lucide-react";
+import { Heart, Search, PlusCircle, X, ArrowLeft, Send, Ban, AlertTriangle, Bell, BellOff, Trash2, CheckSquare, Square } from "lucide-react";
 import AnimalReportCard, { type LostFoundPet } from "../features/lost-found/AnimalReportCard";
 import LostFoundFilters from "../features/lost-found/LostFoundFilters";
 import LostAnimalForm from "../features/lost-found/LostAnimalForm";
@@ -19,7 +19,7 @@ import {
 } from "../services/lost-found/messageApiService";
 
 export default function LostFound() {
-  const { notifications, markAsRead, addNotification, activeChat, setActiveChat, markConversationNotificationsAsRead, deleteNotification } = useNotification();
+  const { notifications, markAsRead, activeChat, setActiveChat, markConversationNotificationsAsRead, deleteNotification } = useNotification();
   const [filter, setFilter] = useState<"all" | "lost" | "found">("all");
 
   const lostFoundNotifications = notifications.filter(
@@ -137,13 +137,15 @@ export default function LostFound() {
         try {
           const inbox = await getInboxFromBackend();
           setConversations(inbox);
-          const found = inbox.find(
-            (c: any) =>
-              c.reportId === activeChat.reportId &&
-              c.otherParticipantId === activeChat.senderId
-          );
-          if (found) {
-            setActiveConversationId(found.conversationId);
+          if (activeChat) {
+            const found = inbox.find(
+              (c: any) =>
+                c.reportId === activeChat.reportId &&
+                c.otherParticipantId === activeChat.senderId
+            );
+            if (found) {
+              setActiveConversationId(found.conversationId);
+            }
           }
         } catch (e) {
           console.error("Failed to select conversation on activeChat alert:", e);
@@ -201,23 +203,24 @@ export default function LostFound() {
       return;
     }
 
+    const convId = activeConversationId;
     const socket = getSocket();
     
     // Join conversation room
-    socket.emit("join_conversation_room", activeConversationId);
-    console.log(`🔌 Client joined conversation socket room: conversation:${activeConversationId}`);
+    socket.emit("join_conversation_room", convId);
+    console.log(`🔌 Client joined conversation socket room: conversation:${convId}`);
 
     async function fetchMessages() {
       try {
         setLoadingMessages(true);
-        const data = await getConversationMessagesFromBackend(activeConversationId);
+        const data = await getConversationMessagesFromBackend(convId);
         setMessages(data.messages || []);
         
         // Mark conversation read on backend
-        await markConversationAsReadOnBackend(activeConversationId);
+        await markConversationAsReadOnBackend(convId);
         
         // Mark notifications read locally
-        markConversationNotificationsAsRead(activeConversationId);
+        markConversationNotificationsAsRead(convId);
       } catch (err) {
         console.error("Failed to load messages:", err);
       } finally {

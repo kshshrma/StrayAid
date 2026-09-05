@@ -8,8 +8,6 @@ import {
   Info,
   Share2,
   CheckCircle,
-  AlertTriangle,
-  PlusCircle,
   Eye,
   Compass,
   Clock,
@@ -49,6 +47,8 @@ export interface LostFoundPet {
   distanceKm?: number;
   contactNumber?: string;
   reporterId?: string;
+  ownerId?: string;
+  ownerName?: string;
   urgency?: string;
   reunited?: boolean;
   reunionPhotoUrl?: string;

@@ -20,5 +20,6 @@ export interface AppNotification {
     messageId?: string;
     senderId?: string;
     content?: string;
+    conversationId?: string;
   };
 }

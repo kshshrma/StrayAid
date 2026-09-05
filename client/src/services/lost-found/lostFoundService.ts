@@ -16,7 +16,7 @@ async function getAuthHeaders() {
 }
 
 export async function saveLostFoundPet(
-  pet: Omit<LostFoundPet, "id" | "date" | "image"> & { urgency?: string },
+  pet: Omit<LostFoundPet, "id" | "image"> & { urgency?: string },
   imageFile: File
 ): Promise<LostFoundPet> {
   // 1. Upload the image file to Supabase Storage first

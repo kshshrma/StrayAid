@@ -10,15 +10,14 @@ import {
   X,
   Send,
   ArrowLeft,
-  Paperclip,
   Info,
   CheckCheck,
   Check,
   AlertCircle,
-  Clock,
-  ExternalLink,
   MapPin,
-  HeartHandshake
+  HeartHandshake,
+  Bot,
+  RotateCcw
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import {
@@ -30,10 +29,12 @@ import {
   type EmergencyHelpline,
   type ReportAttachmentMetadata,
 } from "../services/lost-found/messageApiService";
-import { getMyLostFoundPets } from "../services/lost-found/lostFoundService";
-import type { LostFoundPet } from "../features/lost-found/AnimalReportCard";
 import { getSocket } from "../services/socket";
+import { CHATBOT_FLOW_CONFIG, type ChatOption } from "../services/connect/chatbotFlow";
+import { createBotRescueRequestOnBackend } from "../services/connect/rescueRequestService";
+import { uploadImage } from "../services/storage/uploadImage";
 
+// Real-time Chat DM Message Interface
 interface ChatMessage {
   id: string;
   conversationId: string;
@@ -43,6 +44,18 @@ interface ChatMessage {
   createdAt: string;
   isRead: boolean;
   metadata?: ReportAttachmentMetadata | any;
+}
+
+// Automated Bot Message Interface
+interface BotConversationMessage {
+  id: string;
+  sender: "bot" | "user";
+  text: string;
+  time: string;
+  options?: ChatOption[];
+  imageUrl?: string;
+  isSuccess?: boolean;
+  isError?: boolean;
 }
 
 export default function Connect() {
@@ -55,8 +68,25 @@ export default function Connect() {
   const [helplines, setHelplines] = useState<EmergencyHelpline[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  // Active Chat States
+  // Selected NGO & Mode
   const [selectedNgo, setSelectedNgo] = useState<RegisteredNGO | null>(null);
+  const [chatMode, setChatMode] = useState<"bot" | "live">("bot");
+
+  // Automated Chatbot State
+  const [botMessages, setBotMessages] = useState<BotConversationMessage[]>([]);
+  const [currentBotStep, setCurrentBotStep] = useState<string>("MAIN_MENU");
+  const [selectedRescueType, setSelectedRescueType] = useState<"injured_animal" | "trapped_animal" | "weak_abandoned_baby" | null>(null);
+  const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
+  const [selectedInDanger, setSelectedInDanger] = useState<boolean>(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualLocationText, setManualLocationText] = useState("");
+  const [manualLocationSubmitting, setManualLocationSubmitting] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [botError, setBotError] = useState<string | null>(null);
+  const [requestLock, setRequestLock] = useState(false); // Duplicate click protection
+
+  // Live Human Chat States
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingChat, setLoadingChat] = useState(false);
@@ -64,23 +94,18 @@ export default function Connect() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
 
-  // NGO Details Modal
+  // Modals
   const [showNgoModal, setShowNgoModal] = useState(false);
 
-  // Attach Report Modal States
-  const [showReportPicker, setShowReportPicker] = useState(false);
-  const [myReports, setMyReports] = useState<LostFoundPet[]>([]);
-  const [loadingMyReports, setLoadingMyReports] = useState(false);
-
-  // Typing Indicator
+  // Typing Indicator for Live Chat
   const [isTyping, setIsTyping] = useState(false);
   const [typingUserName, setTypingUserName] = useState("");
-  const typingTimeoutRef = useRef<any>(null);
 
   const messageEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Load Current User Session & Initial Data
+  // 1. Load Current User Session & Initial NGOs Data
   useEffect(() => {
     async function initUserAndData() {
       try {
@@ -114,15 +139,15 @@ export default function Connect() {
   // 2. Auto-scroll Chat to Bottom
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping, selectedNgo]);
+  }, [botMessages, messages, isTyping, showManualInput, selectedNgo, chatMode]);
 
-  // 3. Socket.IO Room Management & Listeners
+  // 3. Socket.IO Room Management for Live Chat Mode
   useEffect(() => {
     if (!activeConversationId) return;
 
     const socket = getSocket();
 
-    // Join conversation room with security verification payload
+    // Join conversation room with verification payload
     socket.emit("join_conversation_room", {
       conversationId: activeConversationId,
       userId: currentUserId,
@@ -131,14 +156,12 @@ export default function Connect() {
     const handleNewMessage = (data: { message: ChatMessage }) => {
       if (data?.message && data.message.conversationId === activeConversationId) {
         setMessages((prev) => {
-          // Deduplicate message by ID
           if (prev.some((m) => m.id === data.message.id)) {
             return prev;
           }
           return [...prev, data.message];
         });
 
-        // Mark read if it is an incoming message
         if (currentUserId && data.message.recipientId === currentUserId) {
           markConversationAsReadOnBackend(activeConversationId).catch(() => {});
         }
@@ -180,42 +203,390 @@ export default function Connect() {
     };
   }, [activeConversationId, currentUserId]);
 
-  // 4. Handle Join Chat / Send Message for Selected NGO
-  async function handleJoinChat(ngo: RegisteredNGO, initialMessage?: string) {
+  // 4. Initialize Automated Chatbot when NGO is selected
+  function initChatbotForNgo(ngo: RegisteredNGO) {
+    setSelectedNgo(ngo);
+    setChatMode("bot");
+    setCurrentBotStep("MAIN_MENU");
+    setSelectedRescueType(null);
+    setSelectedSubType(null);
+    setSelectedInDanger(false);
+    setShowManualInput(false);
+    setBotError(null);
+
+    const initialStep = CHATBOT_FLOW_CONFIG["MAIN_MENU"];
+    const initialText = typeof initialStep.message === "function"
+      ? initialStep.message({ ngoName: ngo.name, ngoLocation: ngo.location })
+      : initialStep.message;
+
+    const initialBotMessage: BotConversationMessage = {
+      id: "msg_init_" + Date.now(),
+      sender: "bot",
+      text: initialText,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      options: initialStep.options,
+    };
+
+    setBotMessages([initialBotMessage]);
+  }
+
+  // 5. Reset to Main Menu
+  function handleResetToMainMenu() {
+    if (!selectedNgo) return;
+    setCurrentBotStep("MAIN_MENU");
+    setSelectedRescueType(null);
+    setSelectedSubType(null);
+    setSelectedInDanger(false);
+    setShowManualInput(false);
+    setBotError(null);
+
+    const mainStep = CHATBOT_FLOW_CONFIG["MAIN_MENU"];
+    const text = typeof mainStep.message === "function"
+      ? mainStep.message({ ngoName: selectedNgo.name, ngoLocation: selectedNgo.location })
+      : mainStep.message;
+
+    const botMsg: BotConversationMessage = {
+      id: "msg_reset_" + Date.now(),
+      sender: "bot",
+      text: text,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      options: mainStep.options,
+    };
+
+    setBotMessages((prev) => [...prev, botMsg]);
+  }
+
+  // 6. Handle User Selecting an Automated Option
+  async function handleOptionSelect(option: ChatOption) {
+    if (!selectedNgo || requestLock) return;
+
+    // 1. Add User selection bubble
+    const userMsg: BotConversationMessage = {
+      id: "user_" + Date.now(),
+      sender: "user",
+      text: option.label,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setBotMessages((prev) => [...prev, userMsg]);
+    setBotError(null);
+
+    // Track rescue context if present
+    if (option.rescueType) setSelectedRescueType(option.rescueType);
+    if (option.subType) setSelectedSubType(option.subType);
+    if (option.inDanger !== undefined) setSelectedInDanger(option.inDanger);
+
+    // Check for special actions
+    if (option.action) {
+      switch (option.action) {
+        case "send_current_location":
+          await handleSendCurrentLocation(option.rescueType || selectedRescueType || "injured_animal", option.subType || selectedSubType, option.inDanger !== undefined ? option.inDanger : selectedInDanger);
+          return;
+
+        case "prompt_manual_location":
+          setShowManualInput(true);
+          const promptMsg: BotConversationMessage = {
+            id: "bot_prompt_" + Date.now(),
+            sender: "bot",
+            text: "Please enter the animal's location.",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setBotMessages((prev) => [...prev, promptMsg]);
+          return;
+
+        case "get_directions":
+          const query = encodeURIComponent(`${selectedNgo.location || selectedNgo.name}`);
+          window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, "_blank");
+          return;
+
+        case "prompt_photo_upload":
+          fileInputRef.current?.click();
+          return;
+
+        case "contact_ngo":
+          await switchToLiveChat();
+          return;
+
+        case "navigate_guardian":
+          navigate("/guardian");
+          return;
+
+        case "show_donation_info":
+          const donateMsg: BotConversationMessage = {
+            id: "bot_don_" + Date.now(),
+            sender: "bot",
+            text: `💳 You can support ${selectedNgo.name} directly:\n\nHelpline / UPI: ${selectedNgo.phone}\nService Area: ${selectedNgo.serviceArea}\n\nThank you for saving stray lives! ❤️`,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            options: [{ id: "opt_mm_dondone", label: "🏠 Main Menu", nextStep: "MAIN_MENU" }],
+          };
+          setBotMessages((prev) => [...prev, donateMsg]);
+          return;
+
+        case "main_menu":
+          handleResetToMainMenu();
+          return;
+      }
+    }
+
+    // Standard State Transition
+    if (option.nextStep) {
+      const nextStepConfig = CHATBOT_FLOW_CONFIG[option.nextStep];
+      if (!nextStepConfig) {
+        handleResetToMainMenu();
+        return;
+      }
+
+      setCurrentBotStep(option.nextStep);
+      const nextText = typeof nextStepConfig.message === "function"
+        ? nextStepConfig.message({ ngoName: selectedNgo.name, ngoLocation: selectedNgo.location })
+        : nextStepConfig.message;
+
+      const nextBotMsg: BotConversationMessage = {
+        id: "bot_" + Date.now(),
+        sender: "bot",
+        text: nextText,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        options: nextStepConfig.options,
+      };
+
+      setBotMessages((prev) => [...prev, nextBotMsg]);
+    }
+  }
+
+  // 7. Handle Send Current Geolocation
+  async function handleSendCurrentLocation(rescueType: "injured_animal" | "trapped_animal" | "weak_abandoned_baby", subType?: string | null, inDanger?: boolean) {
+    if (!selectedNgo || requestLock) return;
+
+    if (!navigator.geolocation) {
+      setBotError("Geolocation is not supported by your browser. Please enter location manually.");
+      setShowManualInput(true);
+      return;
+    }
+
+    setLocationLoading(true);
+    setRequestLock(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          // Send to backend rescue request API
+          const res = await createBotRescueRequestOnBackend({
+            ngoId: selectedNgo.id,
+            rescueType,
+            subType: subType || null,
+            latitude,
+            longitude,
+            inDanger: inDanger || false,
+          });
+
+          if (res.conversationId) {
+            setActiveConversationId(res.conversationId);
+          }
+
+          const successText = inDanger
+            ? "🚨 Rescue team notified.\n\nPlease keep yourself and the animal safe until help arrives."
+            : rescueType === "trapped_animal"
+            ? "📍 Location sent.\n\nThe rescue team has been notified and will arrange assistance."
+            : "📍 Location sent to the rescue team.\n\nThe NGO will arrange transport and contact you shortly.";
+
+          const botSuccessMsg: BotConversationMessage = {
+            id: "bot_loc_succ_" + Date.now(),
+            sender: "bot",
+            text: successText,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            isSuccess: true,
+            options: [
+              { id: "opt_contact_succ", label: "📞 Contact NGO", action: "contact_ngo" },
+              { id: "opt_mm_succ", label: "🏠 Main Menu", nextStep: "MAIN_MENU" },
+            ],
+          };
+
+          setBotMessages((prev) => [...prev, botSuccessMsg]);
+        } catch (err: any) {
+          console.error("Failed to send rescue request:", err);
+          const errorMsg: BotConversationMessage = {
+            id: "bot_err_" + Date.now(),
+            sender: "bot",
+            text: "We couldn't send the rescue request. Please try again or enter the location manually.",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            isError: true,
+            options: [
+              { id: "opt_try_again_loc", label: "🔄 Try Again", action: "send_current_location", rescueType, subType: subType || undefined, inDanger },
+              { id: "opt_man_fallback", label: "🗺️ Enter Location Manually", action: "prompt_manual_location", rescueType, subType: subType || undefined, inDanger },
+              { id: "opt_mm_err", label: "🏠 Main Menu", nextStep: "MAIN_MENU" },
+            ],
+          };
+          setBotMessages((prev) => [...prev, errorMsg]);
+        } finally {
+          setLocationLoading(false);
+          setRequestLock(false);
+        }
+      },
+      (err) => {
+        console.warn("Geolocation error:", err);
+        setLocationLoading(false);
+        setRequestLock(false);
+        setBotError("Unable to get your location. Please enter it manually.");
+        setShowManualInput(true);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }
+
+  // 8. Handle Manual Location Submit
+  async function handleManualLocationSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!manualLocationText.trim() || !selectedNgo || manualLocationSubmitting) return;
+
+    const locationString = manualLocationText.trim();
+    setManualLocationSubmitting(true);
+    setShowManualInput(false);
+    setManualLocationText("");
+
+    // Add user message with entered location
+    const userLocMsg: BotConversationMessage = {
+      id: "user_loc_" + Date.now(),
+      sender: "user",
+      text: `📍 Location: ${locationString}`,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setBotMessages((prev) => [...prev, userLocMsg]);
+
+    try {
+      const res = await createBotRescueRequestOnBackend({
+        ngoId: selectedNgo.id,
+        rescueType: selectedRescueType || "injured_animal",
+        subType: selectedSubType || null,
+        manualLocation: locationString,
+        inDanger: selectedInDanger,
+      });
+
+      if (res.conversationId) {
+        setActiveConversationId(res.conversationId);
+      }
+
+      const successText = selectedInDanger
+        ? "🚨 Rescue team notified.\n\nPlease keep yourself and the animal safe until help arrives."
+        : selectedRescueType === "trapped_animal"
+        ? "📍 Location sent.\n\nThe rescue team has been notified and will arrange assistance."
+        : "📍 Location sent to the rescue team.\n\nThe NGO will arrange transport and contact you shortly.";
+
+      const botSuccessMsg: BotConversationMessage = {
+        id: "bot_man_succ_" + Date.now(),
+        sender: "bot",
+        text: successText,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        isSuccess: true,
+        options: [
+          { id: "opt_contact_man_succ", label: "📞 Contact NGO", action: "contact_ngo" },
+          { id: "opt_mm_man_succ", label: "🏠 Main Menu", nextStep: "MAIN_MENU" },
+        ],
+      };
+
+      setBotMessages((prev) => [...prev, botSuccessMsg]);
+    } catch (err) {
+      console.error("Manual location submit failed:", err);
+      const errorMsg: BotConversationMessage = {
+        id: "bot_man_err_" + Date.now(),
+        sender: "bot",
+        text: "We couldn't submit your location. Please check your connection and try again.",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        isError: true,
+        options: [
+          { id: "opt_try_again_man", label: "🔄 Try Again", action: "prompt_manual_location" },
+          { id: "opt_mm_man_err", label: "🏠 Main Menu", nextStep: "MAIN_MENU" },
+        ],
+      };
+      setBotMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setManualLocationSubmitting(false);
+    }
+  }
+
+  // 9. Handle Photo Upload for Baby Animal
+  async function handlePhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files?.length || !selectedNgo || photoUploading) return;
+    const file = e.target.files[0];
+    setPhotoUploading(true);
+
+    try {
+      const imageUrl = await uploadImage(file);
+
+      // Add user photo bubble
+      const userPhotoMsg: BotConversationMessage = {
+        id: "user_photo_" + Date.now(),
+        sender: "user",
+        text: "📷 Uploaded photo of baby animal",
+        imageUrl,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setBotMessages((prev) => [...prev, userPhotoMsg]);
+
+      // Create rescue request with image
+      const res = await createBotRescueRequestOnBackend({
+        ngoId: selectedNgo.id,
+        rescueType: "weak_abandoned_baby",
+        imageUrl,
+        inDanger: false,
+      });
+
+      if (res.conversationId) {
+        setActiveConversationId(res.conversationId);
+      }
+
+      const botPhotoSucc: BotConversationMessage = {
+        id: "bot_photo_succ_" + Date.now(),
+        sender: "bot",
+        text: "Thank you. The rescue team has received the information and photo.",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        isSuccess: true,
+        options: [
+          { id: "opt_contact_photo_succ", label: "📞 Contact NGO", action: "contact_ngo" },
+          { id: "opt_mm_photo_succ", label: "🏠 Main Menu", nextStep: "MAIN_MENU" },
+        ],
+      };
+      setBotMessages((prev) => [...prev, botPhotoSucc]);
+    } catch (err) {
+      console.error("Photo upload failed:", err);
+      alert("Failed to upload photo. Please try again.");
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  // 10. Switch to Live 1-on-1 NGO DM Chat
+  async function switchToLiveChat() {
+    if (!selectedNgo) return;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
-      alert("Please log in to start a private chat with registered NGOs.");
+      alert("Please log in to chat with NGO coordinators.");
       navigate("/login");
       return;
     }
 
     try {
-      setSelectedNgo(ngo);
       setLoadingChat(true);
       setChatError(null);
-      setMessages([]);
+      setChatMode("live");
 
-      // Start or get existing conversation between user and this NGO
-      const result = await startNgoConversationOnBackend(ngo.id, initialMessage);
-      
+      const result = await startNgoConversationOnBackend(selectedNgo.id);
       if (result.conversation) {
         setActiveConversationId(result.conversation.id);
         setMessages(result.messages || []);
-        
-        // Mark existing unread messages as read
         markConversationAsReadOnBackend(result.conversation.id).catch(() => {});
       }
     } catch (err: any) {
-      console.error("Error opening NGO chat:", err);
-      setChatError(err.message || "Failed to load conversation. Please try again.");
+      console.error("Error switching to live chat:", err);
+      setChatError(err.message || "Failed to load live chat. Please try again.");
     } finally {
       setLoadingChat(false);
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }
 
-  // 5. Send Text Message
-  async function handleSendMessage(e: React.FormEvent) {
+  // 11. Send Message in Live DM Mode
+  async function handleSendLiveMessage(e: React.FormEvent) {
     e.preventDefault();
     if (!messageText.trim() || !activeConversationId || sendingMessage) return;
 
@@ -223,7 +594,6 @@ export default function Connect() {
     setMessageText("");
     setSendingMessage(true);
 
-    // Stop typing indicator on socket
     const socket = getSocket();
     socket.emit("typing_stop", {
       conversationId: activeConversationId,
@@ -244,92 +614,6 @@ export default function Connect() {
     } finally {
       setSendingMessage(false);
       setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }
-
-  // 6. Handle Typing Status Broadcast
-  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setMessageText(e.target.value);
-
-    if (!activeConversationId || !currentUserId) return;
-
-    const socket = getSocket();
-    socket.emit("typing_start", {
-      conversationId: activeConversationId,
-      userId: currentUserId,
-      userName: "User",
-    });
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing_stop", {
-        conversationId: activeConversationId,
-        userId: currentUserId,
-      });
-    }, 1800);
-  }
-
-  // 7. Open Report Picker
-  async function handleOpenReportPicker() {
-    setShowReportPicker(true);
-    setLoadingMyReports(true);
-    try {
-      const pets = await getMyLostFoundPets();
-      setMyReports(pets);
-    } catch (err) {
-      console.error("Error loading user reports for attachment:", err);
-    } finally {
-      setLoadingMyReports(false);
-    }
-  }
-
-  // 8. Attach and Send Report to NGO
-  async function handleAttachReport(pet: LostFoundPet) {
-    if (!activeConversationId || sendingMessage) return;
-
-    setShowReportPicker(false);
-    setSendingMessage(true);
-
-    const metadata: ReportAttachmentMetadata = {
-      type: "report_attachment",
-      reportId: pet.id,
-      animalType: pet.animal,
-      breed: pet.breed,
-      status: pet.type,
-      location: pet.location,
-      urgency: pet.urgency || "Normal",
-      imageUrl: pet.image || undefined,
-    };
-
-    const contentText = `Shared Lost & Found Report: ${pet.name ? `${pet.name} (${pet.breed || pet.animal})` : (pet.breed || pet.animal)}`;
-
-    try {
-      const createdMessage = await sendMessageToConversation(activeConversationId, contentText, metadata);
-      if (createdMessage) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === createdMessage.id)) return prev;
-          return [...prev, createdMessage];
-        });
-      }
-    } catch (err) {
-      console.error("Failed to attach and send report:", err);
-      alert("Failed to send report. Please try again.");
-    } finally {
-      setSendingMessage(false);
-    }
-  }
-
-  // Helper for Formatting Timestamps
-  function formatMessageTime(isoString: string): string {
-    if (!isoString) return "";
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } catch {
-      return "";
     }
   }
 
@@ -364,6 +648,15 @@ export default function Connect() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 pb-28 relative font-sans animate-fadeIn">
       
+      {/* Hidden File Input for Baby Photo Upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handlePhotoSelected}
+        className="hidden"
+      />
+
       {/* 1. Page Header */}
       <div className="max-w-4xl mx-auto mb-6 text-center space-y-1">
         <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-2">
@@ -467,17 +760,17 @@ export default function Connect() {
                   </div>
                 </div>
 
-                {/* Card Footer: Rescuers count + Send Message / Join Chat button */}
+                {/* Card Footer: Rescuers count + Connect / Join Chat button */}
                 <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-450 flex items-center gap-1">
                     <Users size={13} /> {ngo.activeMembers} Rescuers
                   </span>
 
                   <Button
-                    onClick={() => handleJoinChat(ngo)}
+                    onClick={() => initChatbotForNgo(ngo)}
                     className="py-2 px-4 text-xs font-extrabold bg-green-700 hover:bg-green-800 text-white rounded-xl cursor-pointer shadow-sm shadow-green-100 transition-all flex items-center gap-1.5"
                   >
-                    <Send size={12} /> Send Message
+                    <Bot size={13} /> Connect
                   </Button>
                 </div>
               </Card>
@@ -528,27 +821,27 @@ export default function Connect() {
         )}
       </div>
 
-      {/* 4. REAL 1-ON-1 NGO CHAT DRAWER / WORKSPACE (Instagram/WhatsApp DM Style) */}
+      {/* 4. AUTOMATED NGO CHATBOT & LIVE DM DRAWER (Modern Mobile UI) */}
       {selectedNgo && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-lg bg-white h-full flex flex-col shadow-2xl animate-slideLeft">
             
             {/* A. Chat Header */}
-            <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
+            <div className="px-4 py-3 border-b border-slate-150 flex items-center justify-between bg-white shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <button
                   onClick={() => {
                     setSelectedNgo(null);
                     setActiveConversationId(null);
                   }}
-                  className="p-1.5 hover:bg-slate-200 rounded-xl transition text-slate-600 cursor-pointer shrink-0"
+                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-600 cursor-pointer shrink-0"
                   title="Back to NGO list"
                 >
                   <ArrowLeft size={18} />
                 </button>
 
-                {/* NGO Avatar / Icon */}
-                <div className="w-10 h-10 rounded-2xl bg-green-100 text-green-800 flex items-center justify-center font-black text-base shrink-0 border border-green-200/60 relative">
+                {/* NGO Avatar / Icon with status dot */}
+                <div className="w-10 h-10 rounded-2xl bg-green-50 text-green-800 flex items-center justify-center font-black text-base shrink-0 border border-green-200/60 relative">
                   🐾
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
@@ -561,13 +854,13 @@ export default function Connect() {
                   />
                 </div>
 
-                {/* NGO Details Header Text */}
+                {/* NGO Title & Status */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <h3 className="text-xs sm:text-sm font-black text-slate-900 truncate">
                       {selectedNgo.name}
                     </h3>
-                    <ShieldCheck size={14} className="text-sky-600 shrink-0" title="Verified NGO" />
+                    <ShieldCheck size={14} className="text-sky-600 shrink-0" />
                   </div>
                   
                   <div className="flex items-center gap-2 mt-0.5">
@@ -579,258 +872,321 @@ export default function Connect() {
                 </div>
               </div>
 
-              {/* Action Buttons: Info & Close */}
+              {/* Mode Toggle & Info Action */}
               <div className="flex items-center gap-1 shrink-0">
+                {chatMode === "bot" ? (
+                  <button
+                    onClick={switchToLiveChat}
+                    className="py-1 px-2.5 bg-green-50 hover:bg-green-100 text-green-800 text-[10px] font-black rounded-xl border border-green-200 transition cursor-pointer flex items-center gap-1"
+                    title="Switch to live NGO coordinator"
+                  >
+                    <MessageSquare size={11} /> Live Chat
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setChatMode("bot")}
+                    className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black rounded-xl border border-slate-200 transition cursor-pointer flex items-center gap-1"
+                    title="Switch to automated helper"
+                  >
+                    <Bot size={11} /> Bot Guide
+                  </button>
+                )}
+
                 <button
                   onClick={() => setShowNgoModal(true)}
-                  className="p-2 hover:bg-slate-200/80 rounded-xl transition text-slate-500 hover:text-slate-800 cursor-pointer"
+                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-500 cursor-pointer"
                   title="View NGO details"
                 >
-                  <Info size={18} />
+                  <Info size={17} />
                 </button>
                 <button
                   onClick={() => {
                     setSelectedNgo(null);
                     setActiveConversationId(null);
                   }}
-                  className="p-2 hover:bg-slate-200/80 rounded-xl transition text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-400 hover:text-slate-600 cursor-pointer"
                   title="Close chat"
                 >
-                  <X size={18} />
+                  <X size={17} />
                 </button>
               </div>
             </div>
 
-            {/* B. Chat Messages Feed (Instagram/WhatsApp Aligned) */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50">
-              
-              {/* Channel Security Banner */}
-              <div className="text-[10px] text-center text-slate-500 bg-white/80 border border-slate-100 shadow-2xs py-1.5 px-3 rounded-2xl w-max max-w-xs mx-auto font-bold flex items-center justify-center gap-1.5">
-                <ShieldCheck size={12} className="text-green-700" />
-                <span>Verified Rescue Channel • End-to-End Logged</span>
-              </div>
+            {/* Verification Channel Banner */}
+            <div className="bg-slate-50 border-b border-slate-100 py-1 px-4 text-center">
+              <span className="text-[10px] font-black text-slate-500 flex items-center justify-center gap-1">
+                <ShieldCheck size={11} className="text-green-700" />
+                Verified Rescue Channel • End-to-End Logged
+              </span>
+            </div>
 
-              {loadingChat ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-2.5 text-slate-400 text-xs font-bold animate-pulse">
-                  <div className="h-6 w-6 animate-spin rounded-full border-3 border-green-700 border-t-transparent" />
-                  <span>Loading message history...</span>
-                </div>
-              ) : chatError ? (
-                <div className="text-center p-6 bg-red-50 text-red-700 rounded-2xl border border-red-100 text-xs font-semibold space-y-2">
-                  <AlertCircle className="mx-auto" size={20} />
-                  <p>{chatError}</p>
-                  <Button
-                    onClick={() => handleJoinChat(selectedNgo)}
-                    className="py-1 px-3 text-xs bg-red-600 text-white rounded-lg"
-                  >
-                    Retry
-                  </Button>
-                </div>
-              ) : messages.length === 0 ? (
-                /* Empty Chat Welcome Card with Quick Send Message Starters */
-                <div className="py-8 px-4 space-y-4 bg-white rounded-3xl border border-slate-150/80 shadow-xs max-w-sm mx-auto my-auto animate-fadeIn text-center">
-                  <div className="w-12 h-12 rounded-full bg-green-50 text-green-700 flex items-center justify-center font-black text-xl mx-auto border border-green-100">
-                    🐾
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-black text-slate-800">
-                      Send a message to {selectedNgo.name}
-                    </h4>
-                    <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
-                      Type your message below or click a quick starter to contact NGO coordinators immediately.
-                    </p>
-                  </div>
-
-                  {/* Quick Starter Message Buttons */}
-                  <div className="space-y-1.5 pt-2 text-left">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">
-                      Quick Messages:
-                    </span>
-                    {[
-                      "🚨 Emergency: Injured stray animal needs rescue",
-                      "📍 Sighted a lost pet in my neighborhood",
-                      "🩺 Need veterinary first-aid medical guidance",
-                      "🚐 Requesting animal rescue transport assistance",
-                    ].map((starter, sIdx) => (
-                      <button
-                        key={sIdx}
-                        type="button"
-                        onClick={() => {
-                          setMessageText(starter);
-                          setTimeout(() => inputRef.current?.focus(), 50);
-                        }}
-                        className="w-full text-left text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-green-50 hover:text-green-800 border border-slate-200/80 hover:border-green-300 rounded-xl p-2.5 transition flex items-center justify-between group cursor-pointer"
+            {/* B. CHAT CONTENT: MODE 1 (AUTOMATED GUIDED BOT) OR MODE 2 (LIVE DM) */}
+            {chatMode === "bot" ? (
+              /* =========================================================================
+                 AUTOMATED GUIDED DECISION-TREE BOT
+                 ========================================================================= */
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 flex flex-col justify-between">
+                
+                {/* Messages Feed */}
+                <div className="space-y-3.5">
+                  {botMessages.map((msg) => {
+                    const isUser = msg.sender === "user";
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex w-full ${isUser ? "justify-end" : "justify-start"} animate-fadeIn`}
                       >
-                        <span className="truncate">{starter}</span>
-                        <Send size={11} className="text-slate-400 group-hover:text-green-700 shrink-0 ml-1.5" />
+                        <div
+                          className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-3.5 shadow-xs text-xs leading-relaxed space-y-2 ${
+                            isUser
+                              ? "bg-green-700 text-white rounded-tr-xs shadow-green-100 font-semibold"
+                              : msg.isSuccess
+                              ? "bg-emerald-50 border border-emerald-200 text-emerald-950 rounded-tl-xs font-semibold"
+                              : msg.isError
+                              ? "bg-red-50 border border-red-200 text-red-950 rounded-tl-xs font-semibold"
+                              : "bg-white border border-slate-200 text-slate-850 rounded-tl-xs font-medium"
+                          }`}
+                        >
+                          {msg.imageUrl && (
+                            <img
+                              src={msg.imageUrl}
+                              alt="Animal"
+                              className="w-full h-36 object-cover rounded-xl border border-slate-200"
+                            />
+                          )}
+
+                          <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                          
+                          <div
+                            className={`text-[9px] font-bold text-right ${
+                              isUser ? "text-green-200" : "text-slate-400"
+                            }`}
+                          >
+                            {msg.time}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Geolocation Loading Indicator */}
+                  {locationLoading && (
+                    <div className="flex justify-start animate-fadeIn">
+                      <div className="bg-white border border-green-200 text-green-900 rounded-2xl rounded-tl-xs p-3 text-xs font-bold flex items-center gap-2 shadow-xs">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-700 border-t-transparent" />
+                        <span>🛰️ Acquiring GPS location & dispatching rescue...</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Photo Uploading Indicator */}
+                  {photoUploading && (
+                    <div className="flex justify-start animate-fadeIn">
+                      <div className="bg-white border border-green-200 text-green-900 rounded-2xl rounded-tl-xs p-3 text-xs font-bold flex items-center gap-2 shadow-xs">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-700 border-t-transparent" />
+                        <span>📷 Uploading photo & registering request...</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fallback Manual Location Prompt Input */}
+                  {showManualInput && (
+                    <form
+                      onSubmit={handleManualLocationSubmit}
+                      className="bg-white border border-green-300 rounded-2xl p-3 shadow-md space-y-2 animate-fadeIn"
+                    >
+                      <label className="block text-[11px] font-black text-slate-800">
+                        📍 Enter Animal's Exact Location:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Sector 62, Greater Noida near Metro Pillar 42"
+                        value={manualLocationText}
+                        onChange={(e) => setManualLocationText(e.target.value)}
+                        autoFocus
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setShowManualInput(false)}
+                          className="py-1.5 px-3 text-[11px] font-bold text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <Button
+                          type="submit"
+                          disabled={!manualLocationText.trim() || manualLocationSubmitting}
+                          className="py-1.5 px-4 text-xs font-extrabold bg-green-700 text-white rounded-xl shadow-xs"
+                        >
+                          {manualLocationSubmitting ? "Submitting..." : "Send Location"}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+
+                  {botError && (
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-bold text-amber-900 flex items-center gap-1.5 animate-fadeIn">
+                      <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                      <span>{botError}</span>
+                    </div>
+                  )}
+
+                  <div ref={messageEndRef} />
+                </div>
+
+                {/* Bottom Quick-Reply Selectable Options Buttons */}
+                <div className="pt-4 border-t border-slate-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Select an option:
+                    </span>
+                    <button
+                      onClick={handleResetToMainMenu}
+                      className="text-[10px] font-bold text-slate-450 hover:text-green-800 flex items-center gap-0.5 cursor-pointer transition"
+                    >
+                      <RotateCcw size={10} /> Reset Menu
+                    </button>
+                  </div>
+
+                  {/* Render Current Active Options */}
+                  <div className="flex flex-wrap gap-2">
+                    {(botMessages[botMessages.length - 1]?.options || CHATBOT_FLOW_CONFIG[currentBotStep]?.options || []).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        disabled={locationLoading || photoUploading || requestLock}
+                        onClick={() => handleOptionSelect(opt)}
+                        className={`py-2.5 px-3.5 rounded-2xl text-xs font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          opt.label.includes("Main Menu")
+                            ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                            : opt.label.includes("Contact NGO")
+                            ? "bg-sky-600 hover:bg-sky-700 text-white border border-sky-600"
+                            : opt.label.includes("Rescue") || opt.label.includes("Injured") || opt.label.includes("Danger") || opt.label.includes("Send")
+                            ? "bg-green-700 hover:bg-green-800 text-white border border-green-700 hover:scale-[1.02]"
+                            : "bg-white hover:bg-green-50 text-slate-800 hover:text-green-800 border border-slate-200 hover:border-green-300"
+                        }`}
+                      >
+                        <span>{opt.label}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-              ) : (
-                /* Render Messages with STRICT senderId-based Alignment */
-                messages.map((msg) => {
-                  const isOutgoing = msg.senderId === currentUserId;
 
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex w-full ${
-                        isOutgoing ? "justify-end" : "justify-start"
-                      } animate-fadeIn`}
-                    >
-                      <div
-                        className={`max-w-[82%] sm:max-w-[75%] rounded-2xl p-3 shadow-xs text-xs leading-relaxed space-y-2 ${
-                          isOutgoing
-                            ? "bg-green-700 text-white rounded-tr-xs shadow-green-100"
-                            : "bg-white border border-slate-200 text-slate-850 rounded-tl-xs"
-                        }`}
-                      >
-                        {/* 1. Report Attachment Card (if attached) */}
-                        {msg.metadata && msg.metadata.type === "report_attachment" && (
+              </div>
+            ) : (
+              /* =========================================================================
+                 MODE 2: LIVE 1-ON-1 NGO DM CHAT
+                 ========================================================================= */
+              <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50">
+                  {loadingChat ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-2.5 text-slate-400 text-xs font-bold animate-pulse">
+                      <div className="h-6 w-6 animate-spin rounded-full border-3 border-green-700 border-t-transparent" />
+                      <span>Loading message history...</span>
+                    </div>
+                  ) : chatError ? (
+                    <div className="text-center p-6 bg-red-50 text-red-700 rounded-2xl border border-red-100 text-xs font-semibold space-y-2">
+                      <AlertCircle className="mx-auto" size={20} />
+                      <p>{chatError}</p>
+                      <Button onClick={switchToLiveChat} className="py-1 px-3 text-xs bg-red-600 text-white rounded-lg">
+                        Retry
+                      </Button>
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="text-center py-12 px-4 space-y-2 bg-white rounded-3xl border border-slate-150/80 shadow-xs max-w-sm mx-auto my-auto animate-fadeIn">
+                      <div className="w-10 h-10 rounded-full bg-green-50 text-green-700 flex items-center justify-center font-black text-lg mx-auto">
+                        🐾
+                      </div>
+                      <h4 className="text-xs font-black text-slate-800">Direct Chat with {selectedNgo.name}</h4>
+                      <p className="text-[11px] text-slate-500">
+                        Type your message below. The NGO coordinators will respond to your rescue inquiry directly.
+                      </p>
+                    </div>
+                  ) : (
+                    messages.map((msg) => {
+                      const isOutgoing = msg.senderId === currentUserId;
+
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex w-full ${isOutgoing ? "justify-end" : "justify-start"} animate-fadeIn`}
+                        >
                           <div
-                            className={`rounded-xl p-2.5 border space-y-2 text-left ${
+                            className={`max-w-[82%] sm:max-w-[75%] rounded-2xl p-3 shadow-xs text-xs leading-relaxed space-y-2 ${
                               isOutgoing
-                                ? "bg-green-800/60 border-green-600/60 text-white"
-                                : "bg-slate-50 border-slate-200/80 text-slate-800"
+                                ? "bg-green-700 text-white rounded-tr-xs shadow-green-100"
+                                : "bg-white border border-slate-200 text-slate-850 rounded-tl-xs"
                             }`}
                           >
-                            <div className="flex items-center justify-between gap-1 border-b pb-1.5 border-inherit">
-                              <span className="text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
-                                🐕 Lost & Found Report
-                              </span>
-                              <span
-                                className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded-full ${
-                                  msg.metadata.status === "lost"
-                                    ? "bg-red-500 text-white"
-                                    : "bg-emerald-600 text-white"
+                            {msg.metadata && msg.metadata.type === "report_attachment" && (
+                              <div
+                                className={`rounded-xl p-2.5 border space-y-1.5 text-left ${
+                                  isOutgoing
+                                    ? "bg-green-800/60 border-green-600/60 text-white"
+                                    : "bg-slate-50 border-slate-200 text-slate-800"
                                 }`}
                               >
-                                {msg.metadata.status || "Report"}
-                              </span>
-                            </div>
-
-                            {msg.metadata.imageUrl && (
-                              <img
-                                src={msg.metadata.imageUrl}
-                                alt="Animal"
-                                className="w-full h-28 object-cover rounded-lg border border-slate-200/40"
-                              />
+                                <span className="text-[9px] font-black uppercase tracking-wider block">
+                                  🚨 Rescue Request Case
+                                </span>
+                                <h5 className="font-extrabold text-[11px] truncate">
+                                  {msg.metadata.breed || msg.metadata.animalType}
+                                </h5>
+                                <p className="text-[10px] truncate opacity-90">
+                                  📍 {msg.metadata.location || "Location provided"}
+                                </p>
+                              </div>
                             )}
 
-                            <div className="space-y-0.5">
-                              <h5 className="font-extrabold text-[11px] truncate">
-                                {msg.metadata.breed
-                                  ? `${msg.metadata.animalType || "Animal"} • ${msg.metadata.breed}`
-                                  : msg.metadata.animalType || "Animal"}
-                              </h5>
-                              <p
-                                className={`text-[10px] truncate ${
-                                  isOutgoing ? "text-green-100" : "text-slate-500"
-                                }`}
-                              >
-                                📍 {msg.metadata.location || "Location not provided"}
-                              </p>
-                            </div>
+                            <p className="whitespace-pre-wrap break-words font-medium">{msg.content}</p>
 
-                            <button
-                              onClick={() => {
-                                if (msg.metadata.reportId) {
-                                  navigate("/lost-found");
-                                }
-                              }}
-                              className={`w-full py-1.5 px-3 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
-                                isOutgoing
-                                  ? "bg-white text-green-800 hover:bg-green-50"
-                                  : "bg-green-700 text-white hover:bg-green-800"
-                              }`}
-                            >
-                              <span>View Report</span>
-                              <ExternalLink size={10} />
-                            </button>
-                          </div>
-                        )}
-
-                        {/* 2. Text Message Content */}
-                        <p className="whitespace-pre-wrap break-words font-medium">
-                          {msg.content}
-                        </p>
-
-                        {/* 3. Timestamp & Read Checkmark */}
-                        <div
-                          className={`flex items-center justify-end gap-1 text-[9px] font-bold ${
-                            isOutgoing ? "text-green-200" : "text-slate-400"
-                          }`}
-                        >
-                          <span>{formatMessageTime(msg.createdAt)}</span>
-                          {isOutgoing && (
-                            <span>
-                              {msg.isRead ? (
-                                <CheckCheck size={12} className="text-emerald-200" />
-                              ) : (
-                                <Check size={12} className="text-green-200" />
+                            <div className="flex items-center justify-end gap-1 text-[9px] font-bold opacity-75">
+                              <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                              {isOutgoing && (
+                                <span>{msg.isRead ? <CheckCheck size={12} /> : <Check size={12} />}</span>
                               )}
-                            </span>
-                          )}
+                            </div>
+                          </div>
                         </div>
+                      );
+                    })
+                  )}
+
+                  {isTyping && (
+                    <div className="flex justify-start animate-pulse">
+                      <div className="bg-white border border-slate-200 text-slate-500 rounded-2xl rounded-tl-xs px-3.5 py-2 text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs">
+                        <span>{typingUserName} is typing...</span>
                       </div>
                     </div>
-                  );
-                })
-              )}
+                  )}
 
-              {/* Typing Indicator Bubble */}
-              {isTyping && (
-                <div className="flex justify-start animate-pulse">
-                  <div className="bg-white border border-slate-200 text-slate-500 rounded-2xl rounded-tl-xs px-3.5 py-2 text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs">
-                    <span>{typingUserName} is typing</span>
-                    <span className="flex gap-0.5">
-                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" />
-                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
-                    </span>
-                  </div>
+                  <div ref={messageEndRef} />
                 </div>
-              )}
 
-              <div ref={messageEndRef} />
-            </div>
-
-            {/* C. Chat Composer (Sticky Bottom) */}
-            <form
-              onSubmit={handleSendMessage}
-              className="p-3 border-t border-slate-100 bg-white flex items-center gap-2 shrink-0 shadow-sm"
-            >
-              {/* Attach Report Button */}
-              <button
-                type="button"
-                onClick={handleOpenReportPicker}
-                className="p-2.5 text-slate-500 hover:text-green-750 hover:bg-slate-100 rounded-xl transition cursor-pointer shrink-0"
-                title="Attach Lost & Found Report"
-              >
-                <Paperclip size={17} />
-              </button>
-
-              {/* Message Input */}
-              <input
-                ref={inputRef}
-                type="text"
-                placeholder="Write a message..."
-                value={messageText}
-                onChange={handleInputChange}
-                className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 focus:bg-white transition"
-              />
-
-              {/* Send Button */}
-              <button
-                type="submit"
-                disabled={!messageText.trim() || sendingMessage}
-                className="p-2.5 bg-green-700 hover:bg-green-800 text-white rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs shadow-green-100"
-                title="Send Message"
-              >
-                <Send size={15} />
-              </button>
-            </form>
+                {/* Live Message Composer */}
+                <form
+                  onSubmit={handleSendLiveMessage}
+                  className="p-3 border-t border-slate-150 bg-white flex items-center gap-2 shrink-0"
+                >
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    placeholder="Write a message to NGO..."
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 focus:bg-white transition"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!messageText.trim() || sendingMessage}
+                    className="p-2.5 bg-green-700 hover:bg-green-800 text-white rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                  >
+                    <Send size={15} />
+                  </button>
+                </form>
+              </div>
+            )}
 
           </div>
         </div>
@@ -896,85 +1252,6 @@ export default function Connect() {
                   </Button>
                 </a>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 6. ATTACH LOST & FOUND REPORT PICKER MODAL */}
-      {showReportPicker && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl border border-slate-100 space-y-4 animate-scaleIn max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 shrink-0">
-              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Paperclip size={14} className="text-green-700" /> Select Report to Attach
-              </h3>
-              <button
-                onClick={() => setShowReportPicker(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {loadingMyReports ? (
-                <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-400 text-xs font-bold">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-green-700 border-t-transparent" />
-                  <span>Loading your reports...</span>
-                </div>
-              ) : myReports.length === 0 ? (
-                <div className="text-center py-8 px-4 text-slate-400 text-xs space-y-2">
-                  <p className="font-bold">No active Lost & Found reports created yet.</p>
-                  <Button
-                    onClick={() => {
-                      setShowReportPicker(false);
-                      navigate("/lost-found");
-                    }}
-                    className="py-1 px-3 text-xs bg-green-700 text-white rounded-lg mx-auto"
-                  >
-                    Create Report First
-                  </Button>
-                </div>
-              ) : (
-                myReports.map((pet) => (
-                  <div
-                    key={pet.id}
-                    onClick={() => handleAttachReport(pet)}
-                    className="p-3 rounded-2xl border border-slate-200 hover:border-green-600 hover:bg-green-50/40 transition-all cursor-pointer flex items-center gap-3 group"
-                  >
-                    {pet.image ? (
-                      <img
-                        src={pet.image}
-                        alt=""
-                        className="w-12 h-12 rounded-xl object-cover border border-slate-100 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-lg shrink-0">
-                        🐾
-                      </div>
-                    )}
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <h4 className="text-xs font-black text-slate-800 truncate group-hover:text-green-800">
-                          {pet.name ? `${pet.name} (${pet.breed || pet.animal})` : (pet.breed || pet.animal)}
-                        </h4>
-                        <span
-                          className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full shrink-0 ${
-                            pet.type === "lost" ? "bg-red-500 text-white" : "bg-emerald-600 text-white"
-                          }`}
-                        >
-                          {pet.type}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 font-semibold truncate mt-0.5">
-                        📍 {pet.address || pet.location}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
             </div>
           </div>
         </div>
