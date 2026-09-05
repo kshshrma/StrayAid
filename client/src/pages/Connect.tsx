@@ -148,6 +148,18 @@ export default function Connect() {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [botMessages, messages, isTyping, showManualInput, selectedNgo, chatMode]);
 
+  // 2b. Lock body scroll when NGO chat drawer is open
+  useEffect(() => {
+    if (selectedNgo) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedNgo]);
+
   // 3. Socket.IO Room Management for Live Chat Mode
   useEffect(() => {
     if (!activeConversationId) return;
@@ -880,8 +892,8 @@ export default function Connect() {
 
       {/* 4. AUTOMATED NGO CHATBOT & LIVE DM DRAWER (Modern Mobile UI) */}
       {selectedNgo && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-lg bg-white h-[100dvh] flex flex-col shadow-2xl animate-slideLeft overflow-hidden">
+        <div className="fixed inset-0 z-[9999] flex justify-end bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-lg bg-white h-[100dvh] flex flex-col shadow-2xl animate-slideLeft overflow-hidden z-[10000]">
             
             {/* A. Chat Header */}
             <div className="px-4 py-3 border-b border-slate-150 flex items-center justify-between bg-white shrink-0">
@@ -1309,7 +1321,7 @@ export default function Connect() {
 
       {/* 5. NGO PROFILE & DETAILS MODAL */}
       {showNgoModal && selectedNgo && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4 animate-scaleIn">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -1374,7 +1386,7 @@ export default function Connect() {
 
       {/* 6. REPORT ATTACHMENT MODAL */}
       {showReportPicker && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-lg bg-white rounded-3xl p-5 shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] animate-scaleIn">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
