@@ -881,7 +881,7 @@ export default function Connect() {
       {/* 4. AUTOMATED NGO CHATBOT & LIVE DM DRAWER (Modern Mobile UI) */}
       {selectedNgo && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-lg bg-white h-full flex flex-col shadow-2xl animate-slideLeft">
+          <div className="w-full max-w-lg bg-white h-[100dvh] flex flex-col shadow-2xl animate-slideLeft overflow-hidden">
             
             {/* A. Chat Header */}
             <div className="px-4 py-3 border-b border-slate-150 flex items-center justify-between bg-white shrink-0">
@@ -982,10 +982,10 @@ export default function Connect() {
               /* =========================================================================
                  AUTOMATED GUIDED DECISION-TREE BOT
                  ========================================================================= */
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 flex flex-col justify-between">
+              <div className="flex-1 flex flex-col justify-between overflow-hidden">
                 
-                {/* Messages Feed */}
-                <div className="space-y-3.5">
+                {/* Messages Feed (Scrollable) */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50">
                   {botMessages.map((msg) => {
                     const isUser = msg.sender === "user";
                     return (
@@ -1092,41 +1092,46 @@ export default function Connect() {
                   <div ref={messageEndRef} />
                 </div>
 
-                {/* Bottom Quick-Reply Selectable Options Buttons */}
-                <div className="pt-4 border-t border-slate-200/80 space-y-2">
+                {/* Bottom Quick-Reply Selectable Options (Pinned Footer) */}
+                <div className="p-3.5 border-t border-slate-150 bg-white space-y-2.5 shrink-0 shadow-md">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                       Select an option:
                     </span>
                     <button
                       onClick={handleResetToMainMenu}
-                      className="text-[10px] font-bold text-slate-450 hover:text-green-800 flex items-center gap-0.5 cursor-pointer transition"
+                      className="text-[10px] font-bold text-slate-500 hover:text-green-800 flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded-md hover:bg-slate-100"
                     >
-                      <RotateCcw size={10} /> Reset Menu
+                      <RotateCcw size={11} /> Reset Menu
                     </button>
                   </div>
 
                   {/* Render Current Active Options */}
-                  <div className="flex flex-wrap gap-2">
-                    {(botMessages[botMessages.length - 1]?.options || CHATBOT_FLOW_CONFIG[currentBotStep]?.options || []).map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        disabled={locationLoading || photoUploading || requestLock}
-                        onClick={() => handleOptionSelect(opt)}
-                        className={`py-2.5 px-3.5 rounded-2xl text-xs font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
-                          opt.label.includes("Main Menu")
-                            ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
-                            : opt.label.includes("Contact NGO")
-                            ? "bg-sky-600 hover:bg-sky-700 text-white border border-sky-600"
-                            : opt.label.includes("Rescue") || opt.label.includes("Injured") || opt.label.includes("Danger") || opt.label.includes("Send")
-                            ? "bg-green-700 hover:bg-green-800 text-white border border-green-700 hover:scale-[1.02]"
-                            : "bg-white hover:bg-green-50 text-slate-800 hover:text-green-800 border border-slate-200 hover:border-green-300"
-                        }`}
-                      >
-                        <span>{opt.label}</span>
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-0.5">
+                    {(() => {
+                      const latestBotMsgWithOptions = [...botMessages].reverse().find((m) => m.sender === "bot" && m.options && m.options.length > 0);
+                      const currentOptions = latestBotMsgWithOptions?.options || CHATBOT_FLOW_CONFIG[currentBotStep]?.options || [];
+
+                      return currentOptions.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          disabled={locationLoading || photoUploading || requestLock}
+                          onClick={() => handleOptionSelect(opt)}
+                          className={`py-2.5 px-3.5 rounded-2xl text-xs font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                            opt.label.includes("Main Menu")
+                              ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                              : opt.label.includes("Contact NGO")
+                              ? "bg-sky-600 hover:bg-sky-700 text-white border border-sky-600 shadow-sky-100"
+                              : opt.label.includes("Rescue") || opt.label.includes("Injured") || opt.label.includes("Danger") || opt.label.includes("Send")
+                              ? "bg-green-700 hover:bg-green-800 text-white border border-green-700 hover:scale-[1.02] shadow-green-100"
+                              : "bg-white hover:bg-green-50 text-slate-800 hover:text-green-800 border border-slate-200 hover:border-green-300"
+                          }`}
+                        >
+                          <span>{opt.label}</span>
+                        </button>
+                      ));
+                    })()}
                   </div>
                 </div>
 
