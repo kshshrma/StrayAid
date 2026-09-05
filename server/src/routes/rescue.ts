@@ -4,6 +4,7 @@ import {
   createAssignment,
   getMyAssignments,
   updateAssignment,
+  createBotRescueRequest,
 } from "../controllers/rescueController";
 
 import { requireAuth } from "../middleware/auth";
@@ -19,6 +20,16 @@ router.get("/", (_req, res) => {
     message: "Rescue API is working",
   });
 });
+
+/**
+ * Create rescue request from automated Connect chatbot
+ * Authentication required
+ */
+router.post(
+  "/bot-request",
+  requireAuth,
+  createBotRescueRequest
+);
 
 /**
  * Create rescue assignment

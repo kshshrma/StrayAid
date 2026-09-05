@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { supabase } from "../services/supabase";
 import { AuthenticatedRequest } from "../middleware/auth";
 import { dispatchReport } from "../services/dispatch";
+import { getRegisteredNgoById } from "../services/ngoService";
+import { getOrCreateNgoConversation, createMessage } from "../services/messageService";
 /**
  * Create a new rescue assignment
  */
@@ -425,6 +427,158 @@ export async function getMyAssignments(
     return res.status(500).json({
       success: false,
       message: "Failed to get rescue assignments",
+    });
+  }
+}
+
+/**
+ * Create a new rescue request from the automated Connect chatbot
+ * Authenticated endpoint: req.userId
+ */
+export async function createBotRescueRequest(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+    }
+
+    const {
+      ngoId,
+      rescueType,
+      subType,
+      latitude,
+      longitude,
+      manualLocation,
+      imageUrl,
+      inDanger,
+      notes,
+    } = req.body;
+
+    if (!ngoId || !rescueType) {
+      return res.status(400).json({
+        success: false,
+        message: "ngoId and rescueType are required",
+      });
+    }
+
+    // 1. Verify NGO exists
+    const ngo = getRegisteredNgoById(ngoId);
+    if (!ngo) {
+      return res.status(404).json({
+        success: false,
+        message: "Registered NGO not found",
+      });
+    }
+
+    // Format human-readable rescue title & description
+    let rescueTitle = "Injured Animal";
+    let priority = "Urgent";
+    let severity = "High";
+
+    if (rescueType === "injured_animal") {
+      rescueTitle = "Injured Animal Rescue";
+      severity = "High";
+      priority = "Urgent";
+    } else if (rescueType === "trapped_animal") {
+      rescueTitle = `Trapped Animal (${subType || "Unspecified"})`;
+      severity = "High";
+      priority = "Urgent";
+    } else if (rescueType === "weak_abandoned_baby") {
+      rescueTitle = inDanger ? "Abandoned Baby (In Danger)" : "Weak / Abandoned Baby";
+      severity = inDanger ? "Critical" : "Medium";
+      priority = inDanger ? "Emergency" : "Normal";
+    }
+
+    const locationText = manualLocation || (latitude && longitude ? `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)}` : "Location Shared");
+
+    const metadata = {
+      reporterId: userId,
+      ngoId: ngo.id,
+      ngoName: ngo.name,
+      rescueType,
+      subType: subType || null,
+      manualLocation: manualLocation || null,
+      inDanger: inDanger || false,
+      notes: notes || null,
+      source: "connect_chatbot",
+    };
+
+    // 2. Insert into Supabase reports table
+    const { data: report, error: reportError } = await supabase
+      .from("reports")
+      .insert({
+        animal_type: "Dog",
+        severity,
+        priority,
+        status: "pending",
+        latitude: latitude ? Number(latitude) : 28.4744,
+        longitude: longitude ? Number(longitude) : 77.5040,
+        image_url: imageUrl || null,
+        ai_advice: JSON.stringify(metadata),
+      })
+      .select()
+      .single();
+
+    if (reportError) {
+      console.error("[RescueController] Error creating report from chatbot:", reportError);
+      return res.status(500).json({
+        success: false,
+        message: reportError.message || "Failed to create rescue report",
+      });
+    }
+
+    // 3. Create or retrieve NGO conversation
+    const { conversation } = await getOrCreateNgoConversation(userId, ngoId);
+
+    // 4. Create an automated case summary message in the NGO conversation
+    const caseSummary = `🚨 NEW RESCUE REQUEST: ${rescueTitle}\n📍 Location: ${locationText}\n⚡ Priority: ${priority}\n⚠️ Status: Pending NGO Dispatch`;
+
+    const message = await createMessage(
+      conversation.id,
+      report.id,
+      userId,
+      ngo.representativeUserId,
+      caseSummary,
+      {
+        type: "report_attachment",
+        reportId: report.id,
+        animalType: "Rescue Request",
+        breed: rescueTitle,
+        status: "lost",
+        location: locationText,
+        urgency: priority,
+        imageUrl: imageUrl || undefined,
+      }
+    );
+
+    // 5. Emit real-time Socket.IO notifications
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`conversation:${conversation.id}`).emit("new_message", { message });
+      io.to(`user:${ngo.representativeUserId}`).emit("secure_message_received", { message });
+    }
+
+    // 6. Trigger smart dispatch if valid coordinates exist
+    if (latitude && longitude) {
+      dispatchReport(report.id, Number(latitude), Number(longitude), severity).catch((err) => {
+        console.error("[RescueController] Auto dispatch error:", err);
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      reportId: report.id,
+      conversationId: conversation.id,
+      message,
+    });
+  } catch (error: any) {
+    console.error("[RescueController] Exception in createBotRescueRequest:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to process rescue request",
     });
   }
 }
