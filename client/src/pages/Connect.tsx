@@ -10,6 +10,7 @@ import {
   X,
   Send,
   ArrowLeft,
+  Paperclip,
   Info,
   CheckCheck,
   Check,
@@ -17,7 +18,8 @@ import {
   MapPin,
   HeartHandshake,
   Bot,
-  RotateCcw
+  RotateCcw,
+  ExternalLink
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import {
@@ -29,6 +31,8 @@ import {
   type EmergencyHelpline,
   type ReportAttachmentMetadata,
 } from "../services/lost-found/messageApiService";
+import { getMyLostFoundPets } from "../services/lost-found/lostFoundService";
+import type { LostFoundPet } from "../features/lost-found/AnimalReportCard";
 import { getSocket } from "../services/socket";
 import { CHATBOT_FLOW_CONFIG, type ChatOption } from "../services/connect/chatbotFlow";
 import { createBotRescueRequestOnBackend } from "../services/connect/rescueRequestService";
@@ -96,6 +100,9 @@ export default function Connect() {
 
   // Modals
   const [showNgoModal, setShowNgoModal] = useState(false);
+  const [showReportPicker, setShowReportPicker] = useState(false);
+  const [myReports, setMyReports] = useState<LostFoundPet[]>([]);
+  const [loadingMyReports, setLoadingMyReports] = useState(false);
 
   // Typing Indicator for Live Chat
   const [isTyping, setIsTyping] = useState(false);
@@ -617,6 +624,56 @@ export default function Connect() {
     }
   }
 
+  // 12. Open Report Picker
+  async function handleOpenReportPicker() {
+    setShowReportPicker(true);
+    setLoadingMyReports(true);
+    try {
+      const pets = await getMyLostFoundPets();
+      setMyReports(pets);
+    } catch (err) {
+      console.error("Error loading user reports for attachment:", err);
+    } finally {
+      setLoadingMyReports(false);
+    }
+  }
+
+  // 13. Attach and Send Report to NGO
+  async function handleAttachReport(pet: LostFoundPet) {
+    if (!activeConversationId || sendingMessage) return;
+
+    setShowReportPicker(false);
+    setSendingMessage(true);
+
+    const metadata: ReportAttachmentMetadata = {
+      type: "report_attachment",
+      reportId: pet.id,
+      animalType: pet.animal,
+      breed: pet.breed,
+      status: pet.type,
+      location: pet.location,
+      urgency: pet.urgency || "Normal",
+      imageUrl: pet.image || undefined,
+    };
+
+    const contentText = `Shared Lost & Found Report: ${pet.name ? `${pet.name} (${pet.breed || pet.animal})` : (pet.breed || pet.animal)}`;
+
+    try {
+      const createdMessage = await sendMessageToConversation(activeConversationId, contentText, metadata);
+      if (createdMessage) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === createdMessage.id)) return prev;
+          return [...prev, createdMessage];
+        });
+      }
+    } catch (err) {
+      console.error("Failed to attach and send report:", err);
+      alert("Failed to send report. Please try again.");
+    } finally {
+      setSendingMessage(false);
+    }
+  }
+
   // Helper for Availability Status
   function renderAvailabilityBadge(status: "available" | "busy" | "offline") {
     switch (status) {
@@ -1121,21 +1178,65 @@ export default function Connect() {
                           >
                             {msg.metadata && msg.metadata.type === "report_attachment" && (
                               <div
-                                className={`rounded-xl p-2.5 border space-y-1.5 text-left ${
+                                className={`rounded-2xl p-3 border space-y-2 text-left mb-1.5 ${
                                   isOutgoing
-                                    ? "bg-green-800/60 border-green-600/60 text-white"
-                                    : "bg-slate-50 border-slate-200 text-slate-800"
+                                    ? "bg-green-800/80 border-green-600 text-white shadow-xs"
+                                    : "bg-slate-50 border-slate-200 text-slate-900 shadow-xs"
                                 }`}
                               >
-                                <span className="text-[9px] font-black uppercase tracking-wider block">
-                                  🚨 Rescue Request Case
-                                </span>
-                                <h5 className="font-extrabold text-[11px] truncate">
-                                  {msg.metadata.breed || msg.metadata.animalType}
-                                </h5>
-                                <p className="text-[10px] truncate opacity-90">
-                                  📍 {msg.metadata.location || "Location provided"}
-                                </p>
+                                <div className="flex items-center justify-between gap-2 border-b pb-1.5 border-current/20">
+                                  <span className="text-[10px] font-black tracking-wider uppercase flex items-center gap-1">
+                                    🚨 {msg.metadata.status ? `${msg.metadata.status.toUpperCase()} REPORT` : "RESCUE REPORT"}
+                                  </span>
+                                  {msg.metadata.urgency && (
+                                    <span
+                                      className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
+                                        msg.metadata.urgency === "Urgent" || msg.metadata.urgency === "Critical"
+                                          ? "bg-red-500 text-white"
+                                          : isOutgoing
+                                          ? "bg-green-600 text-white"
+                                          : "bg-slate-200 text-slate-700"
+                                      }`}
+                                    >
+                                      {msg.metadata.urgency}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {msg.metadata.imageUrl && (
+                                  <img
+                                    src={msg.metadata.imageUrl}
+                                    alt="Report Attachment"
+                                    className="w-full h-32 object-cover rounded-xl border border-current/10"
+                                  />
+                                )}
+
+                                <div className="space-y-0.5 text-xs">
+                                  <p className="font-black text-[12px] truncate">
+                                    🐾 {msg.metadata.breed || msg.metadata.animalType || "Animal in Need"}
+                                  </p>
+                                  {msg.metadata.location && (
+                                    <p className="text-[11px] truncate opacity-90 flex items-center gap-1">
+                                      <MapPin size={11} className="shrink-0" /> {msg.metadata.location}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {msg.metadata.reportId && (
+                                  <div className="pt-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => navigate(`/reports/${msg.metadata.reportId}`)}
+                                      className={`w-full py-1.5 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${
+                                        isOutgoing
+                                          ? "bg-white text-green-900 hover:bg-slate-100"
+                                          : "bg-green-700 text-white hover:bg-green-800"
+                                      }`}
+                                    >
+                                      <ExternalLink size={12} /> View Report Details
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
 
@@ -1169,6 +1270,15 @@ export default function Connect() {
                   onSubmit={handleSendLiveMessage}
                   className="p-3 border-t border-slate-150 bg-white flex items-center gap-2 shrink-0"
                 >
+                  <button
+                    type="button"
+                    onClick={handleOpenReportPicker}
+                    title="Attach StrayAid Lost & Found Report"
+                    className="p-2.5 hover:bg-slate-100 text-slate-500 hover:text-green-700 rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer"
+                  >
+                    <Paperclip size={17} />
+                  </button>
+
                   <input
                     ref={inputRef}
                     type="text"
@@ -1252,6 +1362,101 @@ export default function Connect() {
                   </Button>
                 </a>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. REPORT ATTACHMENT MODAL */}
+      {showReportPicker && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-5 shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] animate-scaleIn">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-green-50 text-green-700 flex items-center justify-center font-bold text-sm">
+                  📎
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Attach a Report</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Select one of your registered reports to share with {selectedNgo?.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowReportPicker(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-3 space-y-2.5">
+              {loadingMyReports ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-400 text-xs font-bold">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-green-700 border-t-transparent" />
+                  <span>Loading your reports...</span>
+                </div>
+              ) : myReports.length === 0 ? (
+                <div className="text-center py-12 px-4 space-y-2 text-slate-500">
+                  <p className="text-xs font-semibold">You don't have any active Lost & Found reports yet.</p>
+                  <p className="text-[11px] text-slate-400">Create a report under Lost & Found to attach it here.</p>
+                </div>
+              ) : (
+                myReports.map((pet) => (
+                  <div
+                    key={pet.id}
+                    className="flex items-center justify-between p-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-green-50/50 hover:border-green-300 transition group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {pet.image ? (
+                        <img
+                          src={pet.image}
+                          alt={pet.breed || pet.animal}
+                          className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center text-base shrink-0">
+                          🐾
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-black text-slate-900 truncate">
+                            {pet.name ? `${pet.name} (${pet.breed || pet.animal})` : (pet.breed || pet.animal)}
+                          </span>
+                          <span
+                            className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md ${
+                              pet.type === "lost"
+                                ? "bg-red-50 text-red-700 border border-red-200"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            }`}
+                          >
+                            {pet.type}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                          📍 {pet.location || "Location not provided"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={() => handleAttachReport(pet)}
+                      className="py-1.5 px-3 text-xs bg-green-700 hover:bg-green-800 text-white rounded-xl cursor-pointer shrink-0 ml-2"
+                    >
+                      Attach
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setShowReportPicker(false)}
+                className="py-2 px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
