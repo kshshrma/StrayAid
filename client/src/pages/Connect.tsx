@@ -1163,22 +1163,12 @@ export default function Connect() {
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                       Select an option:
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      {currentBotStep !== "MAIN_MENU" && (
-                        <button
-                          onClick={handleGoBack}
-                          className="text-[10px] font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer transition py-0.5 px-2 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200"
-                        >
-                          <ArrowLeft size={10} /> Back
-                        </button>
-                      )}
-                      <button
-                        onClick={handleResetToMainMenu}
-                        className="text-[10px] font-bold text-slate-500 hover:text-green-800 flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded-md hover:bg-slate-100"
-                      >
-                        <RotateCcw size={11} /> Reset
-                      </button>
-                    </div>
+                    <button
+                      onClick={handleResetToMainMenu}
+                      className="text-[10px] font-bold text-slate-500 hover:text-green-800 flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded-md hover:bg-slate-100"
+                    >
+                      <RotateCcw size={11} /> Reset Menu
+                    </button>
                   </div>
 
                   {/* Render Current Active Options */}
