@@ -264,7 +264,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
     message: "Thank you for supporting animal rescue. ❤️\n\nWhat would you like to support?",
     options: [
       { id: "opt_don_rescue", label: "🚑 Rescue", nextStep: "DONATE_CATEGORY" },
-      { id: "opt_don_med", label: "🏥 Medical Care", nextStep: "DONATE_CATEGORY" },
       { id: "opt_don_food", label: "🍖 Food", nextStep: "DONATE_CATEGORY" },
       { id: "opt_don_shelter", label: "🏠 Shelter", nextStep: "DONATE_CATEGORY" },
     ],
