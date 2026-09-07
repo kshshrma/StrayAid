@@ -777,30 +777,34 @@ export default function Connect() {
       />
 
       {/* 1. Page Header */}
-      <div className="max-w-4xl mx-auto mb-6 text-center space-y-1">
-        <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-2">
-          <HeartHandshake className="text-green-700 shrink-0" size={36} /> Connect
+      <div className="max-w-4xl mx-auto mb-7 text-center space-y-2">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-bold shadow-2xs">
+          <span>🐾</span>
+          <span>Community & Rescue Network</span>
+        </div>
+        <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-2.5">
+          <HeartHandshake className="text-emerald-600 shrink-0" size={38} /> Connect
         </h1>
-        <p className="text-xs font-semibold text-slate-500 max-w-md mx-auto">
-          Coordinate with registered NGOs, veterinary networks, and 24/7 emergency rescue helplines.
+        <p className="text-xs sm:text-sm font-medium text-slate-500 max-w-lg mx-auto leading-relaxed">
+          Directly coordinate with registered NGOs, veterinary teams, and 24/7 emergency rescue helplines in real time.
         </p>
       </div>
 
       {/* 2. Main Tab Switcher */}
-      <div className="max-w-md mx-auto mb-6 flex gap-2 p-1 bg-slate-200/60 rounded-2xl">
+      <div className="max-w-md mx-auto mb-7 flex gap-1.5 p-1.5 bg-slate-200/70 backdrop-blur-xs rounded-2xl border border-slate-200/80 shadow-2xs">
         <button
           onClick={() => {
             setActiveTab("groups");
             setSelectedNgo(null);
             setActiveConversationId(null);
           }}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === "groups"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200/60"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/40"
           }`}
         >
-          <MessageSquare size={14} /> Registered NGOs
+          <MessageSquare size={15} className={activeTab === "groups" ? "text-emerald-600" : ""} /> Registered NGOs
         </button>
         <button
           onClick={() => {
@@ -808,22 +812,22 @@ export default function Connect() {
             setSelectedNgo(null);
             setActiveConversationId(null);
           }}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === "helplines"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200/60"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/40"
           }`}
         >
-          <PhoneCall size={14} /> Emergency Helplines
+          <PhoneCall size={15} className={activeTab === "helplines" ? "text-red-500" : ""} /> Emergency Helplines
         </button>
       </div>
 
       {/* 3. Main Body: Registered NGOs List or Helplines List */}
       <div className="max-w-4xl mx-auto">
         {loadingData ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 bg-white rounded-3xl border border-slate-100 shadow-xs">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-700 border-t-transparent" />
-            <p className="text-xs font-semibold text-slate-500">Loading registered organizations...</p>
+          <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white rounded-3xl border border-slate-100 shadow-xs">
+            <div className="h-9 w-9 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
+            <p className="text-xs font-bold text-slate-500">Loading verified organizations...</p>
           </div>
         ) : activeTab === "groups" ? (
           /* Registered NGOs Grid */
@@ -831,12 +835,12 @@ export default function Connect() {
             {ngos.map((ngo) => (
               <Card
                 key={ngo.id}
-                className="flex flex-col justify-between p-5 rounded-3xl border border-slate-150/80 bg-white shadow-xs hover:shadow-md transition-all duration-300 relative group"
+                className="flex flex-col justify-between p-5 rounded-3xl border border-slate-200/80 bg-white shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative group"
               >
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   {/* NGO Header */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="w-11 h-11 rounded-2xl bg-green-50 text-green-700 flex items-center justify-center font-black text-lg border border-green-100 shrink-0">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-xl border border-emerald-100/80 shadow-2xs shrink-0">
                       🐾
                     </div>
                     {renderAvailabilityBadge(ngo.availability)}
@@ -844,11 +848,11 @@ export default function Connect() {
 
                   {/* Title & Verified Badge */}
                   <div>
-                    <h2 className="text-base font-black text-slate-900 leading-tight group-hover:text-green-750 transition-colors">
+                    <h2 className="text-base font-black text-slate-900 leading-snug group-hover:text-emerald-700 transition-colors">
                       {ngo.name}
                     </h2>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-100">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200/60">
                         <ShieldCheck size={11} className="text-sky-600" />
                         Verified NGO
                       </span>
@@ -856,24 +860,24 @@ export default function Connect() {
                   </div>
 
                   {/* Location & Categories */}
-                  <div className="space-y-2 pt-1 border-t border-slate-50">
-                    <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-                      <MapPin size={12} className="text-slate-400 shrink-0" />
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <p className="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
+                      <MapPin size={13} className="text-slate-400 shrink-0" />
                       <span className="truncate">{ngo.location}</span>
                     </p>
                     
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       {ngo.categories.slice(0, 3).map((cat, idx) => (
                         <span
                           key={idx}
-                          className="text-[9px] font-bold bg-slate-100 text-slate-650 px-2 py-0.5 rounded-lg"
+                          className="text-[10px] font-semibold bg-slate-100/90 text-slate-650 px-2 py-0.5 rounded-lg border border-slate-200/60"
                         >
                           {cat}
                         </span>
                       ))}
                     </div>
 
-                    <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
+                    <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
                       {ngo.description}
                     </p>
                   </div>
@@ -881,15 +885,15 @@ export default function Connect() {
 
                 {/* Card Footer: Rescuers count + Connect / Join Chat button */}
                 <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-450 flex items-center gap-1">
-                    <Users size={13} /> {ngo.activeMembers} Rescuers
+                  <span className="text-[11px] font-bold text-slate-450 flex items-center gap-1.5">
+                    <Users size={13} className="text-slate-400" /> {ngo.activeMembers} Rescuers
                   </span>
 
                   <Button
                     onClick={() => initChatbotForNgo(ngo)}
-                    className="py-2 px-4 text-xs font-extrabold bg-green-700 hover:bg-green-800 text-white rounded-xl cursor-pointer shadow-sm shadow-green-100 transition-all flex items-center gap-1.5"
+                    className="py-2 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer shadow-sm shadow-emerald-600/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-1.5"
                   >
-                    <Bot size={13} /> Connect
+                    <Bot size={14} /> Connect
                   </Button>
                 </div>
               </Card>
@@ -901,14 +905,14 @@ export default function Connect() {
             {helplines.map((helpline) => (
               <Card
                 key={helpline.id}
-                className="flex flex-col justify-between p-5 rounded-3xl border border-slate-150/80 bg-white shadow-xs hover:shadow-md transition-all duration-300"
+                className="flex flex-col justify-between p-5 rounded-3xl border border-slate-200/80 bg-white shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
               >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center font-black text-lg border border-red-100">
+                    <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center font-black text-xl border border-red-100/80 shadow-2xs">
                       🚑
                     </div>
-                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/80">
                       Available 24/7
                     </span>
                   </div>
@@ -924,12 +928,12 @@ export default function Connect() {
                 </div>
 
                 <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-slate-600">
+                  <span className="text-xs font-mono font-bold text-slate-700">
                     📞 {helpline.phone}
                   </span>
 
                   <a href={`tel:${helpline.phone}`}>
-                    <Button className="py-2 px-4 text-xs font-extrabold bg-green-700 hover:bg-green-800 text-white rounded-xl flex items-center gap-1.5 shadow-sm shadow-green-100 cursor-pointer">
+                    <Button className="py-2 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer">
                       <PhoneCall size={13} /> Call Now
                     </Button>
                   </a>
@@ -942,7 +946,7 @@ export default function Connect() {
 
       {/* 4. AUTOMATED NGO CHATBOT & LIVE DM DRAWER (Modern Mobile UI) */}
       {selectedNgo && (
-        <div className="fixed inset-0 z-[9999] flex justify-end bg-black/60 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-[9999] flex justify-end bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-lg bg-white h-[100dvh] flex flex-col shadow-2xl animate-slideLeft overflow-hidden z-[10000]">
             
             {/* A. Chat Header */}
@@ -953,14 +957,14 @@ export default function Connect() {
                     setSelectedNgo(null);
                     setActiveConversationId(null);
                   }}
-                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-600 cursor-pointer shrink-0"
+                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-600 hover:text-slate-900 cursor-pointer shrink-0"
                   title="Back to NGO list"
                 >
                   <ArrowLeft size={18} />
                 </button>
 
                 {/* NGO Avatar / Icon with status dot */}
-                <div className="w-10 h-10 rounded-2xl bg-green-50 text-green-800 flex items-center justify-center font-black text-base shrink-0 border border-green-200/60 relative">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-black text-base shrink-0 border border-emerald-200/80 shadow-2xs relative">
                   🐾
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
@@ -984,7 +988,7 @@ export default function Connect() {
                   
                   <div className="flex items-center gap-2 mt-0.5">
                     {renderAvailabilityBadge(selectedNgo.availability)}
-                    <span className="text-[10px] text-slate-400 font-bold truncate">
+                    <span className="text-[10px] text-slate-400 font-medium truncate">
                       📍 {selectedNgo.location.split("&")[0]}
                     </span>
                   </div>
@@ -996,24 +1000,24 @@ export default function Connect() {
                 {chatMode === "bot" ? (
                   <button
                     onClick={switchToLiveChat}
-                    className="py-1 px-2.5 bg-green-50 hover:bg-green-100 text-green-800 text-[10px] font-black rounded-xl border border-green-200 transition cursor-pointer flex items-center gap-1"
+                    className="py-1 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-xl border border-emerald-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
                     title="Switch to live NGO coordinator"
                   >
-                    <MessageSquare size={11} /> Live Chat
+                    <MessageSquare size={12} className="text-emerald-700" /> Live Chat
                   </button>
                 ) : (
                   <button
                     onClick={() => setChatMode("bot")}
-                    className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black rounded-xl border border-slate-200 transition cursor-pointer flex items-center gap-1"
+                    className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-xl border border-slate-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
                     title="Switch to automated helper"
                   >
-                    <Bot size={11} /> Bot Guide
+                    <Bot size={12} className="text-emerald-700" /> Bot Guide
                   </button>
                 )}
 
                 <button
                   onClick={() => setShowNgoModal(true)}
-                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-500 cursor-pointer"
+                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-500 hover:text-slate-800 cursor-pointer"
                   title="View NGO details"
                 >
                   <Info size={17} />
@@ -1032,10 +1036,10 @@ export default function Connect() {
             </div>
 
             {/* Verification Channel Banner */}
-            <div className="bg-slate-50 border-b border-slate-100 py-1 px-4 text-center">
-              <span className="text-[10px] font-black text-slate-500 flex items-center justify-center gap-1">
-                <ShieldCheck size={11} className="text-green-700" />
-                Verified Rescue Channel • End-to-End Logged
+            <div className="bg-slate-50/80 border-b border-slate-100 py-1.5 px-4 text-center">
+              <span className="text-[10px] font-bold text-slate-500 flex items-center justify-center gap-1.5">
+                <ShieldCheck size={12} className="text-emerald-600" />
+                Verified Rescue Channel • Direct Automated Dispatch
               </span>
             </div>
 
@@ -1047,7 +1051,7 @@ export default function Connect() {
               <div className="flex-1 flex flex-col justify-between overflow-hidden">
                 
                 {/* Messages Feed (Scrollable) */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/60">
                   {botMessages.map((msg) => {
                     const isUser = msg.sender === "user";
                     return (
@@ -1055,22 +1059,27 @@ export default function Connect() {
                         key={msg.id}
                         className={`flex w-full ${isUser ? "justify-end" : "justify-start"} animate-fadeIn`}
                       >
+                        {!isUser && (
+                          <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-800 text-xs flex items-center justify-center shrink-0 mr-2 mt-0.5 border border-emerald-200/80 shadow-2xs font-bold">
+                            🐾
+                          </div>
+                        )}
                         <div
-                          className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-3.5 shadow-xs text-xs leading-relaxed space-y-2 ${
+                          className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-3.5 shadow-xs text-xs sm:text-[13px] leading-relaxed space-y-2 ${
                             isUser
-                              ? "bg-green-700 text-white rounded-tr-xs shadow-green-100 font-semibold"
+                              ? "bg-gradient-to-r from-emerald-600 to-green-700 text-white rounded-tr-xs shadow-sm shadow-emerald-700/10 font-medium"
                               : msg.isSuccess
-                              ? "bg-emerald-50 border border-emerald-200 text-emerald-950 rounded-tl-xs font-semibold"
+                              ? "bg-emerald-50/90 border border-emerald-200 text-emerald-950 rounded-tl-xs font-medium"
                               : msg.isError
-                              ? "bg-red-50 border border-red-200 text-red-950 rounded-tl-xs font-semibold"
-                              : "bg-white border border-slate-200 text-slate-850 rounded-tl-xs font-medium"
+                              ? "bg-red-50/90 border border-red-200 text-red-950 rounded-tl-xs font-medium"
+                              : "bg-white border border-slate-200/80 text-slate-800 rounded-tl-xs font-medium"
                           }`}
                         >
                           {msg.imageUrl && (
                             <img
                               src={msg.imageUrl}
                               alt="Animal"
-                              className="w-full h-36 object-cover rounded-xl border border-slate-200"
+                              className="w-full h-40 object-cover rounded-xl border border-slate-200 shadow-2xs"
                             />
                           )}
 
@@ -1078,7 +1087,7 @@ export default function Connect() {
                           
                           <div
                             className={`text-[9px] font-bold text-right ${
-                              isUser ? "text-green-200" : "text-slate-400"
+                              isUser ? "text-emerald-100" : "text-slate-400"
                             }`}
                           >
                             {msg.time}
@@ -1091,8 +1100,8 @@ export default function Connect() {
                   {/* Geolocation Loading Indicator */}
                   {locationLoading && (
                     <div className="flex justify-start animate-fadeIn">
-                      <div className="bg-white border border-green-200 text-green-900 rounded-2xl rounded-tl-xs p-3 text-xs font-bold flex items-center gap-2 shadow-xs">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-700 border-t-transparent" />
+                      <div className="bg-white border border-emerald-200 text-emerald-950 rounded-2xl rounded-tl-xs p-3 text-xs font-bold flex items-center gap-2 shadow-xs">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
                         <span>🛰️ Acquiring GPS location & dispatching rescue...</span>
                       </div>
                     </div>
@@ -1101,8 +1110,8 @@ export default function Connect() {
                   {/* Photo Uploading Indicator */}
                   {photoUploading && (
                     <div className="flex justify-start animate-fadeIn">
-                      <div className="bg-white border border-green-200 text-green-900 rounded-2xl rounded-tl-xs p-3 text-xs font-bold flex items-center gap-2 shadow-xs">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-700 border-t-transparent" />
+                      <div className="bg-white border border-emerald-200 text-emerald-950 rounded-2xl rounded-tl-xs p-3 text-xs font-bold flex items-center gap-2 shadow-xs">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
                         <span>📷 Uploading photo & registering request...</span>
                       </div>
                     </div>
@@ -1112,9 +1121,9 @@ export default function Connect() {
                   {showManualInput && (
                     <form
                       onSubmit={handleManualLocationSubmit}
-                      className="bg-white border border-green-300 rounded-2xl p-3 shadow-md space-y-2 animate-fadeIn"
+                      className="bg-white border border-emerald-300 rounded-2xl p-3.5 shadow-md space-y-2.5 animate-fadeIn"
                     >
-                      <label className="block text-[11px] font-black text-slate-800">
+                      <label className="block text-[11px] font-bold text-slate-800">
                         📍 Enter Animal's Exact Location:
                       </label>
                       <input
@@ -1123,7 +1132,7 @@ export default function Connect() {
                         value={manualLocationText}
                         onChange={(e) => setManualLocationText(e.target.value)}
                         autoFocus
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
                       />
                       <div className="flex gap-2 justify-end">
                         <button
@@ -1136,7 +1145,7 @@ export default function Connect() {
                         <Button
                           type="submit"
                           disabled={!manualLocationText.trim() || manualLocationSubmitting}
-                          className="py-1.5 px-4 text-xs font-extrabold bg-green-700 text-white rounded-xl shadow-xs"
+                          className="py-1.5 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs cursor-pointer"
                         >
                           {manualLocationSubmitting ? "Submitting..." : "Send Location"}
                         </Button>
@@ -1145,8 +1154,8 @@ export default function Connect() {
                   )}
 
                   {botError && (
-                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-bold text-amber-900 flex items-center gap-1.5 animate-fadeIn">
-                      <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 flex items-center gap-2 animate-fadeIn">
+                      <AlertCircle size={15} className="text-amber-600 shrink-0" />
                       <span>{botError}</span>
                     </div>
                   )}
@@ -1155,27 +1164,28 @@ export default function Connect() {
                 </div>
 
                 {/* Bottom Quick-Reply Selectable Options (Pinned Footer) */}
-                <div className="p-3.5 border-t border-slate-150 bg-white space-y-2.5 shrink-0 shadow-md">
+                <div className="p-3.5 border-t border-slate-150/80 bg-white/95 backdrop-blur-sm space-y-2.5 shrink-0 shadow-lg">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      Select an option:
-                    </span>
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-slate-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Select an option:</span>
+                    </div>
                     <div className="flex items-center gap-1.5">
                       {currentBotStep !== "MAIN_MENU" && (
                         <button
                           type="button"
                           onClick={handleGoBack}
-                          className="text-[10px] font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer transition py-0.5 px-2 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200"
+                          className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer transition-all py-1 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200/90 border border-slate-200 shadow-2xs active:scale-95"
                         >
-                          <ArrowLeft size={10} /> Back
+                          <ArrowLeft size={12} /> Back
                         </button>
                       )}
                       <button
                         type="button"
                         onClick={handleResetToMainMenu}
-                        className="text-[10px] font-bold text-slate-500 hover:text-green-800 flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded-md hover:bg-slate-100"
+                        className="text-[11px] font-semibold text-slate-500 hover:text-emerald-700 flex items-center gap-1 cursor-pointer transition-all py-1 px-2 rounded-lg hover:bg-emerald-50 active:scale-95"
                       >
-                        <RotateCcw size={11} /> Reset Menu
+                        <RotateCcw size={12} /> Reset Menu
                       </button>
                     </div>
                   </div>
@@ -1197,12 +1207,12 @@ export default function Connect() {
                           type="button"
                           disabled={locationLoading || photoUploading || requestLock}
                           onClick={() => handleOptionSelect(opt)}
-                          className={`py-2.5 px-3.5 rounded-2xl text-xs font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          className={`py-2.5 px-3.5 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
                             opt.label.includes("Contact NGO")
-                              ? "bg-sky-600 hover:bg-sky-700 text-white border border-sky-600 shadow-sky-100"
+                              ? "bg-sky-600 hover:bg-sky-700 text-white border border-sky-600 shadow-sm shadow-sky-600/20 active:scale-95"
                               : opt.label.includes("Rescue") || opt.label.includes("Injured") || opt.label.includes("Danger") || opt.label.includes("Send") || opt.label.includes("Share")
-                              ? "bg-green-700 hover:bg-green-800 text-white border border-green-700 hover:scale-[1.02] shadow-green-100"
-                              : "bg-white hover:bg-green-50 text-slate-800 hover:text-green-800 border border-slate-200 hover:border-green-300"
+                              ? "bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-sm shadow-emerald-600/20 hover:scale-[1.02] active:scale-95"
+                              : "bg-white hover:bg-emerald-50/70 text-slate-800 hover:text-emerald-800 border border-slate-200/90 hover:border-emerald-300 hover:shadow-xs active:scale-95"
                           }`}
                         >
                           <span>{opt.label}</span>
@@ -1350,31 +1360,31 @@ export default function Connect() {
                 {/* Live Message Composer */}
                 <form
                   onSubmit={handleSendLiveMessage}
-                  className="p-3 border-t border-slate-150 bg-white flex items-center gap-2 shrink-0"
+                  className="p-3.5 border-t border-slate-150/80 bg-white/95 backdrop-blur-sm flex items-center gap-2.5 shrink-0 shadow-lg"
                 >
                   <button
                     type="button"
                     onClick={handleOpenReportPicker}
                     title="Attach StrayAid Lost & Found Report"
-                    className="p-2.5 hover:bg-slate-100 text-slate-500 hover:text-green-700 rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer"
+                    className="p-2.5 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer"
                   >
-                    <Paperclip size={17} />
+                    <Paperclip size={18} />
                   </button>
 
                   <input
                     ref={inputRef}
                     type="text"
-                    placeholder="Write a message to NGO..."
+                    placeholder="Write a message to NGO coordinators..."
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
-                    className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 focus:bg-white transition"
+                    className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
                   />
                   <button
                     type="submit"
                     disabled={!messageText.trim() || sendingMessage}
-                    className="p-2.5 bg-green-700 hover:bg-green-800 text-white rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                    className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-emerald-600/20 active:scale-95"
                   >
-                    <Send size={15} />
+                    <Send size={16} />
                   </button>
                 </form>
               </div>
@@ -1386,11 +1396,11 @@ export default function Connect() {
 
       {/* 5. NGO PROFILE & DETAILS MODAL */}
       {showNgoModal && selectedNgo && (
-        <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-[10010] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4 animate-scaleIn">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-2xl bg-green-50 text-green-700 flex items-center justify-center font-black text-base border border-green-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-black text-base border border-emerald-200/80 shadow-2xs">
                   🐾
                 </div>
                 <div>
@@ -1421,11 +1431,11 @@ export default function Connect() {
 
               <div>
                 <span className="font-extrabold text-slate-800 block mb-1">Rescue Focus:</span>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5">
                   {selectedNgo.categories.map((cat, idx) => (
                     <span
                       key={idx}
-                      className="text-[10px] font-bold bg-green-50 text-green-700 px-2 py-0.5 rounded-lg border border-green-100"
+                      className="text-[10px] font-bold bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-lg border border-emerald-200/60"
                     >
                       {cat}
                     </span>
@@ -1433,14 +1443,14 @@ export default function Connect() {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold block">Helpline Contact</span>
                   <span className="text-xs font-bold text-slate-800">{selectedNgo.phone}</span>
                 </div>
                 <a href={`tel:${selectedNgo.phone}`}>
-                  <Button className="py-1.5 px-3 text-xs bg-green-700 text-white rounded-xl">
-                    <PhoneCall size={12} className="mr-1" /> Call NGO
+                  <Button className="py-2 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm shadow-emerald-600/20 active:scale-95 transition-all">
+                    <PhoneCall size={13} className="mr-1" /> Call NGO
                   </Button>
                 </a>
               </div>
