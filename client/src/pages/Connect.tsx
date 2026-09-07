@@ -389,7 +389,9 @@ export default function Connect() {
             sender: "bot",
             text: `💳 You can support ${selectedNgo.name} directly:\n\nHelpline / UPI: ${selectedNgo.phone}\nService Area: ${selectedNgo.serviceArea}\n\nThank you for saving stray lives! ❤️`,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            options: [],
+            options: [
+              { id: "opt_contact_don", label: "📞 Contact NGO", action: "contact_ngo" },
+            ],
           };
           setBotMessages((prev) => [...prev, donateMsg]);
           return;
@@ -1181,8 +1183,11 @@ export default function Connect() {
                   {/* Render Current Active Options */}
                   <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-0.5">
                     {(() => {
-                      const latestBotMsgWithOptions = [...botMessages].reverse().find((m) => m.sender === "bot" && m.options && m.options.length > 0);
-                      const currentOptions = (latestBotMsgWithOptions?.options || CHATBOT_FLOW_CONFIG[currentBotStep]?.options || []).filter(
+                      const latestBotMsg = [...botMessages].reverse().find((m) => m.sender === "bot");
+                      const rawOptions = latestBotMsg?.options !== undefined
+                        ? latestBotMsg.options
+                        : CHATBOT_FLOW_CONFIG[currentBotStep]?.options || [];
+                      const currentOptions = rawOptions.filter(
                         (opt) => opt.action !== "go_back" && !opt.label.includes("Back")
                       );
 

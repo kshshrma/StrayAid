@@ -253,7 +253,9 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
   VOLUNTEER_AWARENESS: {
     id: "VOLUNTEER_AWARENESS",
     message: "Thank you for helping spread awareness about animal rescue and street dog welfare. ❤️",
-    options: [],
+    options: [
+      { id: "opt_contact_aware", label: "📞 Contact NGO", action: "contact_ngo" },
+    ],
   },
 
   // 8. Donate Flow
