@@ -201,7 +201,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
     message: "Where would you like to adopt from?",
     options: [
       { id: "opt_near_me", label: "📍 Near Me", nextStep: "ADOPT_SUCCESS" },
-      { id: "opt_sel_loc", label: "🗺️ Select Location", nextStep: "ADOPT_SUCCESS" },
       { id: "opt_anywhere", label: "🌎 Anywhere", nextStep: "ADOPT_SUCCESS" },
     ],
   },
