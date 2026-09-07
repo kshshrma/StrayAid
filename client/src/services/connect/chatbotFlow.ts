@@ -44,7 +44,12 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
     id: "INJURED_STEP1",
     message: "Please avoid moving the animal unnecessarily.",
     options: [
-      { id: "opt_share_loc_inj", label: "📍 Share Location", nextStep: "LOCATION_PROMPT_INJURED" },
+      {
+        id: "opt_share_loc_inj",
+        label: "📍 Share Location",
+        action: "send_current_location",
+        rescueType: "injured_animal",
+      },
       { id: "opt_self_trans", label: "🚗 I Can Take It Myself", nextStep: "SELF_TRANSPORT" },
       { id: "opt_mm_inj", label: "🏠 Main Menu", nextStep: "MAIN_MENU" },
     ],
@@ -149,7 +154,13 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
     id: "BABY_NOT_DANGER",
     message: "Please avoid moving the baby unnecessarily.",
     options: [
-      { id: "opt_share_loc_bbnd", label: "📍 Share Location", nextStep: "LOCATION_PROMPT_BABY" },
+      {
+        id: "opt_share_loc_bbnd",
+        label: "📍 Share Location",
+        action: "send_current_location",
+        rescueType: "weak_abandoned_baby",
+        inDanger: false,
+      },
       {
         id: "opt_send_photo_bbnd",
         label: "📷 Send Photo",
