@@ -389,7 +389,7 @@ export default function Connect() {
             sender: "bot",
             text: `💳 You can support ${selectedNgo.name} directly:\n\nHelpline / UPI: ${selectedNgo.phone}\nService Area: ${selectedNgo.serviceArea}\n\nThank you for saving stray lives! ❤️`,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            options: [{ id: "opt_back_dondone", label: "← Back", action: "go_back" }],
+            options: [],
           };
           setBotMessages((prev) => [...prev, donateMsg]);
           return;
@@ -470,7 +470,6 @@ export default function Connect() {
             isSuccess: true,
             options: [
               { id: "opt_contact_succ", label: "📞 Contact NGO", action: "contact_ngo" },
-              { id: "opt_back_succ", label: "← Back", action: "go_back" },
             ],
           };
 
@@ -486,7 +485,6 @@ export default function Connect() {
             options: [
               { id: "opt_try_again_loc", label: "🔄 Try Again", action: "send_current_location", rescueType, subType: subType || undefined, inDanger },
               { id: "opt_man_fallback", label: "🗺️ Enter Location Manually", action: "prompt_manual_location", rescueType, subType: subType || undefined, inDanger },
-              { id: "opt_back_err", label: "← Back", action: "go_back" },
             ],
           };
           setBotMessages((prev) => [...prev, errorMsg]);
@@ -552,7 +550,6 @@ export default function Connect() {
         isSuccess: true,
         options: [
           { id: "opt_contact_man_succ", label: "📞 Contact NGO", action: "contact_ngo" },
-          { id: "opt_back_man_succ", label: "← Back", action: "go_back" },
         ],
       };
 
@@ -567,7 +564,6 @@ export default function Connect() {
         isError: true,
         options: [
           { id: "opt_try_again_man", label: "🔄 Try Again", action: "prompt_manual_location" },
-          { id: "opt_back_man_err", label: "← Back", action: "go_back" },
         ],
       };
       setBotMessages((prev) => [...prev, errorMsg]);
@@ -615,7 +611,6 @@ export default function Connect() {
         isSuccess: true,
         options: [
           { id: "opt_contact_photo_succ", label: "📞 Contact NGO", action: "contact_ngo" },
-          { id: "opt_back_photo_succ", label: "← Back", action: "go_back" },
         ],
       };
       setBotMessages((prev) => [...prev, botPhotoSucc]);
@@ -1163,19 +1158,33 @@ export default function Connect() {
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                       Select an option:
                     </span>
-                    <button
-                      onClick={handleResetToMainMenu}
-                      className="text-[10px] font-bold text-slate-500 hover:text-green-800 flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded-md hover:bg-slate-100"
-                    >
-                      <RotateCcw size={11} /> Reset Menu
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {currentBotStep !== "MAIN_MENU" && (
+                        <button
+                          type="button"
+                          onClick={handleGoBack}
+                          className="text-[10px] font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer transition py-0.5 px-2 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200"
+                        >
+                          <ArrowLeft size={10} /> Back
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleResetToMainMenu}
+                        className="text-[10px] font-bold text-slate-500 hover:text-green-800 flex items-center gap-1 cursor-pointer transition py-0.5 px-1.5 rounded-md hover:bg-slate-100"
+                      >
+                        <RotateCcw size={11} /> Reset Menu
+                      </button>
+                    </div>
                   </div>
 
                   {/* Render Current Active Options */}
                   <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-0.5">
                     {(() => {
                       const latestBotMsgWithOptions = [...botMessages].reverse().find((m) => m.sender === "bot" && m.options && m.options.length > 0);
-                      const currentOptions = latestBotMsgWithOptions?.options || CHATBOT_FLOW_CONFIG[currentBotStep]?.options || [];
+                      const currentOptions = (latestBotMsgWithOptions?.options || CHATBOT_FLOW_CONFIG[currentBotStep]?.options || []).filter(
+                        (opt) => opt.action !== "go_back" && !opt.label.includes("Back")
+                      );
 
                       return currentOptions.map((opt) => (
                         <button
@@ -1184,9 +1193,7 @@ export default function Connect() {
                           disabled={locationLoading || photoUploading || requestLock}
                           onClick={() => handleOptionSelect(opt)}
                           className={`py-2.5 px-3.5 rounded-2xl text-xs font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
-                            opt.label.includes("Back") || opt.action === "go_back"
-                              ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 hover:text-slate-900"
-                              : opt.label.includes("Contact NGO")
+                            opt.label.includes("Contact NGO")
                               ? "bg-sky-600 hover:bg-sky-700 text-white border border-sky-600 shadow-sky-100"
                               : opt.label.includes("Rescue") || opt.label.includes("Injured") || opt.label.includes("Danger") || opt.label.includes("Send") || opt.label.includes("Share")
                               ? "bg-green-700 hover:bg-green-800 text-white border border-green-700 hover:scale-[1.02] shadow-green-100"

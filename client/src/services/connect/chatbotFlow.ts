@@ -35,7 +35,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       { id: "opt_injured", label: "🩹 Injured Animal", nextStep: "INJURED_STEP1" },
       { id: "opt_trapped", label: "🐾 Trapped Animal", nextStep: "TRAPPED_STEP1" },
       { id: "opt_baby", label: "🐣 Weak/Abandoned Baby", nextStep: "BABY_STEP1" },
-      { id: "opt_back_rescue", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -51,7 +50,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
         rescueType: "injured_animal",
       },
       { id: "opt_self_trans", label: "🚗 I Can Take It Myself", nextStep: "SELF_TRANSPORT" },
-      { id: "opt_back_inj", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -71,7 +69,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
         action: "prompt_manual_location",
         rescueType: "injured_animal",
       },
-      { id: "opt_back_loc_inj", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -81,7 +78,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       `Thank you! ❤️\n\nYou can bring the animal directly to:\n\n📍 ${ngoName}${ngoLocation ? `\n(${ngoLocation})` : ""}`,
     options: [
       { id: "opt_get_dir", label: "🗺️ Get Directions", action: "get_directions" },
-      { id: "opt_back_st", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -94,7 +90,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       { id: "opt_const", label: "🏗️ Construction Area", nextStep: "TRAPPED_LOCATION", subType: "Construction Area" },
       { id: "opt_bldg", label: "🏠 Building / Room", nextStep: "TRAPPED_LOCATION", subType: "Building / Room" },
       { id: "opt_other_trap", label: "🌳 Other", nextStep: "TRAPPED_LOCATION", subType: "Other Location" },
-      { id: "opt_back_trap1", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -114,7 +109,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
         action: "prompt_manual_location",
         rescueType: "trapped_animal",
       },
-      { id: "opt_back_trap", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -125,7 +119,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
     options: [
       { id: "opt_baby_danger_yes", label: "🚨 Yes", nextStep: "BABY_DANGER_LOCATION" },
       { id: "opt_baby_danger_no", label: "🟢 No", nextStep: "BABY_NOT_DANGER" },
-      { id: "opt_back_baby", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -147,7 +140,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
         rescueType: "weak_abandoned_baby",
         inDanger: true,
       },
-      { id: "opt_back_bbd", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -169,7 +161,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
         rescueType: "weak_abandoned_baby",
         inDanger: false,
       },
-      { id: "opt_back_bbnd", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -191,7 +182,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
         rescueType: "weak_abandoned_baby",
         inDanger: false,
       },
-      { id: "opt_back_lbb", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -203,7 +193,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       { id: "opt_dog", label: "🐕 Dog", nextStep: "ADOPT_LOCATION" },
       { id: "opt_cat", label: "🐈 Cat", nextStep: "ADOPT_LOCATION" },
       { id: "opt_any_pet", label: "🐾 Any Animal", nextStep: "ADOPT_LOCATION" },
-      { id: "opt_back_adopt", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -214,7 +203,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       { id: "opt_near_me", label: "📍 Near Me", nextStep: "ADOPT_SUCCESS" },
       { id: "opt_sel_loc", label: "🗺️ Select Location", nextStep: "ADOPT_SUCCESS" },
       { id: "opt_anywhere", label: "🌎 Anywhere", nextStep: "ADOPT_SUCCESS" },
-      { id: "opt_back_adloc", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -224,7 +212,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       `Great! ❤️ We've recorded your interest with ${ngoName}'s adoption team. A coordinator will share verified animal profiles with you.`,
     options: [
       { id: "opt_contact_adopt", label: "📞 Contact NGO", action: "contact_ngo" },
-      { id: "opt_back_adsucc", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -236,7 +223,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       { id: "opt_vol_rescue", label: "🚑 Rescue", nextStep: "VOLUNTEER_RESCUE" },
       { id: "opt_vol_foster", label: "🏠 Foster", nextStep: "VOLUNTEER_FOSTER" },
       { id: "opt_vol_aware", label: "📢 Awareness", nextStep: "VOLUNTEER_AWARENESS" },
-      { id: "opt_back_vol", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -245,7 +231,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
     message: "Rescue volunteers can help nearby animals in need.",
     options: [
       { id: "opt_become_guard", label: "🐾 Become a Guardian", action: "navigate_guardian" },
-      { id: "opt_back_vrec", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -254,7 +239,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
     message: "Thank you! Foster volunteers temporarily care for animals until permanent help is found.",
     options: [
       { id: "opt_reg_foster", label: "🤝 Register Interest", nextStep: "FOSTER_REGISTERED" },
-      { id: "opt_back_vfost", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -264,14 +248,13 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       `Thank you! Your foster interest has been recorded with ${ngoName}. A shelter coordinator will contact you. ❤️`,
     options: [
       { id: "opt_contact_foster", label: "📞 Contact NGO", action: "contact_ngo" },
-      { id: "opt_back_fost_reg", label: "← Back", action: "go_back" },
     ],
   },
 
   VOLUNTEER_AWARENESS: {
     id: "VOLUNTEER_AWARENESS",
     message: "Thank you for helping spread awareness about animal rescue and street dog welfare. ❤️",
-    options: [{ id: "opt_back_vaw", label: "← Back", action: "go_back" }],
+    options: [],
   },
 
   // 8. Donate Flow
@@ -283,7 +266,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
       { id: "opt_don_med", label: "🏥 Medical Care", nextStep: "DONATE_CATEGORY" },
       { id: "opt_don_food", label: "🍖 Food", nextStep: "DONATE_CATEGORY" },
       { id: "opt_don_shelter", label: "🏠 Shelter", nextStep: "DONATE_CATEGORY" },
-      { id: "opt_back_don", label: "← Back", action: "go_back" },
     ],
   },
 
@@ -292,7 +274,6 @@ export const CHATBOT_FLOW_CONFIG: Record<string, ChatStep> = {
     message: "Your support helps rescue organizations continue helping animals. ❤️",
     options: [
       { id: "opt_do_donate", label: "💳 Donate", action: "show_donation_info" },
-      { id: "opt_back_doncat", label: "← Back", action: "go_back" },
     ],
   },
 };
