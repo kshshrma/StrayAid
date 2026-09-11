@@ -10,6 +10,7 @@ import rescueRoutes from "./routes/rescue";
 import adminRoutes from "./routes/admin";
 import reportRoutes from "./routes/report";
 import messageRoutes from "./routes/message";
+import caseRoutes from "./routes/case";
 import { supabase } from "./services/supabase";
 import http from "http";
 import { Server } from "socket.io";
@@ -24,6 +25,7 @@ app.use(express.json());
 // API Routes
 app.use("/api/ai", aiRoutes);
 app.use("/api/rescue", rescueRoutes);
+app.use("/api/cases", caseRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/messages", messageRoutes);
@@ -169,7 +171,6 @@ io.on("connection", (socket) => {
 
     if (!conversationId) return;
 
-    // Verify conversation exists and user is an authorized participant
     try {
       const conversation = await getConversationById(conversationId);
       if (!conversation) {
@@ -177,7 +178,13 @@ io.on("connection", (socket) => {
         return;
       }
 
-      if (userId && userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
+      const isParticipant =
+        !userId ||
+        userId === conversation.participant1Id ||
+        userId === conversation.participant2Id ||
+        conversation.participants?.some((p) => p.userId === userId);
+
+      if (!isParticipant) {
         console.warn(`[Socket Security] Unauthorized socket join rejected for user ${userId} in room conversation:${conversationId}`);
         return;
       }
@@ -187,6 +194,30 @@ io.on("connection", (socket) => {
       console.log(`👤 Socket ${socket.id} joined conversation room: ${roomName}`);
     } catch (err) {
       console.error("[Socket Security] Error verifying conversation join:", err);
+    }
+  });
+
+  socket.on("join_case_room", (caseId: string) => {
+    if (caseId) {
+      const roomName = `case:${caseId}`;
+      socket.join(roomName);
+      console.log(`🚑 Socket ${socket.id} joined case room: ${roomName}`);
+    }
+  });
+
+  socket.on("leave_case_room", (caseId: string) => {
+    if (caseId) {
+      const roomName = `case:${caseId}`;
+      socket.leave(roomName);
+      console.log(`🚑 Socket ${socket.id} left case room: ${roomName}`);
+    }
+  });
+
+  socket.on("join_ngo_room", (ngoId: string) => {
+    if (ngoId) {
+      const roomName = `ngo:${ngoId}`;
+      socket.join(roomName);
+      console.log(`🏢 Socket ${socket.id} joined NGO room: ${roomName}`);
     }
   });
 

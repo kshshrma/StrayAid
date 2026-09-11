@@ -1,7 +1,15 @@
+export enum NgoVerificationStatus {
+  PENDING = "pending",
+  APPROVED = "approved",
+  REJECTED = "rejected",
+}
+
 export interface RegisteredNGO {
   id: string; // organizationId
   name: string;
-  isVerified: boolean;
+  isVerified: boolean; // Backwards-compatible flag (true if verificationStatus === APPROVED)
+  verificationStatus: NgoVerificationStatus;
+  status: "ACTIVE" | "INACTIVE";
   availability: "available" | "busy" | "offline";
   location: string;
   categories: string[];
@@ -11,6 +19,9 @@ export interface RegisteredNGO {
   serviceArea: string;
   representativeUserId: string; // Authorized NGO member account
   avatarUrl?: string | null;
+  rejectionReason?: string;
+  verificationRequestedAt?: string;
+  verifiedAt?: string;
 }
 
 export interface EmergencyHelpline {
@@ -27,6 +38,8 @@ export const REGISTERED_NGOS: RegisteredNGO[] = [
     id: "ngo-greater-noida-rescuers",
     name: "Greater Noida Rescuers",
     isVerified: true,
+    verificationStatus: NgoVerificationStatus.APPROVED,
+    status: "ACTIVE",
     availability: "available",
     location: "Greater Noida & Noida Sector 1–150",
     categories: ["Rescue", "Injured Animals", "Strays", "Emergency Transport"],
@@ -36,11 +49,14 @@ export const REGISTERED_NGOS: RegisteredNGO[] = [
     serviceArea: "Greater Noida, Noida-Greater Noida Expressway, Alpha, Beta, Delta & Knowledge Park",
     representativeUserId: "6c4c4175-c2c4-470b-a5d5-c86639f3e949",
     avatarUrl: null,
+    verifiedAt: new Date().toISOString(),
   },
   {
     id: "ngo-vet-first-aid",
     name: "Veterinary First Aid Support",
     isVerified: true,
+    verificationStatus: NgoVerificationStatus.APPROVED,
+    status: "ACTIVE",
     availability: "available",
     location: "Delhi NCR / Greater Noida",
     categories: ["First Aid Advice", "Emergency Triage", "Vaccination Guidance", "Prescription Consult"],
@@ -50,11 +66,14 @@ export const REGISTERED_NGOS: RegisteredNGO[] = [
     serviceArea: "Delhi, Noida, Greater Noida, Ghaziabad & Gurgaon",
     representativeUserId: "a434a8d0-e23f-4388-8aac-fcd5fb38b2a6",
     avatarUrl: null,
+    verifiedAt: new Date().toISOString(),
   },
   {
     id: "ngo-coordination-hub",
     name: "NGO Coordination Hub",
     isVerified: true,
+    verificationStatus: NgoVerificationStatus.APPROVED,
+    status: "ACTIVE",
     availability: "available",
     location: "Noida & Greater Noida",
     categories: ["Shelter Placement", "Fostering", "Adoption Coordination", "Transport Fleet"],
@@ -64,6 +83,7 @@ export const REGISTERED_NGOS: RegisteredNGO[] = [
     serviceArea: "All major animal shelters in Noida & Greater Noida",
     representativeUserId: "c5344b2a-c1b9-4489-aaa4-1b478d11ae5d",
     avatarUrl: null,
+    verifiedAt: new Date().toISOString(),
   },
 ];
 
@@ -92,4 +112,34 @@ export function getRegisteredNgoById(organizationId: string): RegisteredNGO | nu
 
 export function getNgoByRepresentativeUserId(userId: string): RegisteredNGO | null {
   return REGISTERED_NGOS.find((n) => n.representativeUserId === userId) || null;
+}
+
+/**
+ * Security Gate: Checks if NGO is verified & actively eligible to receive cases
+ */
+export function isNgoEligibleForDispatch(organizationId: string): boolean {
+  const ngo = getRegisteredNgoById(organizationId);
+  if (!ngo) return false;
+  return (
+    (ngo.verificationStatus === NgoVerificationStatus.APPROVED || ngo.isVerified === true) &&
+    ngo.status === "ACTIVE"
+  );
+}
+
+/**
+ * Returns only approved, active NGOs for public dispatch
+ */
+export function getApprovedNgos(): RegisteredNGO[] {
+  return REGISTERED_NGOS.filter(
+    (n) =>
+      (n.verificationStatus === NgoVerificationStatus.APPROVED || n.isVerified === true) &&
+      n.status === "ACTIVE"
+  );
+}
+
+/**
+ * Returns all registered NGOs including pending ones (for admins)
+ */
+export function getAllRegisteredNgos(): RegisteredNGO[] {
+  return REGISTERED_NGOS;
 }

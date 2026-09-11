@@ -4,38 +4,60 @@ import crypto from "crypto";
 import { supabase } from "./supabase";
 import { getRegisteredNgoById, REGISTERED_NGOS, RegisteredNGO } from "./ngoService";
 
+export interface ConversationParticipant {
+  userId: string;
+  role: "REPORTER" | "NGO" | "VOLUNTEER" | "VET" | "FOSTER" | "CITIZEN";
+  name?: string | undefined;
+  joinedAt: string;
+  leftAt?: string | undefined;
+}
+
 export interface Conversation {
   id: string;
-  type?: "report" | "ngo";
-  organizationId?: string;
-  reportId?: string;
-  participant1Id: string; // Citizen User ID
-  participant2Id: string; // Report Owner or Authorized NGO Member User ID
+  caseId?: string | undefined;
+  type?: "REPORTER_NGO" | "NGO_VOLUNTEER" | "NGO_VET" | "CASE_GROUP" | "report" | "ngo" | undefined;
+  title?: string | undefined;
+  organizationId?: string | undefined;
+  reportId?: string | undefined;
+  participant1Id?: string | undefined; // Citizen / Initiator
+  participant2Id?: string | undefined; // NGO / Report Owner
+  participants: ConversationParticipant[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface MessageMetadata {
-  type?: "text" | "report_attachment";
-  reportId?: string;
-  animalType?: string;
-  breed?: string;
-  status?: "lost" | "found";
-  location?: string;
-  urgency?: string;
-  imageUrl?: string;
+  type?: "text" | "report_attachment" | "case_update" | undefined;
+  reportId?: string | undefined;
+  caseId?: string | undefined;
+  animalType?: string | undefined;
+  breed?: string | undefined;
+  status?: "lost" | "found" | undefined;
+  location?: string | undefined;
+  urgency?: string | undefined;
+  imageUrl?: string | undefined;
+}
+
+export interface MessageReadState {
+  messageId: string;
+  userId: string;
+  readAt?: string | undefined;
+  deliveredAt?: string | undefined;
 }
 
 export interface Message {
   id: string;
   conversationId: string;
-  reportId?: string;
+  caseId?: string | undefined;
+  reportId?: string | undefined;
   senderId: string;
-  recipientId: string;
+  senderName?: string | undefined;
+  recipientId?: string | undefined; // Kept for 1-on-1 compatibility
   content: string;
   createdAt: string;
   isRead: boolean;
-  metadata?: MessageMetadata;
+  readStates?: MessageReadState[] | undefined;
+  metadata?: MessageMetadata | undefined;
 }
 
 const DATA_DIR = path.resolve("src/data");
@@ -78,51 +100,30 @@ async function ensureFilesExist() {
       await fs.writeFile(MESSAGES_FILE, JSON.stringify([]), "utf-8");
     }
 
-    if (messagesExist) {
-      const messagesContent = await fs.readFile(MESSAGES_FILE, "utf-8");
-      const messages: any[] = JSON.parse(messagesContent || "[]");
+    if (messagesExist && conversationsExist) {
+      const convContent = await fs.readFile(CONVERSATIONS_FILE, "utf-8");
+      const conversations: any[] = JSON.parse(convContent || "[]");
+      let convsUpdated = false;
 
-      const conversationsContent = await fs.readFile(CONVERSATIONS_FILE, "utf-8");
-      const conversations: Conversation[] = JSON.parse(conversationsContent || "[]");
-
-      const needsMigration = messages.some((m) => !m.conversationId);
-      if (needsMigration) {
-        console.log("🛠️ Migrating old messages to conversation-based database schema...");
-        for (const msg of messages) {
-          if (!msg.conversationId) {
-            const ownerId = await getReportOwnerId(msg.reportId);
-            const enquirerId = msg.senderId === ownerId ? msg.recipientId : msg.senderId;
-
-            let conv = conversations.find(
-              (c) =>
-                c.reportId === msg.reportId &&
-                ((c.participant1Id === ownerId && c.participant2Id === enquirerId) ||
-                  (c.participant1Id === enquirerId && c.participant2Id === ownerId))
-            );
-
-            if (!conv) {
-              conv = {
-                id: crypto.randomUUID(),
-                type: "report",
-                reportId: msg.reportId,
-                participant1Id: ownerId,
-                participant2Id: enquirerId,
-                createdAt: msg.createdAt || new Date().toISOString(),
-                updatedAt: msg.createdAt || new Date().toISOString(),
-              };
-              conversations.push(conv);
-            }
-            msg.conversationId = conv.id;
+      for (const c of conversations) {
+        if (!c.participants || !Array.isArray(c.participants)) {
+          c.participants = [];
+          if (c.participant1Id) {
+            c.participants.push({ userId: c.participant1Id, role: "CITIZEN", joinedAt: c.createdAt || new Date().toISOString() });
           }
+          if (c.participant2Id) {
+            c.participants.push({ userId: c.participant2Id, role: "NGO", joinedAt: c.createdAt || new Date().toISOString() });
+          }
+          convsUpdated = true;
         }
+      }
 
+      if (convsUpdated) {
         await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(conversations, null, 2), "utf-8");
-        await fs.writeFile(MESSAGES_FILE, JSON.stringify(messages, null, 2), "utf-8");
-        console.log("✅ Messages migration completed successfully!");
       }
     }
   } catch (err) {
-    console.error("[MessageService] Error during files initialization/migration:", err);
+    console.error("[MessageService] Error initializing files:", err);
   }
 }
 
@@ -131,7 +132,7 @@ export async function readConversations(): Promise<Conversation[]> {
   try {
     const content = await fs.readFile(CONVERSATIONS_FILE, "utf-8");
     return JSON.parse(content || "[]");
-  } catch (e) {
+  } catch {
     return [];
   }
 }
@@ -146,7 +147,7 @@ export async function readMessages(): Promise<Message[]> {
   try {
     const content = await fs.readFile(MESSAGES_FILE, "utf-8");
     return JSON.parse(content || "[]");
-  } catch (e) {
+  } catch {
     return [];
   }
 }
@@ -161,29 +162,87 @@ export async function getConversationById(id: string): Promise<Conversation | nu
   return conversations.find((c) => c.id === id) || null;
 }
 
-export async function getOrCreateConversation(
-  reportId: string,
-  participant1Id: string,
-  participant2Id: string
+export async function getOrCreateCaseConversation(
+  caseId: string,
+  type: "REPORTER_NGO" | "NGO_VOLUNTEER" | "NGO_VET" | "CASE_GROUP" = "CASE_GROUP",
+  initialParticipants: { userId: string; role: ConversationParticipant["role"]; name?: string | undefined }[] = [],
+  title?: string
 ): Promise<Conversation> {
   const conversations = await readConversations();
-  
+  let conv = conversations.find((c) => c.caseId === caseId && c.type === type);
+
+  if (!conv) {
+    const now = new Date().toISOString();
+    conv = {
+      id: "conv_" + crypto.randomUUID(),
+      caseId,
+      type,
+      title: title || `Case #${caseId} Coordination`,
+      participants: initialParticipants.map((p) => ({
+        userId: p.userId,
+        role: p.role,
+        name: p.name,
+        joinedAt: now,
+      })),
+      createdAt: now,
+      updatedAt: now,
+    };
+    conversations.unshift(conv);
+    await writeConversations(conversations);
+  } else {
+    // Add missing participants
+    let updated = false;
+    for (const p of initialParticipants) {
+      if (!conv.participants.some((cp) => cp.userId === p.userId)) {
+        conv.participants.push({
+          userId: p.userId,
+          role: p.role,
+          name: p.name,
+          joinedAt: new Date().toISOString(),
+        });
+        updated = true;
+      }
+    }
+    if (updated) {
+      conv.updatedAt = new Date().toISOString();
+      await writeConversations(conversations);
+    }
+  }
+
+  return conv;
+}
+
+export async function getOrCreateNgoConversation(
+  citizenUserId: string,
+  organizationId: string
+): Promise<Conversation> {
+  const conversations = await readConversations();
+  const ngo = getRegisteredNgoById(organizationId);
+  const repUserId = ngo ? ngo.representativeUserId : "6c4c4175-c2c4-470b-a5d5-c86639f3e949";
+
   let conv = conversations.find(
     (c) =>
-      c.reportId === reportId &&
-      ((c.participant1Id === participant1Id && c.participant2Id === participant2Id) ||
-        (c.participant1Id === participant2Id && c.participant2Id === participant1Id))
+      c.type === "ngo" &&
+      c.organizationId === organizationId &&
+      ((c.participant1Id === citizenUserId && c.participant2Id === repUserId) ||
+        (c.participant1Id === repUserId && c.participant2Id === citizenUserId) ||
+        c.participants.some((p) => p.userId === citizenUserId))
   );
 
   if (!conv) {
+    const now = new Date().toISOString();
     conv = {
       id: crypto.randomUUID(),
-      type: "report",
-      reportId,
-      participant1Id,
-      participant2Id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      type: "ngo",
+      organizationId,
+      participant1Id: citizenUserId,
+      participant2Id: repUserId,
+      participants: [
+        { userId: citizenUserId, role: "CITIZEN", joinedAt: now },
+        { userId: repUserId, role: "NGO", joinedAt: now },
+      ],
+      createdAt: now,
+      updatedAt: now,
     };
     conversations.push(conv);
     await writeConversations(conversations);
@@ -192,231 +251,138 @@ export async function getOrCreateConversation(
   return conv;
 }
 
-export async function getOrCreateNgoConversation(
-  userId: string,
-  organizationId: string
-): Promise<{ conversation: Conversation; ngo: RegisteredNGO }> {
-  const ngo = getRegisteredNgoById(organizationId);
-  if (!ngo) {
-    throw new Error(`Invalid organization ID: ${organizationId}`);
-  }
-
+export async function getOrCreateReportConversation(
+  citizenUserId: string,
+  reportId: string
+): Promise<Conversation> {
   const conversations = await readConversations();
-  const representativeUserId = ngo.representativeUserId;
+  const reportOwnerId = await getReportOwnerId(reportId);
 
   let conv = conversations.find(
     (c) =>
-      c.type === "ngo" &&
-      c.organizationId === organizationId &&
-      ((c.participant1Id === userId && c.participant2Id === representativeUserId) ||
-        (c.participant1Id === representativeUserId && c.participant2Id === userId))
+      c.type === "report" &&
+      c.reportId === reportId &&
+      ((c.participant1Id === citizenUserId && c.participant2Id === reportOwnerId) ||
+        (c.participant1Id === reportOwnerId && c.participant2Id === citizenUserId) ||
+        c.participants.some((p) => p.userId === citizenUserId))
   );
 
   if (!conv) {
+    const now = new Date().toISOString();
     conv = {
       id: crypto.randomUUID(),
-      type: "ngo",
-      organizationId,
-      reportId: "",
-      participant1Id: userId,
-      participant2Id: representativeUserId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      type: "report",
+      reportId,
+      participant1Id: citizenUserId,
+      participant2Id: reportOwnerId,
+      participants: [
+        { userId: citizenUserId, role: "CITIZEN", joinedAt: now },
+        { userId: reportOwnerId, role: "CITIZEN", joinedAt: now },
+      ],
+      createdAt: now,
+      updatedAt: now,
     };
     conversations.push(conv);
     await writeConversations(conversations);
   }
 
-  return { conversation: conv, ngo };
+  return conv;
 }
 
-export async function createMessage(
-  conversationId: string,
-  reportId: string,
-  senderId: string,
-  recipientId: string,
-  content: string,
-  metadata?: MessageMetadata
-): Promise<Message> {
-  const messages = await readMessages();
-  const newMessage: Message = {
-    id: crypto.randomUUID(),
-    conversationId,
-    reportId: reportId || "",
-    senderId,
-    recipientId,
-    content,
-    createdAt: new Date().toISOString(),
-    isRead: false,
-    ...(metadata ? { metadata } : {}),
-  };
-  messages.push(newMessage);
-  await writeMessages(messages);
-
-  // Update conversation updatedAt timestamp
+export async function getConversationsForUser(userId: string): Promise<Conversation[]> {
   const conversations = await readConversations();
-  const conv = conversations.find((c) => c.id === conversationId);
-  if (conv) {
-    conv.updatedAt = new Date().toISOString();
-    await writeConversations(conversations);
+  return conversations.filter(
+    (c) =>
+      c.participant1Id === userId ||
+      c.participant2Id === userId ||
+      c.participants.some((p) => p.userId === userId)
+  );
+}
+
+export async function getMessagesByConversationId(conversationId: string): Promise<Message[]> {
+  const messages = await readMessages();
+  return messages.filter((m) => m.conversationId === conversationId);
+}
+
+export async function createMessage(data: {
+  conversationId: string;
+  caseId?: string | undefined;
+  reportId?: string | undefined;
+  senderId: string;
+  senderName?: string | undefined;
+  recipientId?: string | undefined;
+  content: string;
+  metadata?: MessageMetadata | undefined;
+}): Promise<Message> {
+  const messages = await readMessages();
+  const conversations = await readConversations();
+
+  const conversationIndex = conversations.findIndex((c) => c.id === data.conversationId);
+  if (conversationIndex !== -1) {
+    const conv = conversations[conversationIndex];
+    if (conv) {
+      conv.updatedAt = new Date().toISOString();
+      await writeConversations(conversations);
+    }
   }
 
+  const newMessage: Message = {
+    id: crypto.randomUUID(),
+    conversationId: data.conversationId,
+    caseId: data.caseId,
+    reportId: data.reportId,
+    senderId: data.senderId,
+    senderName: data.senderName,
+    recipientId: data.recipientId,
+    content: data.content,
+    createdAt: new Date().toISOString(),
+    isRead: false,
+    readStates: [
+      {
+        messageId: "",
+        userId: data.senderId,
+        readAt: new Date().toISOString(),
+        deliveredAt: new Date().toISOString(),
+      },
+    ],
+    metadata: data.metadata,
+  };
+
+  messages.push(newMessage);
+  await writeMessages(messages);
   return newMessage;
 }
 
-export async function getConversationMessages(conversationId: string): Promise<Message[]> {
-  const messages = await readMessages();
-  return messages
-    .filter((m) => m.conversationId === conversationId)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-}
-
-export async function getUnreadMessagesCount(recipientId: string): Promise<number> {
-  const messages = await readMessages();
-  return messages.filter((m) => m.recipientId === recipientId && !m.isRead).length;
-}
-
-export async function markConversationAsRead(
+export async function markMessagesAsReadForUser(
   conversationId: string,
-  recipientId: string
+  userId: string
 ): Promise<void> {
   const messages = await readMessages();
+  const now = new Date().toISOString();
   let updated = false;
-  const updatedMessages = messages.map((m) => {
-    if (m.conversationId === conversationId && m.recipientId === recipientId && !m.isRead) {
+
+  for (const m of messages) {
+    if (m.conversationId === conversationId && m.senderId !== userId) {
+      m.isRead = true;
+      if (!m.readStates) {
+        m.readStates = [];
+      }
+      const existing = m.readStates.find((r) => r.userId === userId);
+      if (existing) {
+        if (!existing.readAt) existing.readAt = now;
+      } else {
+        m.readStates.push({
+          messageId: m.id,
+          userId,
+          readAt: now,
+          deliveredAt: now,
+        });
+      }
       updated = true;
-      return { ...m, isRead: true };
     }
-    return m;
-  });
+  }
 
   if (updated) {
-    await writeMessages(updatedMessages);
+    await writeMessages(messages);
   }
-}
-
-export async function getConversationsForUser(userId: string): Promise<any[]> {
-  const conversations = await readConversations();
-  const userConvs = conversations.filter(
-    (c) => c.participant1Id === userId || c.participant2Id === userId
-  );
-
-  if (userConvs.length === 0) return [];
-
-  // Batch query profile information for other participants
-  const otherUserIds = Array.from(
-    new Set(
-      userConvs.map((c) => (c.participant1Id === userId ? c.participant2Id : c.participant1Id))
-    )
-  );
-  
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, full_name, avatar_url")
-    .in("id", otherUserIds);
-
-  const profileMap = new Map<string, { full_name: string; avatar_url: string | null }>();
-  if (profiles) {
-    profiles.forEach((p) => {
-      profileMap.set(p.id, { full_name: p.full_name, avatar_url: p.avatar_url });
-    });
-  }
-
-  // Batch query report context information for report conversations
-  const reportIds = Array.from(
-    new Set(userConvs.filter((c) => c.reportId && c.type !== "ngo").map((c) => c.reportId as string))
-  );
-  
-  const reportMap = new Map<string, { name: string; status: string }>();
-  if (reportIds.length > 0) {
-    const { data: reports } = await supabase
-      .from("reports")
-      .select("id, status, animal_type, ai_advice")
-      .in("id", reportIds);
-
-    if (reports) {
-      reports.forEach((r) => {
-        let breed = r.animal_type || "Animal";
-        let name = "";
-        try {
-          const meta = JSON.parse(r.ai_advice || "{}");
-          breed = meta.breed || breed;
-          name = meta.name || "";
-        } catch {}
-        
-        const petName = name ? `${name} (${breed})` : breed;
-        reportMap.set(r.id, { name: petName, status: r.status });
-      });
-    }
-  }
-
-  const messages = await readMessages();
-
-  const list = userConvs.map((c) => {
-    const isNgo = c.type === "ngo";
-    const ngo = isNgo && c.organizationId ? getRegisteredNgoById(c.organizationId) : null;
-    const otherParticipantId = c.participant1Id === userId ? c.participant2Id : c.participant1Id;
-
-    let otherParticipantName = "";
-    let otherParticipantAvatar: string | null = null;
-    let reportName = "";
-    let reportStatus = "";
-
-    if (isNgo && ngo) {
-      otherParticipantName = ngo.name;
-      otherParticipantAvatar = ngo.avatarUrl || null;
-      reportName = `🐾 NGO • ${ngo.categories[0] || "Rescue"}`;
-      reportStatus = ngo.availability;
-    } else {
-      const profile = profileMap.get(otherParticipantId) || {
-        full_name: `User #${otherParticipantId.substring(0, 5)}`,
-        avatar_url: null,
-      };
-      const reportContext = (c.reportId && reportMap.get(c.reportId)) || {
-        name: "Unknown Animal",
-        status: "lost",
-      };
-      otherParticipantName = profile.full_name;
-      otherParticipantAvatar = profile.avatar_url;
-      reportName = reportContext.name;
-      reportStatus = reportContext.status;
-    }
-
-    // Find messages in this conversation
-    const convMsgs = messages.filter((m) => m.conversationId === c.id);
-    const sortedMsgs = [...convMsgs].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-    const lastMsg = sortedMsgs[sortedMsgs.length - 1];
-    const unreadCount = convMsgs.filter((m) => m.recipientId === userId && !m.isRead).length;
-
-    return {
-      conversationId: c.id,
-      type: c.type || "report",
-      organizationId: c.organizationId,
-      reportId: c.reportId,
-      isNgo,
-      ngoDetails: ngo ? {
-        id: ngo.id,
-        name: ngo.name,
-        isVerified: ngo.isVerified,
-        availability: ngo.availability,
-        location: ngo.location,
-        categories: ngo.categories,
-        serviceArea: ngo.serviceArea,
-        phone: ngo.phone,
-      } : null,
-      otherParticipantId,
-      otherParticipantName,
-      otherParticipantAvatar,
-      reportName,
-      reportStatus,
-      lastMessage: lastMsg ? lastMsg.content : "No messages yet.",
-      lastMessageAt: lastMsg ? lastMsg.createdAt : c.updatedAt,
-      unreadCount,
-    };
-  });
-
-  // Sort by lastMessageAt descending
-  return list.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
 }

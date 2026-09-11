@@ -531,18 +531,18 @@ export async function createBotRescueRequest(req: AuthenticatedRequest, res: Res
     }
 
     // 3. Create or retrieve NGO conversation
-    const { conversation } = await getOrCreateNgoConversation(userId, ngoId);
+    const conversation = await getOrCreateNgoConversation(userId, ngoId);
 
     // 4. Create an automated case summary message in the NGO conversation
     const caseSummary = `🚨 NEW RESCUE REQUEST: ${rescueTitle}\n📍 Location: ${locationText}\n⚡ Priority: ${priority}\n⚠️ Status: Pending NGO Dispatch`;
 
-    const message = await createMessage(
-      conversation.id,
-      report.id,
-      userId,
-      ngo.representativeUserId,
-      caseSummary,
-      {
+    const message = await createMessage({
+      conversationId: conversation.id,
+      reportId: report.id,
+      senderId: userId,
+      recipientId: ngo.representativeUserId,
+      content: caseSummary,
+      metadata: {
         type: "report_attachment",
         reportId: report.id,
         animalType: "Rescue Request",
@@ -551,8 +551,8 @@ export async function createBotRescueRequest(req: AuthenticatedRequest, res: Res
         location: locationText,
         urgency: priority,
         imageUrl: imageUrl || undefined,
-      }
-    );
+      },
+    });
 
     // 5. Emit real-time Socket.IO notifications
     const io = req.app.get("io");

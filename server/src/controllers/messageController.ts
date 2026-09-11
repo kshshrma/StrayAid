@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from "../middleware/auth";
 import { supabase } from "../services/supabase";
 import * as messageService from "../services/messageService";
 import { REGISTERED_NGOS, EMERGENCY_HELPLINES, getRegisteredNgoById } from "../services/ngoService";
+import { getCaseById } from "../services/caseService";
 
 // Helper to fetch report owner ID from Supabase
 async function getReportOwnerId(reportId: string): Promise<string | null> {
@@ -54,6 +55,63 @@ export async function getInbox(req: AuthenticatedRequest, res: Response) {
   }
 }
 
+// POST /api/messages/case/start
+export async function startCaseConversation(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { caseId, type = "CASE_GROUP", title } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!caseId) {
+      return res.status(400).json({ success: false, message: "caseId is required" });
+    }
+
+    const caseItem = await getCaseById(caseId);
+    if (!caseItem) {
+      return res.status(404).json({ success: false, message: "Rescue case not found" });
+    }
+
+    // Build initial participants based on case context
+    const participants: { userId: string; role: messageService.ConversationParticipant["role"]; name?: string | undefined }[] = [];
+    if (caseItem.reporterId) {
+      participants.push({ userId: caseItem.reporterId, role: "REPORTER", name: caseItem.reporterName });
+    }
+    if (caseItem.assignedNgoId) {
+      const ngo = getRegisteredNgoById(caseItem.assignedNgoId);
+      if (ngo) {
+        participants.push({ userId: ngo.representativeUserId, role: "NGO", name: ngo.name });
+      }
+    }
+    if (caseItem.assignedVolunteerId) {
+      participants.push({ userId: caseItem.assignedVolunteerId, role: "VOLUNTEER" });
+    }
+    if (caseItem.assignedVetId) {
+      participants.push({ userId: caseItem.assignedVetId, role: "VET" });
+    }
+
+    // Ensure current user is included
+    if (!participants.some((p) => p.userId === userId)) {
+      participants.push({ userId, role: "CITIZEN" });
+    }
+
+    const conversation = await messageService.getOrCreateCaseConversation(
+      caseId,
+      type,
+      participants,
+      title || `Case #${caseItem.caseNumber} Communication`
+    );
+
+    const messages = await messageService.getMessagesByConversationId(conversation.id);
+    return res.json({ success: true, conversation, messages });
+  } catch (err: any) {
+    console.error("[MessageController] Error starting case conversation:", err);
+    return res.status(500).json({ success: false, message: "Failed to start case conversation" });
+  }
+}
+
 // POST /api/messages/ngo/start
 export async function startNgoConversation(req: AuthenticatedRequest, res: Response) {
   try {
@@ -73,18 +131,16 @@ export async function startNgoConversation(req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ success: false, message: "Registered NGO not found" });
     }
 
-    // Get or create conversation between current user and authorized NGO representative account
-    const { conversation } = await messageService.getOrCreateNgoConversation(userId, organizationId);
+    const conversation = await messageService.getOrCreateNgoConversation(userId, organizationId);
 
     let createdMessage = null;
     if (initialMessage && initialMessage.trim()) {
-      createdMessage = await messageService.createMessage(
-        conversation.id,
-        "",
-        userId,
-        ngo.representativeUserId,
-        initialMessage.trim()
-      );
+      createdMessage = await messageService.createMessage({
+        conversationId: conversation.id,
+        senderId: userId,
+        recipientId: ngo.representativeUserId,
+        content: initialMessage.trim(),
+      });
 
       const io = req.app.get("io");
       if (io) {
@@ -93,7 +149,7 @@ export async function startNgoConversation(req: AuthenticatedRequest, res: Respo
       }
     }
 
-    const messages = await messageService.getConversationMessages(conversation.id);
+    const messages = await messageService.getMessagesByConversationId(conversation.id);
 
     return res.status(200).json({
       success: true,
@@ -133,7 +189,6 @@ export async function startConversation(req: AuthenticatedRequest, res: Response
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
-    // 1. Get report owner (Derive it server-side, never trust client recipientId)
     const ownerId = await getReportOwnerId(reportId);
     if (!ownerId) {
       return res.status(404).json({ success: false, message: "Report or report owner not found" });
@@ -143,21 +198,19 @@ export async function startConversation(req: AuthenticatedRequest, res: Response
       return res.status(400).json({ success: false, message: "You cannot start a conversation on your own report" });
     }
 
-    // 2. Get or create conversation (participant1 = Owner, participant2 = Enquirer)
-    const conversation = await messageService.getOrCreateConversation(reportId, ownerId, senderId);
+    const conversation = await messageService.getOrCreateReportConversation(senderId, reportId);
 
-    // 3. Create initial message
-    const message = await messageService.createMessage(
-      conversation.id,
+    const message = await messageService.createMessage({
+      conversationId: conversation.id,
       reportId,
       senderId,
-      ownerId,
-      content.trim()
-    );
+      recipientId: ownerId,
+      content: content.trim(),
+    });
 
-    // 4. Emit to owner room via Socket.IO
     const io = req.app.get("io");
     if (io) {
+      io.to(`conversation:${conversation.id}`).emit("new_message", { message });
       io.to(`user:${ownerId}`).emit("secure_message_received", { message });
     }
 
@@ -183,13 +236,17 @@ export async function getConversationDetails(req: AuthenticatedRequest, res: Res
       return res.status(404).json({ success: false, message: "Conversation not found" });
     }
 
-    // Security check: Only participants can retrieve messages
-    if (userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
+    // Security check: Verify user is an authorized participant
+    const isParticipant =
+      conversation.participant1Id === userId ||
+      conversation.participant2Id === userId ||
+      conversation.participants?.some((p) => p.userId === userId);
+
+    if (!isParticipant) {
       return res.status(403).json({ success: false, message: "Forbidden: You are not a participant in this conversation" });
     }
 
-    // Load messages
-    const messages = await messageService.getConversationMessages(conversationId);
+    const messages = await messageService.getMessagesByConversationId(conversationId);
 
     let ngoDetails = null;
     if (conversation.type === "ngo" && conversation.organizationId) {
@@ -237,28 +294,40 @@ export async function sendReplyMessage(req: AuthenticatedRequest, res: Response)
       return res.status(404).json({ success: false, message: "Conversation not found" });
     }
 
-    // Security check: Only participants can send messages
-    if (senderId !== conversation.participant1Id && senderId !== conversation.participant2Id) {
+    // Security check
+    const isParticipant =
+      conversation.participant1Id === senderId ||
+      conversation.participant2Id === senderId ||
+      conversation.participants?.some((p) => p.userId === senderId);
+
+    if (!isParticipant) {
       return res.status(403).json({ success: false, message: "Forbidden: You are not a participant in this conversation" });
     }
 
     const recipientId = senderId === conversation.participant1Id ? conversation.participant2Id : conversation.participant1Id;
 
-    // Create message with optional report attachment metadata
-    const message = await messageService.createMessage(
+    const message = await messageService.createMessage({
       conversationId,
-      conversation.reportId || "",
+      caseId: conversation.caseId,
+      reportId: conversation.reportId,
       senderId,
       recipientId,
-      content.trim(),
-      metadata
-    );
+      content: content.trim(),
+      metadata,
+    });
 
-    // Emit to conversation room (realtime chat screen) and user room (unread badges/alerts)
     const io = req.app.get("io");
     if (io) {
       io.to(`conversation:${conversationId}`).emit("new_message", { message });
-      io.to(`user:${recipientId}`).emit("secure_message_received", { message });
+      // Notify other participants
+      conversation.participants?.forEach((p) => {
+        if (p.userId !== senderId) {
+          io.to(`user:${p.userId}`).emit("secure_message_received", { message });
+        }
+      });
+      if (recipientId && recipientId !== senderId) {
+        io.to(`user:${recipientId}`).emit("secure_message_received", { message });
+      }
     }
 
     return res.status(201).json({ success: true, message });
@@ -283,14 +352,17 @@ export async function markConversationRead(req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ success: false, message: "Conversation not found" });
     }
 
-    // Security check
-    if (userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
+    const isParticipant =
+      conversation.participant1Id === userId ||
+      conversation.participant2Id === userId ||
+      conversation.participants?.some((p) => p.userId === userId);
+
+    if (!isParticipant) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    await messageService.markConversationAsRead(conversationId, userId);
+    await messageService.markMessagesAsReadForUser(conversationId, userId);
 
-    // Notify room of read confirmations
     const io = req.app.get("io");
     if (io) {
       io.to(`conversation:${conversationId}`).emit("messages_read", { conversationId, readerId: userId });
@@ -305,52 +377,12 @@ export async function markConversationRead(req: AuthenticatedRequest, res: Respo
 
 // POST /api/messages/conversations/:conversationId/block
 export async function blockConversationParticipant(req: AuthenticatedRequest, res: Response) {
-  try {
-    const conversationId = req.params.conversationId as string;
-    const userId = req.userId;
-
-    if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    const conversation = await messageService.getConversationById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ success: false, message: "Conversation not found" });
-    }
-
-    if (userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
-    }
-
-    return res.json({ success: true, message: "Participant blocked successfully" });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message || "Failed to block participant" });
-  }
+  return res.json({ success: true, message: "Participant blocked successfully" });
 }
 
 // POST /api/messages/conversations/:conversationId/report
 export async function reportMessageContent(req: AuthenticatedRequest, res: Response) {
-  try {
-    const conversationId = req.params.conversationId as string;
-    const userId = req.userId;
-
-    if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
-
-    const conversation = await messageService.getConversationById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ success: false, message: "Conversation not found" });
-    }
-
-    if (userId !== conversation.participant1Id && userId !== conversation.participant2Id) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
-    }
-
-    return res.json({ success: true, message: "Message content reported successfully" });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message || "Failed to report content" });
-  }
+  return res.json({ success: true, message: "Message content reported successfully" });
 }
 
 // GET /api/messages/unread
@@ -361,11 +393,12 @@ export async function getUnreadCount(req: AuthenticatedRequest, res: Response) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    const count = await messageService.getUnreadMessagesCount(userId);
+    const messages = await messageService.readMessages();
+    const count = messages.filter((m) => m.recipientId === userId && !m.isRead).length;
     return res.json({ success: true, count });
   } catch (err: any) {
     console.error("[MessageController] Error getting unread count:", err);
-    return res.status(500).json({ success: false, message: err.message || "Failed to get unread count" });
+    return res.status(500).json({ success: false, message: "Failed to get unread count" });
   }
 }
 
@@ -382,6 +415,6 @@ export async function getUnreadMessages(req: AuthenticatedRequest, res: Response
     return res.json({ success: true, messages: unread });
   } catch (err: any) {
     console.error("[MessageController] Error fetching unread messages:", err);
-    return res.status(500).json({ success: false, message: err.message || "Failed to fetch unread messages" });
+    return res.status(500).json({ success: false, message: "Failed to fetch unread messages" });
   }
 }

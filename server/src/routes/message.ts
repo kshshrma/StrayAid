@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth";
 import {
   getNgosList,
   startNgoConversation,
+  startCaseConversation,
   getInbox,
   startConversation,
   getConversationDetails,
@@ -16,9 +17,10 @@ import {
 
 const router = Router();
 
-// NGO Registry & NGO Conversations
+// NGO Registry & Case/NGO Conversations
 router.get("/ngos", getNgosList);
 router.post("/ngo/start", requireAuth, startNgoConversation);
+router.post("/case/start", requireAuth, startCaseConversation);
 
 // Inbox & Report Conversations
 router.get("/inbox", requireAuth, getInbox);
