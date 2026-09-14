@@ -128,9 +128,29 @@ export async function createCaseHandler(req: AuthenticatedRequest, res: Response
     // Notify via Socket.IO if available
     const io = req.app.get("io");
     if (io) {
-      io.emit("new_rescue_case", { case: newCase });
+      io.emit("new_rescue_case", {
+        case: newCase,
+        notification: {
+          category: "ACTION_REQUIRED",
+          priority: newCase.priority === "critical" ? "HIGH" : "NORMAL",
+          type: "RESCUE_REQUEST",
+          title: `🚨 New Rescue Request #${newCase.caseNumber}`,
+          body: `${newCase.breed || newCase.animalType.toUpperCase()}: ${newCase.condition || "Rescue required"} at ${newCase.generalLocation || newCase.exactLocation}`,
+          caseId: newCase.caseId,
+        },
+      });
       if (newCase.assignedNgoId) {
-        io.to(`ngo:${newCase.assignedNgoId}`).emit("case_assigned", { case: newCase });
+        io.to(`ngo:${newCase.assignedNgoId}`).emit("case_assigned", {
+          case: newCase,
+          notification: {
+            category: "ACTION_REQUIRED",
+            priority: "HIGH",
+            type: "RESCUE_DISPATCH",
+            title: `🚨 Rescue Request Assigned #${newCase.caseNumber}`,
+            body: `Your organization was dispatched to a rescue case at ${newCase.generalLocation || newCase.exactLocation}. Please review and respond within 15 minutes.`,
+            caseId: newCase.caseId,
+          },
+        });
       }
     }
 
@@ -284,6 +304,9 @@ export async function acceptCaseHandler(req: AuthenticatedRequest, res: Response
       io.to(`case:${caseId}`).emit("case_accepted", { caseId, case: result.case });
       if (result.case?.reporterId) {
         io.to(`user:${result.case.reporterId}`).emit("notification", {
+          category: "INFORMATIONAL",
+          priority: "NORMAL",
+          type: "CASE_ACCEPTED",
           title: "🚨 Rescue Accepted",
           body: `An NGO has accepted your rescue case #${result.case.caseNumber}. Help is being dispatched.`,
           caseId,
@@ -507,6 +530,30 @@ export async function assignVolunteerHandler(req: AuthenticatedRequest, res: Res
       `Assigned ${role.toLowerCase()} volunteer ${assignedToName}`
     );
 
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`case:${caseId}`).emit("volunteer_assigned", {
+        caseId,
+        assignment,
+        notification: {
+          category: "ACTION_REQUIRED",
+          priority: "HIGH",
+          type: role === "FOSTER" ? "FOSTER_REQUEST" : "RESCUE_ASSIGNMENT",
+          title: role === "FOSTER" ? `🏠 Foster Assignment` : `🦺 Rescue Assignment`,
+          body: `Assigned volunteer ${assignedToName} to case #${caseId}.`,
+          caseId,
+        },
+      });
+      io.to(`user:${assignedToUserId}`).emit("notification", {
+        category: "ACTION_REQUIRED",
+        priority: "HIGH",
+        type: role === "FOSTER" ? "FOSTER_REQUEST" : "RESCUE_ASSIGNMENT",
+        title: role === "FOSTER" ? `🏠 New Foster Assignment` : `🦺 New Rescue Assignment`,
+        body: `You have been assigned to case #${caseId}. Please review the case details in your operations console.`,
+        caseId,
+      });
+    }
+
     return res.status(201).json({ success: true, assignment });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: "Failed to assign volunteer" });
@@ -589,6 +636,22 @@ export async function createVetReferralHandler(req: AuthenticatedRequest, res: R
       `Referred to ${referral.clinicName || clinicId}. Payment responsibility: ${paymentResponsibility}`
     );
 
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`case:${caseId}`).emit("medical_referral_created", {
+        caseId,
+        referral,
+        notification: {
+          category: "ACTION_REQUIRED",
+          priority: "HIGH",
+          type: "MEDICAL_REQUEST",
+          title: `🏥 Veterinary Referral Created`,
+          body: `Case referred to ${referral.clinicName || clinicId}. Payment responsibility: ${paymentResponsibility}`,
+          caseId,
+        },
+      });
+    }
+
     return res.status(201).json({ success: true, referral });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: "Failed to create vet referral" });
@@ -634,6 +697,14 @@ export async function confirmSeverityHandler(req: AuthenticatedRequest, res: Res
         caseId,
         confirmedSeverity,
         case: result.case,
+        notification: {
+          category: "INFORMATIONAL",
+          priority: "NORMAL",
+          type: "CASE_SEVERITY_CONFIRMED",
+          title: `Medical Severity Confirmed: ${confirmedSeverity}`,
+          body: `Medical severity confirmed by ${fullName || "coordinator"}.`,
+          caseId,
+        },
       });
     }
 
@@ -692,16 +763,43 @@ export async function recordOutcomeHandler(req: AuthenticatedRequest, res: Respo
         io.to(`case:${caseId}`).emit("deceased_notification", {
           caseId,
           ...sensitiveCopy,
+          category: "INFORMATIONAL",
+          priority: "NORMAL",
+          type: "DECEASED",
         });
         if (result.case.reporterId) {
           io.to(`user:${result.case.reporterId}`).emit("notification", {
             ...sensitiveCopy,
             category: "INFORMATIONAL",
+            priority: "NORMAL",
+            type: "DECEASED",
             caseId,
           });
         }
       } else {
-        io.to(`case:${caseId}`).emit("case_resolved", { caseId, outcome, case: result.case });
+        io.to(`case:${caseId}`).emit("case_resolved", {
+          caseId,
+          outcome,
+          case: result.case,
+          notification: {
+            category: "INFORMATIONAL",
+            priority: "NORMAL",
+            type: "CASE_RESOLVED",
+            title: `Case Resolved — #${result.case.caseNumber}`,
+            body: `Case outcome recorded as ${outcome}.`,
+            caseId,
+          },
+        });
+        if (result.case.reporterId) {
+          io.to(`user:${result.case.reporterId}`).emit("notification", {
+            category: "INFORMATIONAL",
+            priority: "NORMAL",
+            type: "CASE_RESOLVED",
+            title: `Case Outcome — #${result.case.caseNumber}`,
+            body: `Your reported case has reached outcome: ${outcome}. Thank you for helping give them a chance!`,
+            caseId,
+          });
+        }
       }
     }
 
