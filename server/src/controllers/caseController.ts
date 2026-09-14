@@ -212,7 +212,14 @@ export async function updateStatusHandler(req: AuthenticatedRequest, res: Respon
     }
 
     const { role, fullName } = await getUserProfileRole(userId);
-    const actorRole = (role === "admin" ? "ADMIN" : role === "ngo" ? "NGO" : "VOLUNTEER") as any;
+    if (role === "citizen" || role === "user") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Citizen reporters cannot directly modify operational case status.",
+      });
+    }
+
+    const actorRole = (role === "admin" ? "ADMIN" : role === "ngo" ? "NGO" : role === "volunteer" ? "VOLUNTEER" : role === "vet" ? "VET" : "REPORTER") as any;
 
     const result = await transitionCaseStatus(
       caseId,
@@ -466,6 +473,19 @@ export async function assignVolunteerHandler(req: AuthenticatedRequest, res: Res
   try {
     const { caseId } = req.params;
     const { assignedToUserId, assignedToName, role = "RESCUE", notes } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { role: userRole } = await getUserProfileRole(userId);
+    if (userRole !== "ngo" && userRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Only NGO coordinators and administrators can assign volunteers.",
+      });
+    }
 
     if (!assignedToUserId || !assignedToName) {
       return res.status(400).json({ success: false, message: "Volunteer details required" });
@@ -483,7 +503,7 @@ export async function assignVolunteerHandler(req: AuthenticatedRequest, res: Res
     await transitionCaseStatus(
       caseId as string,
       role === "FOSTER" ? "FOSTER_ASSIGNED" : "VOLUNTEER_ASSIGNED",
-      { actorId: req.userId || "system", actorRole: "NGO", actorName: "NGO Operations" },
+      { actorId: userId, actorRole: (userRole === "admin" ? "ADMIN" : "NGO") as any, actorName: "NGO Operations" },
       `Assigned ${role.toLowerCase()} volunteer ${assignedToName}`
     );
 
@@ -530,6 +550,19 @@ export async function createVetReferralHandler(req: AuthenticatedRequest, res: R
   try {
     const { caseId } = req.params;
     const { clinicId, paymentResponsibility = "ngo", requestedTreatment, notes } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { role: userRole } = await getUserProfileRole(userId);
+    if (userRole !== "ngo" && userRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Only NGO coordinators and administrators can create veterinary referrals.",
+      });
+    }
 
     if (!clinicId) {
       return res.status(400).json({ success: false, message: "clinicId is required" });
@@ -552,8 +585,8 @@ export async function createVetReferralHandler(req: AuthenticatedRequest, res: R
     await transitionCaseStatus(
       caseId as string,
       "MEDICAL_CARE",
-      { actorId: req.userId || "system", actorRole: "NGO", actorName: "NGO Operations" },
-      `Referred to ${referral.clinicName}. Payment responsibility: ${paymentResponsibility}`
+      { actorId: userId, actorRole: (userRole === "admin" ? "ADMIN" : "NGO") as any, actorName: "NGO Operations" },
+      `Referred to ${referral.clinicName || clinicId}. Payment responsibility: ${paymentResponsibility}`
     );
 
     return res.status(201).json({ success: true, referral });
