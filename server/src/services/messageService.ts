@@ -3,6 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import { supabase } from "./supabase";
 import { getRegisteredNgoById, REGISTERED_NGOS, RegisteredNGO } from "./ngoService";
+import { readCases } from "./caseService";
 
 export interface ConversationParticipant {
   userId: string;
@@ -385,4 +386,158 @@ export async function markMessagesAsReadForUser(
   if (updated) {
     await writeMessages(messages);
   }
+}
+
+export interface CaseInboxThread {
+  conversationId: string;
+  type: "REPORTER_NGO" | "NGO_VOLUNTEER" | "NGO_VET" | "CASE_GROUP" | "report" | "ngo";
+  title?: string | undefined;
+  unreadCount: number;
+  lastMessage?: Message | undefined;
+  updatedAt: string;
+}
+
+export interface CaseGroupedInboxItem {
+  caseId: string;
+  caseNumber?: string | undefined;
+  animalType?: string | undefined;
+  condition?: string | undefined;
+  status?: string | undefined;
+  priority?: string | undefined;
+  generalLocation?: string | undefined;
+  totalUnreadCount: number;
+  lastMessageTimestamp?: string | undefined;
+  threads: {
+    group?: CaseInboxThread | undefined;
+    reporter?: CaseInboxThread | undefined;
+    guardian?: CaseInboxThread | undefined;
+    vet?: CaseInboxThread | undefined;
+    other?: CaseInboxThread[] | undefined;
+  };
+}
+
+/**
+ * Returns case-centric grouped inbox with multi-thread unread counters
+ */
+export async function getCaseGroupedInbox(
+  userId: string,
+  ngoId?: string
+): Promise<{ cases: CaseGroupedInboxItem[]; directConversations: Conversation[] }> {
+  const cases = await readCases();
+  const conversations = await readConversations();
+  const messages = await readMessages();
+
+  // Find conversations user is part of
+  const userConversations = conversations.filter(
+    (c) =>
+      c.participant1Id === userId ||
+      c.participant2Id === userId ||
+      c.participants?.some((p) => p.userId === userId) ||
+      (ngoId && c.organizationId === ngoId)
+  );
+
+  const caseMap = new Map<string, CaseGroupedInboxItem>();
+
+  // Populate cases that match NGO or where user participates
+  for (const c of cases) {
+    if (
+      !ngoId ||
+      c.assignedNgoId === ngoId ||
+      c.reporterId === userId ||
+      c.assignedVolunteerId === userId ||
+      c.assignedFosterId === userId
+    ) {
+      caseMap.set(c.caseId, {
+        caseId: c.caseId,
+        caseNumber: c.caseNumber,
+        animalType: c.animalType,
+        condition: c.condition,
+        status: c.status,
+        priority: c.priority,
+        generalLocation: c.generalLocation,
+        totalUnreadCount: 0,
+        lastMessageTimestamp: c.updatedAt || c.createdAt,
+        threads: {},
+      });
+    }
+  }
+
+  const directConversations: Conversation[] = [];
+
+  for (const conv of userConversations) {
+    const convMessages = messages.filter((m) => m.conversationId === conv.id);
+    const lastMsg = convMessages.length > 0 ? convMessages[convMessages.length - 1] : undefined;
+
+    // Calculate unread for user
+    const unreadCount = convMessages.filter((m) => {
+      if (m.senderId === userId) return false;
+      const readState = m.readStates?.find((r) => r.userId === userId);
+      return !readState || !readState.readAt;
+    }).length;
+
+    if (conv.caseId) {
+      let caseItem = caseMap.get(conv.caseId);
+      if (!caseItem) {
+        const matchedCase = cases.find((c) => c.caseId === conv.caseId);
+        caseItem = {
+          caseId: conv.caseId,
+          caseNumber: matchedCase?.caseNumber || conv.caseId,
+          animalType: matchedCase?.animalType || "Animal",
+          condition: matchedCase?.condition,
+          status: matchedCase?.status || "IN_PROGRESS",
+          priority: matchedCase?.priority || "normal",
+          generalLocation: matchedCase?.generalLocation,
+          totalUnreadCount: 0,
+          lastMessageTimestamp: conv.updatedAt,
+          threads: {},
+        };
+        caseMap.set(conv.caseId, caseItem);
+      }
+
+      caseItem.totalUnreadCount += unreadCount;
+      if (
+        lastMsg &&
+        (!caseItem.lastMessageTimestamp ||
+          new Date(lastMsg.createdAt) > new Date(caseItem.lastMessageTimestamp))
+      ) {
+        caseItem.lastMessageTimestamp = lastMsg.createdAt;
+      }
+
+      const threadInfo: CaseInboxThread = {
+        conversationId: conv.id,
+        type: (conv.type || "CASE_GROUP") as any,
+        title: conv.title,
+        unreadCount,
+        lastMessage: lastMsg,
+        updatedAt: conv.updatedAt,
+      };
+
+      if (conv.type === "CASE_GROUP") {
+        caseItem.threads.group = threadInfo;
+      } else if (conv.type === "REPORTER_NGO") {
+        caseItem.threads.reporter = threadInfo;
+      } else if (conv.type === "NGO_VOLUNTEER") {
+        caseItem.threads.guardian = threadInfo;
+      } else if (conv.type === "NGO_VET") {
+        caseItem.threads.vet = threadInfo;
+      } else {
+        if (!caseItem.threads.other) caseItem.threads.other = [];
+        caseItem.threads.other.push(threadInfo);
+      }
+    } else {
+      directConversations.push(conv);
+    }
+  }
+
+  // Sort case inbox items: unread cases first, then most recently active
+  const sortedCases = Array.from(caseMap.values()).sort((a, b) => {
+    if (b.totalUnreadCount !== a.totalUnreadCount) {
+      return b.totalUnreadCount - a.totalUnreadCount;
+    }
+    const timeA = a.lastMessageTimestamp ? new Date(a.lastMessageTimestamp).getTime() : 0;
+    const timeB = b.lastMessageTimestamp ? new Date(b.lastMessageTimestamp).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  return { cases: sortedCases, directConversations };
 }

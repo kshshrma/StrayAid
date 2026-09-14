@@ -29,6 +29,8 @@ import {
   startCaseConversationOnBackend,
   confirmCaseSeverityApi,
   recordCaseOutcomeApi,
+  fetchCaseGroupedInbox,
+  fetchConversationDetails,
   type RescueCase,
   type CaseStatus,
   type CaseTimelineEvent,
@@ -36,6 +38,7 @@ import {
   type FosterMatchResult,
   type VetClinic,
   type PaymentResponsibility,
+  type CaseGroupedInboxItem,
 } from "../../services/connect/caseApiService";
 import { getSocket } from "../../services/socket";
 
@@ -80,6 +83,11 @@ export default function NgoOperationsView({
   const [vetTreatmentNotes, setVetTreatmentNotes] = useState("");
   const [submittingVet, setSubmittingVet] = useState(false);
 
+  // Case-Grouped Inbox State
+  const [inboxCases, setInboxCases] = useState<CaseGroupedInboxItem[]>([]);
+  const [inboxDirect, setInboxDirect] = useState<any[]>([]);
+  const [loadingInbox, setLoadingInbox] = useState(false);
+
   // Case Chat Drawer
   const [showCaseChat, setShowCaseChat] = useState(false);
   const [activeConversation, setActiveConversation] = useState<any>(null);
@@ -87,7 +95,7 @@ export default function NgoOperationsView({
   const [chatInput, setChatInput] = useState("");
   const [sendingMsg, setSendingMsg] = useState(false);
 
-  // 1. Fetch Cases
+  // 1. Fetch Cases & Inbox
   async function loadData() {
     try {
       setLoading(true);
@@ -100,8 +108,58 @@ export default function NgoOperationsView({
     }
   }
 
+  async function loadInbox() {
+    try {
+      setLoadingInbox(true);
+      const data = await fetchCaseGroupedInbox(ngoId);
+      setInboxCases(data.cases);
+      setInboxDirect(data.directConversations);
+    } catch (err) {
+      console.error("[NgoOperations] Error loading inbox:", err);
+    } finally {
+      setLoadingInbox(false);
+    }
+  }
+
+  async function openThread(convId: string) {
+    try {
+      const res = await fetchConversationDetails(convId);
+      setActiveConversation(res.conversation);
+      setChatMessages(res.messages || []);
+      setShowCaseChat(true);
+
+      const socket = getSocket();
+      socket.emit("join_conversation_room", { conversationId: convId, userId: currentUserId });
+    } catch (err) {
+      alert("Failed to load conversation thread");
+    }
+  }
+
+  async function openCaseThreadByType(
+    caseItem: { caseId: string; caseNumber?: string },
+    type: "CASE_GROUP" | "REPORTER_NGO" | "NGO_VOLUNTEER" | "NGO_VET",
+    titleSuffix: string
+  ) {
+    try {
+      const res = await startCaseConversationOnBackend(
+        caseItem.caseId,
+        type,
+        `Case #${caseItem.caseNumber || caseItem.caseId} ${titleSuffix}`
+      );
+      setActiveConversation(res.conversation);
+      setChatMessages(res.messages || []);
+      setShowCaseChat(true);
+
+      const socket = getSocket();
+      socket.emit("join_conversation_room", { conversationId: res.conversation.id, userId: currentUserId });
+    } catch (err) {
+      alert("Failed to open communication channel");
+    }
+  }
+
   useEffect(() => {
     loadData();
+    loadInbox();
 
     // Socket.IO real-time event listeners
     const socket = getSocket();
@@ -111,12 +169,21 @@ export default function NgoOperationsView({
 
     const handleNewCase = (data: { case: RescueCase }) => {
       setCases((prev) => [data.case, ...prev.filter((c) => c.caseId !== data.case.caseId)]);
+      loadInbox();
     };
 
     const handleStatusUpdated = (data: { case: RescueCase }) => {
       setCases((prev) => prev.map((c) => (c.caseId === data.case.caseId ? data.case : c)));
       if (selectedCase?.caseId === data.case.caseId) {
         setSelectedCase(data.case);
+      }
+      loadInbox();
+    };
+
+    const handleNewMessage = (data: any) => {
+      loadInbox();
+      if (activeConversation && data?.message?.conversationId === activeConversation.id) {
+        setChatMessages((prev) => [...prev, data.message]);
       }
     };
 
@@ -125,6 +192,8 @@ export default function NgoOperationsView({
     socket.on("case_status_updated", handleStatusUpdated);
     socket.on("case_accepted", handleStatusUpdated);
     socket.on("case_escalated", handleStatusUpdated);
+    socket.on("new_message", handleNewMessage);
+    socket.on("secure_message_received", handleNewMessage);
 
     return () => {
       socket.off("new_rescue_case", handleNewCase);
@@ -132,8 +201,10 @@ export default function NgoOperationsView({
       socket.off("case_status_updated", handleStatusUpdated);
       socket.off("case_accepted", handleStatusUpdated);
       socket.off("case_escalated", handleStatusUpdated);
+      socket.off("new_message", handleNewMessage);
+      socket.off("secure_message_received", handleNewMessage);
     };
-  }, [ngoId, selectedCase]);
+  }, [ngoId, selectedCase, activeConversation]);
 
   // Handle Accept
   async function handleAccept(caseId: string) {
@@ -394,80 +465,105 @@ export default function NgoOperationsView({
       </div>
 
       {/* 2. OPERATIONAL ACTION QUEUES (Top Metric Pills) */}
-      <div className="max-w-6xl mx-auto mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="max-w-6xl mx-auto mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <button
           onClick={() => setActiveTab("requests")}
-          className={`p-4 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
+          className={`p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
             activeTab === "requests"
               ? "bg-red-950/40 border-red-500 text-white shadow-lg shadow-red-950/50"
               : "bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-red-400">Incoming Requests</span>
-            <Radio size={16} className="text-red-400 animate-pulse" />
+            <span className="text-[11px] font-bold text-red-400">Incoming</span>
+            <Radio size={14} className="text-red-400 animate-pulse" />
           </div>
-          <div className="text-2xl font-black mt-2 text-white">{incomingRequests.length}</div>
+          <div className="text-xl font-black mt-2 text-white">{incomingRequests.length}</div>
         </button>
 
         <button
           onClick={() => setActiveTab("cases")}
-          className={`p-4 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
+          className={`p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
             activeTab === "cases"
               ? "bg-amber-950/40 border-amber-500 text-white shadow-lg shadow-amber-950/50"
               : "bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-400">Active Cases</span>
-            <Layers size={16} className="text-amber-400" />
+            <span className="text-[11px] font-bold text-amber-400">Active Cases</span>
+            <Layers size={14} className="text-amber-400" />
           </div>
-          <div className="text-2xl font-black mt-2 text-white">{activeCases.length}</div>
+          <div className="text-xl font-black mt-2 text-white">{activeCases.length}</div>
         </button>
 
         <button
           onClick={() => setActiveTab("medical")}
-          className={`p-4 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
+          className={`p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
             activeTab === "medical"
               ? "bg-sky-950/40 border-sky-500 text-white shadow-lg shadow-sky-950/50"
               : "bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-sky-400">Medical & Vets</span>
-            <Stethoscope size={16} className="text-sky-400" />
+            <span className="text-[11px] font-bold text-sky-400">Medical & Vets</span>
+            <Stethoscope size={14} className="text-sky-400" />
           </div>
-          <div className="text-2xl font-black mt-2 text-white">{medicalCases.length}</div>
+          <div className="text-xl font-black mt-2 text-white">{medicalCases.length}</div>
         </button>
 
         <button
           onClick={() => setActiveTab("fosters")}
-          className={`p-4 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
+          className={`p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
             activeTab === "fosters"
               ? "bg-emerald-950/40 border-emerald-500 text-white shadow-lg shadow-emerald-950/50"
               : "bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-400">Foster Network</span>
-            <Home size={16} className="text-emerald-400" />
+            <span className="text-[11px] font-bold text-emerald-400">Foster Network</span>
+            <Home size={14} className="text-emerald-400" />
           </div>
-          <div className="text-2xl font-black mt-2 text-white">{fosterCases.length}</div>
+          <div className="text-xl font-black mt-2 text-white">{fosterCases.length}</div>
         </button>
 
         <button
           onClick={() => setActiveTab("volunteers")}
-          className={`p-4 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
+          className={`p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
             activeTab === "volunteers"
               ? "bg-indigo-950/40 border-indigo-500 text-white shadow-lg shadow-indigo-950/50"
               : "bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-indigo-400">Volunteers Pool</span>
-            <Users size={16} className="text-indigo-400" />
+            <span className="text-[11px] font-bold text-indigo-400">Volunteers Pool</span>
+            <Users size={14} className="text-indigo-400" />
           </div>
-          <div className="text-2xl font-black mt-2 text-white">42 Active</div>
+          <div className="text-xl font-black mt-2 text-white">42 Active</div>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab("inbox");
+            loadInbox();
+          }}
+          className={`p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
+            activeTab === "inbox"
+              ? "bg-purple-950/40 border-purple-500 text-white shadow-lg shadow-purple-950/50"
+              : "bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-purple-400">Case Inbox</span>
+            <MessageSquare size={14} className="text-purple-400" />
+          </div>
+          <div className="text-xl font-black mt-2 text-white flex items-center justify-between">
+            <span>{inboxCases.length}</span>
+            {inboxCases.reduce((sum, c) => sum + (c.totalUnreadCount || 0), 0) > 0 && (
+              <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.5 rounded-full animate-pulse">
+                {inboxCases.reduce((sum, c) => sum + (c.totalUnreadCount || 0), 0)} new
+              </span>
+            )}
+          </div>
         </button>
       </div>
 
@@ -548,7 +644,7 @@ export default function NgoOperationsView({
               ))
             )}
           </div>
-        ) : (
+        ) : activeTab === "cases" ? (
           /* TAB 2: ACTIVE RESCUE CASES & OPERATIONS */
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -595,6 +691,331 @@ export default function NgoOperationsView({
                 </div>
               ))}
             </div>
+          </div>
+        ) : activeTab === "medical" ? (
+          /* TAB 3: MEDICAL & VETS */
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                🏥 Medical Care & Veterinary Coordination ({medicalCases.length})
+              </h2>
+            </div>
+
+            {medicalCases.length === 0 ? (
+              <div className="text-center py-16 bg-slate-800/40 rounded-3xl border border-slate-800 space-y-2">
+                <Stethoscope size={32} className="mx-auto text-sky-400 opacity-60" />
+                <p className="text-sm font-bold text-slate-300">No cases currently awaiting medical attention</p>
+                <p className="text-xs text-slate-500">Cases flagged as requiring medical treatment or surgery referral will appear here.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {medicalCases.map((c) => (
+                  <div
+                    key={c.caseId}
+                    onClick={() => openCaseWorkspace(c)}
+                    className="bg-slate-800/80 border border-slate-700/80 hover:border-sky-500/60 rounded-3xl p-5 shadow-lg cursor-pointer transition-all flex flex-col justify-between space-y-4"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono font-black text-sky-400 bg-sky-950/80 px-2 py-0.5 rounded-lg border border-sky-800/50">
+                          #{c.caseNumber}
+                        </span>
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-sky-900/60 text-sky-300">
+                          {c.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-black text-white">{c.breed || c.animalType.toUpperCase()}: {c.condition}</h3>
+                      <p className="text-xs text-slate-400">📍 {c.generalLocation || c.exactLocation}</p>
+                    </div>
+                    <Button className="w-full py-2 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-xl">
+                      Manage Medical Referral →
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : activeTab === "fosters" ? (
+          /* TAB 4: FOSTER NETWORK */
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                🏠 Foster Network & Placement ({fosterCases.length})
+              </h2>
+            </div>
+
+            {fosterCases.length === 0 ? (
+              <div className="text-center py-16 bg-slate-800/40 rounded-3xl border border-slate-800 space-y-2">
+                <Home size={32} className="mx-auto text-emerald-400 opacity-60" />
+                <p className="text-sm font-bold text-slate-300">No cases currently needing foster placement</p>
+                <p className="text-xs text-slate-500">Post-surgery and recovering animals requiring temporary foster homes will appear here.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {fosterCases.map((c) => (
+                  <div
+                    key={c.caseId}
+                    onClick={() => openCaseWorkspace(c)}
+                    className="bg-slate-800/80 border border-slate-700/80 hover:border-emerald-500/60 rounded-3xl p-5 shadow-lg cursor-pointer transition-all flex flex-col justify-between space-y-4"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono font-black text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-lg border border-emerald-800/50">
+                          #{c.caseNumber}
+                        </span>
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-900/60 text-emerald-300">
+                          {c.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-black text-white">{c.breed || c.animalType.toUpperCase()}: {c.condition}</h3>
+                      <p className="text-xs text-slate-400">📍 {c.generalLocation || c.exactLocation}</p>
+                    </div>
+                    <Button className="w-full py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl">
+                      Match Verified Foster →
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : activeTab === "volunteers" ? (
+          /* TAB 5: VOLUNTEERS POOL */
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                🦺 Registered Rescuers & Street Guardians Pool
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="bg-slate-800/80 border border-slate-700/80 rounded-3xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-white">Rohit Bansal</span>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full">BIKE RESCUER</span>
+                </div>
+                <p className="text-xs text-slate-400">📍 Alpha 1, Greater Noida (5km radius)</p>
+                <p className="text-[11px] text-slate-500">12 successful field rescues • First-aid certified</p>
+              </div>
+              <div className="bg-slate-800/80 border border-slate-700/80 rounded-3xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-white">Meenakshi Sundaram</span>
+                  <span className="text-[10px] font-bold text-sky-400 bg-sky-950 px-2 py-0.5 rounded-full">CAR / TRANSPORT</span>
+                </div>
+                <p className="text-xs text-slate-400">📍 Knowledge Park, Greater Noida (10km radius)</p>
+                <p className="text-[11px] text-slate-500">28 rescues • Emergency transport & large animals</p>
+              </div>
+              <div className="bg-slate-800/80 border border-slate-700/80 rounded-3xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-white">Aditya Kumar</span>
+                  <span className="text-[10px] font-bold text-amber-400 bg-amber-950 px-2 py-0.5 rounded-full">ON-FOOT TRIAGE</span>
+                </div>
+                <p className="text-xs text-slate-400">📍 Sector 137, Noida (3km radius)</p>
+                <p className="text-[11px] text-slate-500">9 rescues • Stray dog feeding & puppy securing</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* TAB 6: CASE-GROUPED OPERATIONS INBOX */
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-black text-white flex items-center gap-2">
+                  📬 Case-Grouped Operations Inbox
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Case-centric communication threads organized by Animal / Rescue Operation
+                </p>
+              </div>
+              <Button
+                onClick={loadInbox}
+                className="py-1.5 px-3 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl"
+              >
+                🔄 Refresh Inbox
+              </Button>
+            </div>
+
+            {loadingInbox ? (
+              <div className="flex flex-col items-center justify-center py-16 bg-slate-800/40 rounded-3xl border border-slate-800">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-purple-500 border-t-transparent" />
+                <p className="text-xs text-slate-400 mt-2">Loading case threads...</p>
+              </div>
+            ) : inboxCases.length === 0 && inboxDirect.length === 0 ? (
+              <div className="text-center py-16 bg-slate-800/40 rounded-3xl border border-slate-800 space-y-2">
+                <MessageSquare size={32} className="mx-auto text-purple-400 opacity-60" />
+                <p className="text-sm font-bold text-slate-300">No active message threads yet</p>
+                <p className="text-xs text-slate-500">Messages sent between citizens, guardians, vets, and NGO will appear organized by case.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Case Grouped Threads */}
+                <div className="space-y-3">
+                  {inboxCases.map((ci) => (
+                    <div
+                      key={ci.caseId}
+                      className="bg-slate-800/90 border border-slate-700/90 rounded-3xl p-5 shadow-lg space-y-3 hover:border-purple-500/50 transition-all"
+                    >
+                      {/* Case Info Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-700/60 pb-3">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="text-xs font-mono font-black text-purple-400 bg-purple-950/80 px-2.5 py-0.5 rounded-lg border border-purple-800/50">
+                            #{ci.caseNumber || ci.caseId}
+                          </span>
+                          <span className="text-xs font-black text-white">
+                            {ci.animalType?.toUpperCase()}: {ci.condition || "Rescue Case"}
+                          </span>
+                          {ci.status && (
+                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
+                              {ci.status.replace(/_/g, " ")}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {ci.totalUnreadCount > 0 && (
+                            <span className="text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded-full animate-pulse">
+                              {ci.totalUnreadCount} unread
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-400">
+                            {ci.lastMessageTimestamp
+                              ? new Date(ci.lastMessageTimestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                              : ""}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Sub-thread Channels */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+                        {/* Channel 1: Team Group Chat */}
+                        <button
+                          onClick={() => {
+                            if (ci.threads.group) {
+                              openThread(ci.threads.group.conversationId);
+                            } else {
+                              openCaseThreadByType(ci, "CASE_GROUP", "Team Chat");
+                            }
+                          }}
+                          className="p-3 bg-slate-900/80 hover:bg-slate-750 border border-slate-700/80 rounded-2xl text-left cursor-pointer transition flex flex-col justify-between space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                              👥 Case Group
+                            </span>
+                            {ci.threads.group?.unreadCount ? (
+                              <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.2 rounded-full">
+                                {ci.threads.group.unreadCount}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {ci.threads.group?.lastMessage?.content || "Multi-participant team channel"}
+                          </p>
+                        </button>
+
+                        {/* Channel 2: Citizen / Reporter Direct */}
+                        <button
+                          onClick={() => {
+                            if (ci.threads.reporter) {
+                              openThread(ci.threads.reporter.conversationId);
+                            } else {
+                              openCaseThreadByType(ci, "REPORTER_NGO", "Reporter Direct");
+                            }
+                          }}
+                          className="p-3 bg-slate-900/80 hover:bg-slate-750 border border-slate-700/80 rounded-2xl text-left cursor-pointer transition flex flex-col justify-between space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                              👤 Citizen Direct
+                            </span>
+                            {ci.threads.reporter?.unreadCount ? (
+                              <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.2 rounded-full">
+                                {ci.threads.reporter.unreadCount}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {ci.threads.reporter?.lastMessage?.content || "Direct private channel with reporter"}
+                          </p>
+                        </button>
+
+                        {/* Channel 3: Rescuer / Guardian Direct */}
+                        <button
+                          onClick={() => {
+                            if (ci.threads.guardian) {
+                              openThread(ci.threads.guardian.conversationId);
+                            } else {
+                              openCaseThreadByType(ci, "NGO_VOLUNTEER", "Guardian Direct");
+                            }
+                          }}
+                          className="p-3 bg-slate-900/80 hover:bg-slate-750 border border-slate-700/80 rounded-2xl text-left cursor-pointer transition flex flex-col justify-between space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                              🦺 Rescuer Direct
+                            </span>
+                            {ci.threads.guardian?.unreadCount ? (
+                              <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.2 rounded-full">
+                                {ci.threads.guardian.unreadCount}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {ci.threads.guardian?.lastMessage?.content || "Direct channel with assigned rescuer"}
+                          </p>
+                        </button>
+
+                        {/* Channel 4: Vet Clinic Direct */}
+                        <button
+                          onClick={() => {
+                            if (ci.threads.vet) {
+                              openThread(ci.threads.vet.conversationId);
+                            } else {
+                              openCaseThreadByType(ci, "NGO_VET", "Vet Consultation");
+                            }
+                          }}
+                          className="p-3 bg-slate-900/80 hover:bg-slate-750 border border-slate-700/80 rounded-2xl text-left cursor-pointer transition flex flex-col justify-between space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                              🩺 Vet Direct
+                            </span>
+                            {ci.threads.vet?.unreadCount ? (
+                              <span className="text-[10px] font-bold bg-red-600 text-white px-1.5 py-0.2 rounded-full">
+                                {ci.threads.vet.unreadCount}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {ci.threads.vet?.lastMessage?.content || "Direct channel with partner vet"}
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Direct Inquiries & Consultations */}
+                {inboxDirect.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <h3 className="text-sm font-bold text-slate-300">💬 General Inquiries & Public Chats</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {inboxDirect.map((conv) => (
+                        <div
+                          key={conv.id}
+                          onClick={() => openThread(conv.id)}
+                          className="p-4 bg-slate-800/80 border border-slate-700/80 hover:border-slate-600 rounded-2xl cursor-pointer flex items-center justify-between transition"
+                        >
+                          <div className="space-y-1">
+                            <div className="text-xs font-bold text-white">{conv.title || "Direct NGO Consultation"}</div>
+                            <p className="text-[11px] text-slate-400">Created: {new Date(conv.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          <ChevronRight size={16} className="text-slate-400" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

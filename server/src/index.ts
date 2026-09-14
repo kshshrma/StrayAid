@@ -48,6 +48,8 @@ app.use("/api/v1/reports", reportRoutes);
 
 app.use("/api/messages", messageRoutes);
 app.use("/api/v1/messages", messageRoutes);
+app.use("/api/conversations", messageRoutes);
+app.use("/api/v1/conversations", messageRoutes);
 
 // Home Route
 app.get("/", (_, res) => {

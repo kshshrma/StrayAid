@@ -39,16 +39,25 @@ export async function getNgosList(_req: AuthenticatedRequest, res: Response) {
   }
 }
 
-// GET /api/messages/inbox
+// GET /api/messages/inbox & GET /api/conversations/inbox
 export async function getInbox(req: AuthenticatedRequest, res: Response) {
   try {
     const userId = req.userId;
+    const ngoId = req.query.ngoId as string | undefined;
+
     if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     const conversations = await messageService.getConversationsForUser(userId);
-    return res.json({ success: true, conversations });
+    const { cases, directConversations } = await messageService.getCaseGroupedInbox(userId, ngoId);
+
+    return res.json({
+      success: true,
+      conversations,
+      cases,
+      directConversations,
+    });
   } catch (err: any) {
     console.error("[MessageController] Error loading inbox:", err);
     return res.status(500).json({ success: false, message: err.message || "Failed to load inbox" });

@@ -491,3 +491,60 @@ export async function recordCaseOutcomeApi(
   return json.case;
 }
 
+export interface CaseInboxThread {
+  conversationId: string;
+  type: "REPORTER_NGO" | "NGO_VOLUNTEER" | "NGO_VET" | "CASE_GROUP" | "report" | "ngo";
+  title?: string | undefined;
+  unreadCount: number;
+  lastMessage?: any | undefined;
+  updatedAt: string;
+}
+
+export interface CaseGroupedInboxItem {
+  caseId: string;
+  caseNumber?: string | undefined;
+  animalType?: string | undefined;
+  condition?: string | undefined;
+  status?: string | undefined;
+  priority?: string | undefined;
+  generalLocation?: string | undefined;
+  totalUnreadCount: number;
+  lastMessageTimestamp?: string | undefined;
+  threads: {
+    group?: CaseInboxThread | undefined;
+    reporter?: CaseInboxThread | undefined;
+    guardian?: CaseInboxThread | undefined;
+    vet?: CaseInboxThread | undefined;
+    other?: CaseInboxThread[] | undefined;
+  };
+}
+
+// 19. Fetch Case Grouped Inbox
+export async function fetchCaseGroupedInbox(
+  ngoId?: string
+): Promise<{ cases: CaseGroupedInboxItem[]; directConversations: any[] }> {
+  const headers = await getAuthHeaders();
+  const url = ngoId
+    ? `${API_BASE_URL}/api/v1/conversations/inbox?ngoId=${encodeURIComponent(ngoId)}`
+    : `${API_BASE_URL}/api/v1/conversations/inbox`;
+  const res = await fetch(url, { headers });
+  const json = await res.json();
+  return {
+    cases: json.cases || [],
+    directConversations: json.directConversations || [],
+  };
+}
+
+// 20. Fetch Conversation Details
+export async function fetchConversationDetails(
+  conversationId: string
+): Promise<{ conversation: any; messages: any[] }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/api/v1/conversations/${conversationId}`, { headers });
+  const json = await res.json();
+  return {
+    conversation: json.conversation,
+    messages: json.messages || [],
+  };
+}
+
