@@ -324,10 +324,25 @@ export async function rejectCaseHandler(req: AuthenticatedRequest, res: Response
 
     const io = req.app.get("io");
     if (io) {
-      io.to(`case:${caseId}`).emit("case_escalated", { caseId, case: result.case });
+      io.to(`case:${caseId}`).emit("case_escalated", {
+        caseId,
+        case: result.case,
+        reporterNotification: result.reporterNotification,
+      });
+      if (result.case?.reporterId) {
+        io.to(`user:${result.case.reporterId}`).emit("case_escalated", {
+          caseId,
+          case: result.case,
+          notification: result.reporterNotification,
+        });
+      }
     }
 
-    return res.json({ success: true, case: result.case });
+    return res.json({
+      success: true,
+      case: result.case,
+      reporterNotification: result.reporterNotification,
+    });
   } catch (err: any) {
     console.error("[CaseController] Reject error:", err);
     return res.status(500).json({ success: false, message: "Failed to reject case" });

@@ -41,6 +41,10 @@ export async function escalateDispatchHandler(req: AuthenticatedRequest, res: Re
       io.to(`case:${caseId}`).emit("case_escalating", {
         caseId,
         tier: 2,
+        notification: {
+          title: `Rescue Status — ${caseId}`,
+          body: "We're finding another responder for this case. Your rescue request is still active.",
+        },
       });
     }
 

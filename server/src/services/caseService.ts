@@ -36,6 +36,21 @@ export type PaymentResponsibility =
   | "pro_bono"
   | "unknown";
 
+export const NGO_RESPONSE_TIMEOUT_MINUTES = parseInt(
+  process.env.NGO_RESPONSE_TIMEOUT_MINUTES || "15",
+  10
+);
+
+/**
+ * Returns sensitive, neutral messaging for reporters when a case is escalated or re-routed
+ */
+export function getNeutralReporterEscalationCopy(caseIdentifier: string) {
+  return {
+    title: `Rescue Status — ${caseIdentifier}`,
+    body: "We're finding another responder for this case. Your rescue request is still active.",
+  };
+}
+
 export interface EscalationEvent {
   caseId: string;
   ngoId?: string | undefined;
@@ -566,7 +581,12 @@ export async function rejectCaseByNgo(
   ngoId: string,
   actor: { actorId: string; actorName?: string | undefined },
   reason: "capacity" | "rejected" | "out_of_area" = "capacity"
-): Promise<{ success: boolean; case?: RescueCase | undefined; error?: string | undefined }> {
+): Promise<{
+  success: boolean;
+  case?: RescueCase | undefined;
+  reporterNotification?: { title: string; body: string } | undefined;
+  error?: string | undefined;
+}> {
   const cases = await readCases();
   const caseItem = cases.find((c) => c.caseId === caseId);
 
@@ -595,12 +615,15 @@ export async function rejectCaseByNgo(
     if (nextNgo) {
       caseItem.assignedNgoId = nextNgo.id;
       caseItem.status = "PENDING_NGO_RESPONSE";
-      caseItem.responseDeadline = new Date(Date.now() + 15 * 60000).toISOString();
+      caseItem.responseDeadline = new Date(
+        Date.now() + NGO_RESPONSE_TIMEOUT_MINUTES * 60 * 1000
+      ).toISOString();
     }
   } else {
     // Escalate to Guardian / Emergency Network
     caseItem.status = "ESCALATING";
     caseItem.assignedNgoId = undefined;
+    caseItem.responseDeadline = undefined;
   }
 
   caseItem.updatedAt = new Date().toISOString();
@@ -618,7 +641,11 @@ export async function rejectCaseByNgo(
     metadata: { previousNgoId: ngoId, nextNgoId: caseItem.assignedNgoId },
   });
 
-  return { success: true, case: caseItem };
+  const reporterNotification = getNeutralReporterEscalationCopy(
+    caseItem.caseNumber || caseItem.caseId
+  );
+
+  return { success: true, case: caseItem, reporterNotification };
 }
 
 /**
