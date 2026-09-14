@@ -67,9 +67,24 @@ export interface FosterMatchFactor {
   isWarning?: boolean | undefined;
 }
 
+export interface FosterMatchFactorsDict {
+  speciesMatch: boolean;
+  hasCapacity: boolean;
+  emergencyAvailable: boolean;
+  canHandleMedication: boolean;
+  canHandlePostSurgery: boolean;
+  durationSufficient: boolean;
+}
+
 export interface FosterMatchResult {
+  fosterId: string;
+  name: string;
+  distanceKm: string;
+  availableSpaces: number;
   foster: FosterProfile;
+  matchFactors: FosterMatchFactorsDict;
   compatibilityFactors: FosterMatchFactor[];
+  compatibilityWarnings: string[];
   isEligible: boolean;
 }
 
@@ -347,10 +362,41 @@ export async function matchFostersForCase(caseRequirements: {
       });
     }
 
+    const warnings: string[] = [];
+    if (!hasCapacity) {
+      warnings.push(`Currently at capacity (${foster.currentAnimalCount}/${foster.totalCapacity} animals)`);
+    }
+    if (foster.existingAnimals && foster.existingAnimals.length > 1) {
+      warnings.push(`Currently has ${foster.existingAnimals.length} pets — verify behavioral compatibility`);
+    }
+    if (caseRequirements.medicalRequired && foster.medicalCapabilities.length === 0) {
+      warnings.push("No recorded medical experience for special treatment");
+    }
+
+    const matchFactors: FosterMatchFactorsDict = {
+      speciesMatch: acceptsSpecies,
+      hasCapacity,
+      emergencyAvailable: foster.emergencyAvailable,
+      canHandleMedication: foster.medicalCapabilities.includes("Basic Medication") || foster.medicalCapabilities.length > 0,
+      canHandlePostSurgery: foster.medicalCapabilities.includes("Post-Op Care") || foster.medicalCapabilities.includes("Post-Op Recovery"),
+      durationSufficient: !foster.maximumDurationDays || (caseRequirements.estimatedDurationDays ? foster.maximumDurationDays >= caseRequirements.estimatedDurationDays : true),
+    };
+
     return {
+      fosterId: foster.userId,
+      name: foster.name,
+      distanceKm: "2.5",
+      availableSpaces: Math.max(0, availableSlots),
       foster,
+      matchFactors,
       compatibilityFactors: factors,
+      compatibilityWarnings: warnings,
       isEligible,
     };
+  }).sort((a, b) => {
+    const aScore = Object.values(a.matchFactors).filter(Boolean).length;
+    const bScore = Object.values(b.matchFactors).filter(Boolean).length;
+    return bScore - aScore || Number(a.distanceKm) - Number(b.distanceKm);
   });
 }
+
