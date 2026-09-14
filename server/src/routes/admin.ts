@@ -6,6 +6,11 @@ import {
   getAvailableGuardians,
   overrideDispatch,
   updateReportStatusManually,
+  getAllNgosHandler,
+  approveNgoHandler,
+  rejectNgoHandler,
+  suspendNgoHandler,
+  updateNgoCapacityHandler,
 } from "../controllers/adminController";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 
@@ -44,5 +49,30 @@ router.post("/dispatch/override", overrideDispatch);
  * Manually transition a report status
  */
 router.patch("/reports/:reportId/status", updateReportStatusManually);
+
+/**
+ * Fetch all registered NGOs with verification and capacity statuses
+ */
+router.get("/ngos", getAllNgosHandler);
+
+/**
+ * Verify and approve an NGO
+ */
+router.patch("/ngos/:id/approve", approveNgoHandler);
+
+/**
+ * Reject an NGO registration
+ */
+router.patch("/ngos/:id/reject", rejectNgoHandler);
+
+/**
+ * Suspend an NGO from active operations
+ */
+router.patch("/ngos/:id/suspend", suspendNgoHandler);
+
+/**
+ * Update NGO capacity / emergency availability
+ */
+router.patch("/ngos/:id/capacity", updateNgoCapacityHandler);
 
 export default router;

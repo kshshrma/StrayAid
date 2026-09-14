@@ -1,5 +1,13 @@
 import { Request, Response } from "express";
 import { supabase } from "../services/supabase";
+import {
+  getAllRegisteredNgos,
+  getRegisteredNgoById,
+  approveNgo,
+  rejectNgo,
+  suspendNgo,
+  updateNgoCapacity,
+} from "../services/ngoService";
 
 /**
  * Retrieve all pending (unverified) Guardians.
@@ -424,6 +432,175 @@ export async function updateReportStatusManually(
     return res.status(500).json({
       success: false,
       message: err.message || "Failed to update report status",
+    });
+  }
+}
+
+/**
+ * Retrieve all registered NGOs including verification and capacity statuses.
+ */
+export async function getAllNgosHandler(_req: Request, res: Response) {
+  try {
+    const ngos = getAllRegisteredNgos();
+    return res.status(200).json({
+      success: true,
+      ngos,
+    });
+  } catch (err: any) {
+    console.error("[Admin] Exception loading NGOs:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to load NGOs",
+    });
+  }
+}
+
+/**
+ * Admin action: Approve an NGO organization.
+ */
+export async function approveNgoHandler(req: Request, res: Response) {
+  try {
+    const id = req.params.id as string;
+    const adminUser = (req as any).user;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "NGO ID is required",
+      });
+    }
+
+    const result = approveNgo(id, adminUser?.id);
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.error,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "NGO verified and approved successfully for dispatch and operations",
+      ngo: result.ngo,
+    });
+  } catch (err: any) {
+    console.error("[Admin] Exception approving NGO:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to approve NGO",
+    });
+  }
+}
+
+/**
+ * Admin action: Reject an NGO registration.
+ */
+export async function rejectNgoHandler(req: Request, res: Response) {
+  try {
+    const id = req.params.id as string;
+    const { reason } = req.body;
+    const adminUser = (req as any).user;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "NGO ID is required",
+      });
+    }
+
+    const result = rejectNgo(id, reason || "Documentation requirements not met.", adminUser?.id);
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.error,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "NGO registration rejected",
+      ngo: result.ngo,
+    });
+  } catch (err: any) {
+    console.error("[Admin] Exception rejecting NGO:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to reject NGO",
+    });
+  }
+}
+
+/**
+ * Admin action: Suspend an NGO from active dispatch.
+ */
+export async function suspendNgoHandler(req: Request, res: Response) {
+  try {
+    const id = req.params.id as string;
+    const { reason } = req.body;
+    const adminUser = (req as any).user;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "NGO ID is required",
+      });
+    }
+
+    const result = suspendNgo(id, reason || "Suspended pending review.", adminUser?.id);
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.error,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "NGO suspended from active operations",
+      ngo: result.ngo,
+    });
+  } catch (err: any) {
+    console.error("[Admin] Exception suspending NGO:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to suspend NGO",
+    });
+  }
+}
+
+/**
+ * Admin action: Update NGO capacity or emergency intake availability.
+ */
+export async function updateNgoCapacityHandler(req: Request, res: Response) {
+  try {
+    const id = req.params.id as string;
+    const { current, max, emergencyAvailable } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "NGO ID is required",
+      });
+    }
+
+    const result = updateNgoCapacity(id, { current, max, emergencyAvailable });
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.error,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "NGO capacity updated successfully",
+      ngo: result.ngo,
+    });
+  } catch (err: any) {
+    console.error("[Admin] Exception updating NGO capacity:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to update NGO capacity",
     });
   }
 }
