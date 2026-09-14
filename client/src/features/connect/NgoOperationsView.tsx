@@ -27,6 +27,8 @@ import {
   fetchVetClinics,
   createVetReferralOnBackend,
   startCaseConversationOnBackend,
+  confirmCaseSeverityApi,
+  recordCaseOutcomeApi,
   type RescueCase,
   type CaseStatus,
   type CaseTimelineEvent,
@@ -163,6 +165,30 @@ export default function NgoOperationsView({
   async function handleStatusTransition(newStatus: CaseStatus) {
     if (!selectedCase) return;
     try {
+      if (newStatus === "DECEASED") {
+        const confirmed = confirm(
+          "Sensitive Protocol: Recording DECEASED will preserve all medical records and audit history permanently, and deliver a compassionate notification to the reporter. Do you wish to proceed?"
+        );
+        if (!confirmed) return;
+        const reason = prompt("Medical / field reason for recording deceased outcome:", "Animal succumbed to severe trauma despite emergency medical treatment");
+        if (!reason) return;
+        const updated = await recordCaseOutcomeApi(selectedCase.caseId, "DECEASED", reason);
+        setCases((prev) => prev.map((c) => (c.caseId === selectedCase.caseId ? updated : c)));
+        setSelectedCase(updated);
+        loadTimeline(selectedCase.caseId);
+        return;
+      }
+
+      if (newStatus === "RESOLVED") {
+        const outcomeChoice = prompt("Select outcome type (RESOLVED, ADOPTED, or REUNITED):", "RESOLVED");
+        if (!outcomeChoice) return;
+        const updated = await recordCaseOutcomeApi(selectedCase.caseId, outcomeChoice as any, "Case completed");
+        setCases((prev) => prev.map((c) => (c.caseId === selectedCase.caseId ? updated : c)));
+        setSelectedCase(updated);
+        loadTimeline(selectedCase.caseId);
+        return;
+      }
+
       const reason = prompt(`Confirm status change to ${newStatus}. Optional note:`, "");
       const updated = await updateCaseStatusOnBackend(selectedCase.caseId, newStatus, reason || undefined);
       setCases((prev) => prev.map((c) => (c.caseId === selectedCase.caseId ? updated : c)));
@@ -610,7 +636,63 @@ export default function NgoOperationsView({
 
             {/* Case Details Body */}
             <div className="p-5 space-y-6 flex-1">
-              
+
+              {/* AI Vision Triage Advisory & Confirmation Module (Section 8) */}
+              <div className="bg-slate-800/80 p-4 rounded-2xl border border-purple-500/30 space-y-3 shadow-md">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🤖</span>
+                    <div>
+                      <h4 className="text-xs font-black text-white">AI Vision Triage (Advisory)</h4>
+                      <p className="text-[10px] text-amber-400 font-semibold">⚠ AI suggestion — pending human confirmation</p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
+                    (selectedCase as any).confirmed_severity
+                      ? "bg-emerald-950 text-emerald-300 border border-emerald-700"
+                      : "bg-purple-950 text-purple-300 border border-purple-700"
+                  }`}>
+                    {(selectedCase as any).confirmed_severity
+                      ? `Confirmed: ${(selectedCase as any).confirmed_severity}`
+                      : (selectedCase as any).ai_severity
+                      ? `Suggested: ${(selectedCase as any).ai_severity}`
+                      : "Triage Advisory"}
+                  </span>
+                </div>
+
+                {(selectedCase as any).safety_warning && (
+                  <div className="p-2.5 bg-amber-950/70 border border-amber-600/70 rounded-xl text-xs text-amber-200">
+                    {(selectedCase as any).safety_warning}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-700/60">
+                  <span className="text-[11px] text-slate-400 font-bold">Confirm Medical Severity:</span>
+                  {(["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const).map((sev) => (
+                    <button
+                      key={sev}
+                      onClick={async () => {
+                        try {
+                          const updated = await confirmCaseSeverityApi(selectedCase.caseId, sev);
+                          setSelectedCase(updated);
+                          setCases((prev) => prev.map((c) => (c.caseId === updated.caseId ? updated : c)));
+                          alert(`Medical severity confirmed as ${sev}. Case priority updated.`);
+                        } catch (err: any) {
+                          alert(err?.message || "Failed to confirm severity");
+                        }
+                      }}
+                      className={`py-1 px-2.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                        (selectedCase as any).confirmed_severity === sev
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "bg-slate-700 hover:bg-slate-600 text-slate-300"
+                      }`}
+                    >
+                      {sev}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Status Action Buttons */}
               <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80 space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">

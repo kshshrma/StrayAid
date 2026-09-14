@@ -119,14 +119,29 @@ export interface FosterProfile {
   notes?: string;
 }
 
+export interface FosterMatchFactorsDict {
+  speciesMatch: boolean;
+  hasCapacity: boolean;
+  emergencyAvailable: boolean;
+  canHandleMedication: boolean;
+  canHandlePostSurgery: boolean;
+  durationSufficient: boolean;
+}
+
 export interface FosterMatchResult {
+  fosterId?: string;
+  name?: string;
+  distanceKm?: string;
+  availableSpaces?: number;
   foster: FosterProfile;
+  matchFactors?: FosterMatchFactorsDict;
   compatibilityFactors: {
     label: string;
     isCompatible: boolean;
     detail: string;
     isWarning?: boolean;
   }[];
+  compatibilityWarnings?: string[];
   isEligible: boolean;
 }
 
@@ -435,3 +450,44 @@ export async function syncOfflineStatus(
   const json = await res.json();
   return json;
 }
+
+// 17. Confirm AI Severity
+export async function confirmCaseSeverityApi(
+  caseId: string,
+  confirmedSeverity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+): Promise<RescueCase> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/api/cases/${caseId}/severity`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ confirmedSeverity }),
+  });
+
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || "Failed to confirm case severity");
+  }
+  return json.case;
+}
+
+// 18. Record Final Case Outcome
+export async function recordCaseOutcomeApi(
+  caseId: string,
+  outcome: "RESOLVED" | "ADOPTED" | "REUNITED" | "DECEASED" | "CANCELLED",
+  reason?: string,
+  notes?: string
+): Promise<RescueCase> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/api/cases/${caseId}/outcome`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ outcome, reason, notes }),
+  });
+
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || "Failed to record case outcome");
+  }
+  return json.case;
+}
+

@@ -747,11 +747,11 @@ export default function CitizenConnectView({ currentUserId }: CitizenConnectView
                     </div>
                   </div>
 
-                  {/* Compassionate Message for Deceased Outcome */}
+                  {/* Compassionate Message for Deceased Outcome (Section 11) */}
                   {c.status === "DECEASED" && (
-                    <div className="p-3 bg-slate-100 border border-slate-200 rounded-2xl text-xs text-slate-700 space-y-1">
-                      <p className="font-bold">🖤 Rescue Team Notification:</p>
-                      <p>We are very sorry. Despite rescue and veterinary medical efforts, the animal did not survive. The complete case record and medical timeline have been securely preserved.</p>
+                    <div className="p-3.5 bg-slate-100 border border-slate-200 rounded-2xl text-xs text-slate-700 space-y-1">
+                      <p className="font-black text-slate-900">🖤 Case Update — {c.caseNumber}</p>
+                      <p className="leading-relaxed">Despite the rescue efforts, the animal could not be saved. Thank you for helping give them a chance.</p>
                     </div>
                   )}
 
