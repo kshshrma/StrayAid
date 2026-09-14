@@ -10,6 +10,7 @@ export type CaseStatus =
   | "VOLUNTEER_ASSIGNMENT_REQUIRED"
   | "VOLUNTEER_ASSIGNED"
   | "RESCUE_IN_PROGRESS"
+  | "RESCUE_FAILED"
   | "ANIMAL_SECURED"
   | "MEDICAL_REQUIRED"
   | "MEDICAL_CARE"
@@ -17,12 +18,15 @@ export type CaseStatus =
   | "FOSTER_REQUIRED"
   | "FOSTER_ASSIGNED"
   | "FOSTER_UNAVAILABLE"
+  | "IN_FOSTER"
   | "RECOVERY"
   | "ADOPTION"
+  | "REUNITED"
   | "REUNIFICATION"
   | "RESOLVED"
   | "REOPENED"
   | "ESCALATING"
+  | "CANCELLED"
   | "DECEASED";
 
 export type PaymentResponsibility =
@@ -66,6 +70,14 @@ export interface RescueCase {
   priority: "critical" | "urgent" | "normal";
   status: CaseStatus;
 
+  // AI Triage advisory output (confirmed by human before public map display)
+  ai_severity?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | undefined;
+  confirmed_severity?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | undefined;
+  ai_injury_type?: string[] | undefined;
+  ai_raw_response?: any | undefined;
+  ai_triage_at?: string | undefined;
+  safety_warning?: string | undefined;
+
   reporterId: string;
   reporterName?: string | undefined;
   reporterPhone?: string | undefined;
@@ -107,30 +119,45 @@ export interface OfflineStatusUpdate {
 
 /**
  * Valid Non-linear State Transitions Map
- * Enforced on the backend
+ * Strictly enforced according to StrayAid specification
  */
 export const ALLOWED_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
-  NEW: ["PENDING_NGO_RESPONSE", "ESCALATING", "DECEASED"],
-  PENDING_NGO_RESPONSE: ["ACCEPTED", "ESCALATING", "DECEASED"],
-  ACCEPTED: ["VOLUNTEER_ASSIGNMENT_REQUIRED", "RESCUE_IN_PROGRESS", "ANIMAL_SECURED", "MEDICAL_REQUIRED", "FOSTER_REQUIRED", "ESCALATING", "DECEASED"],
-  VOLUNTEER_ASSIGNMENT_REQUIRED: ["VOLUNTEER_ASSIGNED", "ESCALATING", "DECEASED"],
-  VOLUNTEER_ASSIGNED: ["RESCUE_IN_PROGRESS", "VOLUNTEER_ASSIGNMENT_REQUIRED", "DECEASED"],
-  RESCUE_IN_PROGRESS: ["ANIMAL_SECURED", "VOLUNTEER_ASSIGNMENT_REQUIRED", "DECEASED"],
-  ANIMAL_SECURED: ["MEDICAL_REQUIRED", "FOSTER_REQUIRED", "RECOVERY", "DECEASED"],
-  MEDICAL_REQUIRED: ["MEDICAL_CARE", "DECEASED"],
+  NEW: ["ACCEPTED", "PENDING_NGO_RESPONSE", "CANCELLED", "DECEASED"],
+  PENDING_NGO_RESPONSE: ["ACCEPTED", "ESCALATING", "CANCELLED", "DECEASED"],
+  ACCEPTED: ["VOLUNTEER_ASSIGNMENT_REQUIRED", "VOLUNTEER_ASSIGNED", "ESCALATING", "CANCELLED", "DECEASED"],
+  ESCALATING: ["ACCEPTED", "CANCELLED", "DECEASED"],
+  VOLUNTEER_ASSIGNMENT_REQUIRED: ["VOLUNTEER_ASSIGNED", "ESCALATING", "CANCELLED", "DECEASED"],
+  VOLUNTEER_ASSIGNED: ["RESCUE_IN_PROGRESS", "VOLUNTEER_ASSIGNMENT_REQUIRED", "VOLUNTEER_ASSIGNED", "CANCELLED", "DECEASED"],
+  RESCUE_IN_PROGRESS: ["ANIMAL_SECURED", "RESCUE_FAILED", "DECEASED"],
+  RESCUE_FAILED: ["VOLUNTEER_ASSIGNED", "VOLUNTEER_ASSIGNMENT_REQUIRED", "CANCELLED", "DECEASED"],
+  ANIMAL_SECURED: ["MEDICAL_REQUIRED", "FOSTER_REQUIRED", "RECOVERY", "RESOLVED", "DECEASED"],
+  MEDICAL_REQUIRED: ["MEDICAL_CARE", "CANCELLED", "DECEASED"],
   MEDICAL_CARE: ["MEDICAL_STALLED", "FOSTER_REQUIRED", "RECOVERY", "DECEASED"],
   MEDICAL_STALLED: ["MEDICAL_CARE", "DECEASED"],
-  FOSTER_REQUIRED: ["FOSTER_ASSIGNED", "RECOVERY", "DECEASED"],
-  FOSTER_ASSIGNED: ["FOSTER_UNAVAILABLE", "RECOVERY", "DECEASED"],
+  FOSTER_REQUIRED: ["FOSTER_ASSIGNED", "CANCELLED", "DECEASED"],
+  FOSTER_ASSIGNED: ["IN_FOSTER", "FOSTER_UNAVAILABLE", "CANCELLED", "DECEASED"],
   FOSTER_UNAVAILABLE: ["FOSTER_REQUIRED", "DECEASED"],
-  RECOVERY: ["ADOPTION", "REUNIFICATION", "RESOLVED", "DECEASED"],
+  IN_FOSTER: ["RECOVERY", "MEDICAL_REQUIRED", "DECEASED"],
+  RECOVERY: ["ADOPTION", "REUNITED", "REUNIFICATION", "MEDICAL_REQUIRED", "RESOLVED", "DECEASED"],
   ADOPTION: ["RESOLVED", "RECOVERY"],
-  REUNIFICATION: ["RESOLVED", "RECOVERY"],
+  REUNITED: ["RESOLVED", "REOPENED"],
+  REUNIFICATION: ["RESOLVED", "REOPENED"],
   RESOLVED: ["REOPENED"],
   REOPENED: ["ACCEPTED", "VOLUNTEER_ASSIGNMENT_REQUIRED", "MEDICAL_REQUIRED", "FOSTER_REQUIRED"],
-  ESCALATING: ["PENDING_NGO_RESPONSE", "ACCEPTED", "VOLUNTEER_ASSIGNMENT_REQUIRED", "DECEASED"],
-  DECEASED: [], // Terminal outcome
+  CANCELLED: ["REOPENED"],
+  DECEASED: [], // Terminal outcome — no further transitions allowed
 };
+
+/**
+ * Deceased Notification Phrasing (Section 11)
+ * Sensitive wording required by spec
+ */
+export function getDeceasedNotificationCopy(caseNumber: string) {
+  return {
+    title: `Case Update — ${caseNumber}`,
+    body: "Despite the rescue efforts, the animal could not be saved. Thank you for helping give them a chance.",
+  };
+}
 
 const DATA_DIR = path.resolve("src/data");
 const CASES_FILE = path.join(DATA_DIR, "cases.json");
@@ -691,7 +718,58 @@ export function filterCaseByInformationTier(
     status: c.status,
     generalLocation: c.generalLocation,
     photos: c.photos,
+    confirmed_severity: c.confirmed_severity,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   };
 }
+
+/**
+ * Human confirmation of AI advisory severity (Section 4.2 / Section 8)
+ * ai_severity is strictly advisory until confirmed.
+ */
+export async function confirmCaseSeverity(
+  caseId: string,
+  confirmedSeverity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  actor: {
+    actorId: string;
+    actorRole: "REPORTER" | "NGO" | "VOLUNTEER" | "VET" | "FOSTER" | "ADMIN" | "SYSTEM";
+    actorName?: string | undefined;
+  }
+): Promise<{ success: boolean; case?: RescueCase | undefined; error?: string | undefined }> {
+  const cases = await readCases();
+  const caseItem = cases.find((c) => c.caseId === caseId || c.caseNumber === caseId);
+
+  if (!caseItem) {
+    return { success: false, error: "Case not found" };
+  }
+
+  if (actor.actorRole === "REPORTER" || actor.actorRole === "FOSTER") {
+    return {
+      success: false,
+      error: "Unauthorized: Only NGO coordinators, Rescuers, Vets, or Admins can confirm medical severity.",
+    };
+  }
+
+  caseItem.confirmed_severity = confirmedSeverity;
+  caseItem.priority = confirmedSeverity === "CRITICAL" ? "critical" : confirmedSeverity === "HIGH" ? "urgent" : "normal";
+  caseItem.updatedAt = new Date().toISOString();
+
+  await writeCases(cases);
+
+  await logTimelineEvent({
+    caseId: caseItem.caseId,
+    type: "SEVERITY_CONFIRMED",
+    actorId: actor.actorId,
+    actorRole: actor.actorRole,
+    actorName: actor.actorName || "Medical/Rescue Reviewer",
+    reason: `Severity confirmed by human reviewer: ${confirmedSeverity}`,
+    metadata: {
+      ai_severity: caseItem.ai_severity,
+      confirmed_severity: confirmedSeverity,
+    },
+  });
+
+  return { success: true, case: caseItem };
+}
+
