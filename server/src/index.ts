@@ -24,15 +24,30 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// API Routes
+// API Routes (Legacy + Standard /api/v1 Base URL)
 app.use("/api/ai", aiRoutes);
+app.use("/api/v1/ai", aiRoutes);
+
 app.use("/api/rescue", rescueRoutes);
+app.use("/api/v1/rescue", rescueRoutes);
+
 app.use("/api/cases", caseRoutes);
+app.use("/api/v1/cases", caseRoutes);
+
 app.use("/api/dispatch", dispatchRoutes);
+app.use("/api/v1/dispatch", dispatchRoutes);
+
 app.use("/api/sync", syncRoutes);
+app.use("/api/v1/sync", syncRoutes);
+
 app.use("/api/admin", adminRoutes);
+app.use("/api/v1/admin", adminRoutes);
+
 app.use("/api/reports", reportRoutes);
+app.use("/api/v1/reports", reportRoutes);
+
 app.use("/api/messages", messageRoutes);
+app.use("/api/v1/messages", messageRoutes);
 
 // Home Route
 app.get("/", (_, res) => {
