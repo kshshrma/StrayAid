@@ -11,9 +11,14 @@ import {
   readTimeline,
   syncOfflineStatusUpdates,
   filterCaseByInformationTier,
+  confirmCaseSeverity,
+  getDeceasedNotificationCopy,
+  readCases,
+  writeCases,
   CaseStatus,
   PaymentResponsibility,
 } from "../services/caseService";
+import { performAiTriage } from "../services/aiTriageService";
 import {
   readVolunteers,
   matchFostersForCase,
@@ -91,6 +96,33 @@ export async function createCaseHandler(req: AuthenticatedRequest, res: Response
       photos: photos || [],
       targetNgoId,
       paymentResponsibility: paymentResponsibility as PaymentResponsibility,
+    });
+
+    // Run AI Triage asynchronously (Section 8 — does not block case response)
+    const photo = (photos && photos.length > 0) ? photos[0] : undefined;
+    performAiTriage(photo, condition).then(async (triageResult) => {
+      try {
+        const cases = await readCases();
+        const idx = cases.findIndex((c) => c.caseId === newCase.caseId);
+        if (idx !== -1 && cases[idx]) {
+          cases[idx].ai_severity = triageResult.suggested_severity;
+          cases[idx].ai_injury_type = triageResult.visible_injuries;
+          cases[idx].ai_raw_response = triageResult;
+          cases[idx].ai_triage_at = new Date().toISOString();
+          cases[idx].safety_warning = triageResult.safety_warning || undefined;
+          await writeCases(cases);
+
+          const io = req.app.get("io");
+          if (io) {
+            io.to(`case:${newCase.caseId}`).emit("ai_triage_completed", {
+              caseId: newCase.caseId,
+              triage: triageResult,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("[CaseController] AI triage update error:", err);
+      }
     });
 
     // Notify via Socket.IO if available
@@ -514,3 +546,121 @@ export async function createVetReferralHandler(req: AuthenticatedRequest, res: R
     return res.status(500).json({ success: false, message: "Failed to create vet referral" });
   }
 }
+
+/**
+ * PATCH /api/cases/:caseId/severity - Human confirms AI severity (Section 4.2 / Section 8)
+ */
+export async function confirmSeverityHandler(req: AuthenticatedRequest, res: Response) {
+  try {
+    const caseId = req.params.caseId as string;
+    const { confirmedSeverity } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!confirmedSeverity || !["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(confirmedSeverity)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid confirmedSeverity value. Must be LOW, MEDIUM, HIGH, or CRITICAL",
+      });
+    }
+
+    const { role, fullName } = await getUserProfileRole(userId);
+    const actorRole = (role === "admin" ? "ADMIN" : role === "ngo" ? "NGO" : "VOLUNTEER") as any;
+
+    const result = await confirmCaseSeverity(caseId, confirmedSeverity, {
+      actorId: userId,
+      actorRole,
+      actorName: fullName,
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`case:${caseId}`).emit("case_severity_confirmed", {
+        caseId,
+        confirmedSeverity,
+        case: result.case,
+      });
+    }
+
+    return res.json({ success: true, case: result.case });
+  } catch (err: any) {
+    console.error("[CaseController] Severity confirm error:", err);
+    return res.status(500).json({ success: false, message: "Failed to confirm case severity" });
+  }
+}
+
+/**
+ * POST /api/cases/:caseId/outcome - Record final case outcome (Section 4.2 / Section 11)
+ */
+export async function recordOutcomeHandler(req: AuthenticatedRequest, res: Response) {
+  try {
+    const caseId = req.params.caseId as string;
+    const { outcome, reason, notes } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!outcome || !["RESOLVED", "ADOPTED", "REUNITED", "DECEASED", "CANCELLED"].includes(outcome)) {
+      return res.status(400).json({ success: false, message: "Invalid outcome value" });
+    }
+
+    const { role, fullName } = await getUserProfileRole(userId);
+
+    // Extra authorization check for DECEASED (NGO, VET, or ADMIN only)
+    if (outcome === "DECEASED" && role !== "ngo" && role !== "vet" && role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized: Only NGO coordinators, veterinarians, or administrators can record DECEASED outcome.",
+      });
+    }
+
+    const actorRole = (role === "admin" ? "ADMIN" : role === "ngo" ? "NGO" : role === "vet" ? "VET" : "VOLUNTEER") as any;
+
+    const result = await transitionCaseStatus(
+      caseId,
+      outcome === "DECEASED" ? "DECEASED" : outcome === "CANCELLED" ? "CANCELLED" : "RESOLVED",
+      { actorId: userId, actorRole, actorName: fullName },
+      reason || `Case outcome recorded as ${outcome}`,
+      { outcome, notes, recordedAt: new Date().toISOString() }
+    );
+
+    if (!result.success) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    const io = req.app.get("io");
+    if (io && result.case) {
+      if (outcome === "DECEASED") {
+        const sensitiveCopy = getDeceasedNotificationCopy(result.case.caseNumber);
+        io.to(`case:${caseId}`).emit("deceased_notification", {
+          caseId,
+          ...sensitiveCopy,
+        });
+        if (result.case.reporterId) {
+          io.to(`user:${result.case.reporterId}`).emit("notification", {
+            ...sensitiveCopy,
+            category: "INFORMATIONAL",
+            caseId,
+          });
+        }
+      } else {
+        io.to(`case:${caseId}`).emit("case_resolved", { caseId, outcome, case: result.case });
+      }
+    }
+
+    return res.json({ success: true, case: result.case });
+  } catch (err: any) {
+    console.error("[CaseController] Outcome error:", err);
+    return res.status(500).json({ success: false, message: "Failed to record case outcome" });
+  }
+}
+

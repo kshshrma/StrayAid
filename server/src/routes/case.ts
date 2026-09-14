@@ -4,6 +4,8 @@ import {
   getCasesHandler,
   getCaseDetailsHandler,
   updateStatusHandler,
+  confirmSeverityHandler,
+  recordOutcomeHandler,
   acceptCaseHandler,
   rejectCaseHandler,
   reopenCaseHandler,
@@ -36,6 +38,8 @@ router.get("/:caseId", requireAuth, getCaseDetailsHandler);
 
 // 4. Status & Actions
 router.patch("/:caseId/status", requireAuth, updateStatusHandler);
+router.patch("/:caseId/severity", requireAuth, confirmSeverityHandler);
+router.post("/:caseId/outcome", requireAuth, recordOutcomeHandler);
 router.post("/:caseId/accept", requireAuth, acceptCaseHandler);
 router.post("/:caseId/reject", requireAuth, rejectCaseHandler);
 router.post("/:caseId/reopen", requireAuth, reopenCaseHandler);
@@ -46,3 +50,4 @@ router.post("/:caseId/assign-volunteer", requireAuth, assignVolunteerHandler);
 router.post("/:caseId/vet-referral", requireAuth, createVetReferralHandler);
 
 export default router;
+
