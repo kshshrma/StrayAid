@@ -10,7 +10,6 @@ import {
   MapPin,
   Bot,
   Users,
-  AlertCircle,
   Clock,
   RotateCcw,
   Send,
@@ -33,9 +32,11 @@ import {
   type RegisteredNGO,
   type EmergencyHelpline,
 } from "../../services/lost-found/messageApiService";
-import { CHATBOT_FLOW_CONFIG, type ChatOption } from "../../services/connect/chatbotFlow";
-import { createRescueCaseOnBackend } from "../../services/connect/caseApiService";
-import { uploadImage } from "../../services/storage/uploadImage";
+import {
+  CHATBOT_FLOW_CONFIG,
+  type ChatOption,
+  type ChatMessage,
+} from "./chatbotFlow";
 import { getSocket } from "../../services/socket";
 
 interface CitizenConnectViewProps {
@@ -60,20 +61,10 @@ export default function CitizenConnectView({ currentUserId }: CitizenConnectView
   const [caseTimeline, setCaseTimeline] = useState<CaseTimelineEvent[]>([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
 
-  // Automated Chatbot & Drawer
+  // Automated Chatbot & Drawer (Milestone 2 Deterministic Quick-Reply Bot)
   const [selectedNgo, setSelectedNgo] = useState<RegisteredNGO | null>(null);
-  const [botMessages, setBotMessages] = useState<any[]>([]);
+  const [botMessages, setBotMessages] = useState<ChatMessage[]>([]);
   const [currentBotStep, setCurrentBotStep] = useState<string>("MAIN_MENU");
-  const [botStepHistory, setBotStepHistory] = useState<string[]>([]);
-  const [selectedRescueType, setSelectedRescueType] = useState<any>(null);
-  const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
-  const [selectedInDanger, setSelectedInDanger] = useState<boolean>(false);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [showManualInput, setShowManualInput] = useState(false);
-  const [manualLocationText, setManualLocationText] = useState("");
-  const [manualLocationSubmitting, setManualLocationSubmitting] = useState(false);
-  const [photoUploading, setPhotoUploading] = useState(false);
-  const [botError, setBotError] = useState<string | null>(null);
   const [showNgoModal, setShowNgoModal] = useState(false);
 
   // Case Chat Drawer
@@ -90,7 +81,6 @@ export default function CitizenConnectView({ currentUserId }: CitizenConnectView
   const [offlineNotes, setOfflineNotes] = useState("");
 
   const messageEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function loadInitData() {
@@ -129,7 +119,7 @@ export default function CitizenConnectView({ currentUserId }: CitizenConnectView
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [botMessages, showManualInput, selectedNgo]);
+  }, [botMessages, selectedNgo]);
 
   // Handle Reopening Resolved Case
   async function handleReopenCase(caseId: string) {
@@ -231,283 +221,209 @@ export default function CitizenConnectView({ currentUserId }: CitizenConnectView
     flushOfflineQueue().catch(() => {});
   }
 
-  // Chatbot Setup
-  function initChatbotForNgo(ngo: RegisteredNGO) {
-    setSelectedNgo(ngo);
+  // Chatbot Setup (Milestone 2 - Deterministic State Machine)
+  function initChatbotForNgo(ngo?: RegisteredNGO | null) {
+    const activeNgo: RegisteredNGO = ngo || ngos[0] || {
+      id: "ngo-greater-noida-rescuers",
+      name: "Greater Noida Rescuers",
+      location: "Knowledge Park III, Greater Noida",
+      phone: "+91 98765 43210",
+      description: "Dedicated animal rescue operations in Greater Noida.",
+      serviceArea: "Greater Noida & NCR",
+      activeMembers: 24,
+      verified: true,
+    };
+
+    setSelectedNgo(activeNgo);
     setCurrentBotStep("MAIN_MENU");
-    setBotStepHistory([]);
-    setSelectedRescueType(null);
-    setSelectedSubType(null);
-    setSelectedInDanger(false);
-    setShowManualInput(false);
 
     const initialStep = CHATBOT_FLOW_CONFIG["MAIN_MENU"];
     const initialText = typeof initialStep.message === "function"
-      ? initialStep.message({ ngoName: ngo.name, ngoLocation: ngo.location })
+      ? initialStep.message({ ngoName: activeNgo.name, ngoLocation: activeNgo.location })
       : initialStep.message;
 
-    setBotMessages([
-      {
-        id: "msg_init_" + Date.now(),
-        sender: "bot",
-        text: initialText,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        options: initialStep.options,
-      },
-    ]);
+    const initialMsg: ChatMessage = {
+      id: "msg_init_" + Date.now(),
+      sender: "bot",
+      isOutgoing: false,
+      text: initialText,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      options: initialStep.options,
+    };
+
+    setBotMessages([initialMsg]);
   }
 
   function handleResetToMainMenu() {
-    if (!selectedNgo) return;
+    const ngoName = selectedNgo?.name || "Greater Noida Rescuers";
+    const ngoLocation = selectedNgo?.location;
     setCurrentBotStep("MAIN_MENU");
-    setBotStepHistory([]);
-    setShowManualInput(false);
+
     const mainStep = CHATBOT_FLOW_CONFIG["MAIN_MENU"];
-    setBotMessages((prev) => [
-      ...prev,
-      {
-        id: "msg_reset_" + Date.now(),
+    const text = typeof mainStep.message === "function"
+      ? mainStep.message({ ngoName, ngoLocation })
+      : mainStep.message;
+
+    const resetMsg: ChatMessage = {
+      id: "msg_reset_" + Date.now(),
+      sender: "bot",
+      isOutgoing: false,
+      text: text,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      options: mainStep.options,
+    };
+
+    setBotMessages((prev) => [...prev, resetMsg]);
+  }
+
+  function handleOptionSelect(option: ChatOption) {
+    const ngoName = selectedNgo?.name || "Greater Noida Rescuers";
+    const ngoLocation = selectedNgo?.location;
+
+    // 1. Add user message with isOutgoing: true
+    const userMessage: ChatMessage = {
+      id: "user_" + Date.now(),
+      sender: "user",
+      isOutgoing: true,
+      text: option.label,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    // Check if option triggers Main Menu reset
+    if (option.action === "main_menu" || option.nextStep === "MAIN_MENU" || option.label.includes("Main Menu")) {
+      setCurrentBotStep("MAIN_MENU");
+
+      const mainStep = CHATBOT_FLOW_CONFIG["MAIN_MENU"];
+      const botMessage: ChatMessage = {
+        id: "bot_" + (Date.now() + 1),
         sender: "bot",
-        text: mainStep.message,
+        isOutgoing: false,
+        text: typeof mainStep.message === "function" ? mainStep.message({ ngoName, ngoLocation }) : mainStep.message,
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         options: mainStep.options,
-      },
-    ]);
-  }
+      };
 
-  function handleGoBack() {
-    if (!selectedNgo || botStepHistory.length === 0 || currentBotStep === "MAIN_MENU") {
-      handleResetToMainMenu();
+      setBotMessages((prev) => [...prev, userMessage, botMessage]);
       return;
     }
-    const prevStep = botStepHistory[botStepHistory.length - 1] || "MAIN_MENU";
-    setBotStepHistory((prev) => prev.slice(0, -1));
-    setCurrentBotStep(prevStep);
-    setShowManualInput(false);
-    const stepConfig = CHATBOT_FLOW_CONFIG[prevStep] || CHATBOT_FLOW_CONFIG["MAIN_MENU"];
-    setBotMessages((prev) => [
-      ...prev,
-      {
-        id: "user_back_" + Date.now(),
-        sender: "user",
-        text: "← Back",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-      {
-        id: "bot_back_" + Date.now(),
+
+    // Check if option navigates to Guardian
+    if (option.action === "navigate_guardian") {
+      const botMessage: ChatMessage = {
+        id: "bot_" + (Date.now() + 1),
         sender: "bot",
-        text: typeof stepConfig.message === "function" ? stepConfig.message({ ngoName: selectedNgo.name }) : stepConfig.message,
+        isOutgoing: false,
+        text: "Navigating to Guardian registration...",
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        options: stepConfig.options,
-      },
-    ]);
-  }
-
-  async function handleOptionSelect(option: ChatOption) {
-    if (!selectedNgo) return;
-    if (option.action === "go_back") {
-      handleGoBack();
+      };
+      setBotMessages((prev) => [...prev, userMessage, botMessage]);
+      setTimeout(() => {
+        navigate("/guardian");
+      }, 300);
       return;
     }
 
-    setBotMessages((prev) => [
-      ...prev,
-      {
-        id: "user_" + Date.now(),
-        sender: "user",
-        text: option.label,
+    // Check if option triggers Get Directions
+    if (option.action === "get_directions") {
+      const botMessage: ChatMessage = {
+        id: "bot_" + (Date.now() + 1),
+        sender: "bot",
+        isOutgoing: false,
+        text: `📍 Opening directions to ${ngoName}...`,
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-    ]);
-
-    if (option.nextStep || option.action) {
-      setBotStepHistory((prev) => [...prev, currentBotStep]);
-    }
-    if (option.rescueType) setSelectedRescueType(option.rescueType);
-    if (option.subType) setSelectedSubType(option.subType);
-    if (option.inDanger !== undefined) setSelectedInDanger(option.inDanger);
-
-    if (option.action) {
-      switch (option.action) {
-        case "send_current_location":
-          await handleSendCurrentLocation(option.rescueType || selectedRescueType || "injured_animal", option.inDanger || selectedInDanger);
-          return;
-        case "prompt_manual_location":
-          setShowManualInput(true);
-          return;
-        case "get_directions":
-          window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedNgo.location || selectedNgo.name)}`, "_blank");
-          return;
-        case "prompt_photo_upload":
-          fileInputRef.current?.click();
-          return;
-        case "navigate_guardian":
-          navigate("/guardian");
-          return;
-        case "show_donation_info":
-          setBotMessages((prev) => [
-            ...prev,
-            {
-              id: "bot_don_" + Date.now(),
-              sender: "bot",
-              text: `💳 You can support ${selectedNgo.name} directly:\n\nHelpline / UPI: ${selectedNgo.phone}\nService Area: ${selectedNgo.serviceArea}\n\nThank you for saving stray lives! ❤️`,
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              options: [{ id: "opt_contact_don", label: "📞 Contact NGO", action: "contact_ngo" }],
-            },
-          ]);
-          return;
-        case "main_menu":
-          handleResetToMainMenu();
-          return;
-      }
-    }
-
-    if (option.nextStep) {
-      const nextStepConfig = CHATBOT_FLOW_CONFIG[option.nextStep];
-      if (nextStepConfig) {
-        setCurrentBotStep(option.nextStep);
-        const nextText = typeof nextStepConfig.message === "function"
-          ? nextStepConfig.message({ ngoName: selectedNgo.name })
-          : nextStepConfig.message;
-
-        setBotMessages((prev) => [
-          ...prev,
-          {
-            id: "bot_" + Date.now(),
-            sender: "bot",
-            text: nextText,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            options: nextStepConfig.options,
-          },
-        ]);
-      }
-    }
-  }
-
-  async function handleSendCurrentLocation(rescueType: string, inDanger: boolean) {
-    if (!selectedNgo) return;
-    if (!navigator.geolocation) {
-      setShowManualInput(true);
+        options: [{ id: "opt_dir_menu", label: "🏠 Main Menu", action: "main_menu", nextStep: "MAIN_MENU" }],
+      };
+      setBotMessages((prev) => [...prev, userMessage, botMessage]);
+      window.open(
+        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ngoName)}`,
+        "_blank"
+      );
       return;
     }
 
-    setLocationLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        try {
-          const newCase = await createRescueCaseOnBackend({
-            animalType: "dog",
-            condition: inDanger
-              ? "Emergency: Animal in Critical Danger"
-              : selectedSubType
-              ? `Report: ${selectedSubType}`
-              : `Injured Stray Animal (${rescueType})`,
-            priority: inDanger ? "critical" : "urgent",
-            exactLocation: `GPS Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
-            coordinates: { latitude, longitude },
-            targetNgoId: selectedNgo.id,
-          });
-
-          setBotMessages((prev) => [
-            ...prev,
-            {
-              id: "bot_succ_" + Date.now(),
-              sender: "bot",
-              text: `🚨 Rescue Case #${newCase.caseNumber} registered and dispatched to ${selectedNgo.name}!\n\nA responder has been alerted. Please keep yourself and the animal safe until help arrives.`,
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              isSuccess: true,
-              options: [
-                { id: "opt_view_my_case", label: "📋 Track in My Cases", nextStep: "MAIN_MENU" },
-              ],
-            },
-          ]);
-        } catch {
-          setShowManualInput(true);
-        } finally {
-          setLocationLoading(false);
-        }
-      },
-      () => {
-        setLocationLoading(false);
-        setShowManualInput(true);
-      }
-    );
-  }
-
-  async function handleManualLocationSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!manualLocationText.trim() || !selectedNgo || manualLocationSubmitting) return;
-
-    setManualLocationSubmitting(true);
-    setShowManualInput(false);
-    const loc = manualLocationText.trim();
-    setManualLocationText("");
-
-    try {
-      const newCase = await createRescueCaseOnBackend({
-        animalType: "dog",
-        condition: selectedInDanger ? "Emergency: Animal in Danger" : "Injured Stray Animal",
-        priority: selectedInDanger ? "critical" : "urgent",
-        exactLocation: loc,
-        targetNgoId: selectedNgo.id,
-      });
-
-      setBotMessages((prev) => [
-        ...prev,
-        {
-          id: "bot_man_succ_" + Date.now(),
-          sender: "bot",
-          text: `🚨 Rescue Case #${newCase.caseNumber} registered and sent to ${selectedNgo.name}!\n\nLocation: ${loc}\n\nThe team is reviewing the dispatch.`,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          isSuccess: true,
-          options: [{ id: "opt_menu", label: "🏠 Main Menu", action: "main_menu" }],
-        },
-      ]);
-    } catch (err) {
-      setBotError("Could not submit case. Please check connection.");
-    } finally {
-      setManualLocationSubmitting(false);
+    // Check if option is Send Current Location (Milestone 2 placeholder notice)
+    if (option.action === "send_current_location") {
+      const botMessage: ChatMessage = {
+        id: "bot_" + (Date.now() + 1),
+        sender: "bot",
+        isOutgoing: false,
+        text: "📍 Location sharing will be connected in the next milestone.",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        options: [{ id: "opt_gps_menu", label: "🏠 Main Menu", action: "main_menu", nextStep: "MAIN_MENU" }],
+      };
+      setBotMessages((prev) => [...prev, userMessage, botMessage]);
+      setCurrentBotStep("RESCUE_GPS_PLACEHOLDER");
+      return;
     }
-  }
 
-  async function handlePhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!e.target.files?.length || !selectedNgo || photoUploading) return;
-    const file = e.target.files[0];
-    setPhotoUploading(true);
-
-    try {
-      const imageUrl = await uploadImage(file);
-      await createRescueCaseOnBackend({
-        animalType: "other",
-        condition: "Weak / Abandoned Animal",
-        priority: "urgent",
-        exactLocation: "Photo Evidence Provided",
-        photos: [imageUrl],
-        targetNgoId: selectedNgo.id,
-      });
-
-      setBotMessages((prev) => [
-        ...prev,
-        {
-          id: "bot_photo_succ_" + Date.now(),
-          sender: "bot",
-          text: "📷 Photo uploaded and rescue case registered! The NGO rescue coordinators have been notified.",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          isSuccess: true,
-          options: [{ id: "opt_menu", label: "🏠 Main Menu", action: "main_menu" }],
-        },
-      ]);
-    } catch (err) {
-      alert("Failed to upload photo.");
-    } finally {
-      setPhotoUploading(false);
+    // Check if option is Manual Location (Milestone 2 placeholder notice)
+    if (option.action === "prompt_manual_location") {
+      const botMessage: ChatMessage = {
+        id: "bot_" + (Date.now() + 1),
+        sender: "bot",
+        isOutgoing: false,
+        text: "🗺️ Manual location entry will be connected in the next milestone.",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        options: [{ id: "opt_man_menu", label: "🏠 Main Menu", action: "main_menu", nextStep: "MAIN_MENU" }],
+      };
+      setBotMessages((prev) => [...prev, userMessage, botMessage]);
+      setCurrentBotStep("RESCUE_MANUAL_PLACEHOLDER");
+      return;
     }
+
+    // Check if option is Photo Upload (Milestone 2 placeholder notice)
+    if (option.action === "prompt_photo_upload") {
+      const botMessage: ChatMessage = {
+        id: "bot_" + (Date.now() + 1),
+        sender: "bot",
+        isOutgoing: false,
+        text: "📷 Photo upload will be connected in the next milestone.",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        options: [{ id: "opt_photo_menu", label: "🏠 Main Menu", action: "main_menu", nextStep: "MAIN_MENU" }],
+      };
+      setBotMessages((prev) => [...prev, userMessage, botMessage]);
+      setCurrentBotStep("RESCUE_PHOTO_PLACEHOLDER");
+      return;
+    }
+
+    // Check if option is Donate Info
+    if (option.action === "show_donation_info") {
+      const botMessage: ChatMessage = {
+        id: "bot_" + (Date.now() + 1),
+        sender: "bot",
+        isOutgoing: false,
+        text: "💳 Donation processing will be connected in a later milestone.",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        options: [{ id: "opt_don_menu", label: "🏠 Main Menu", action: "main_menu", nextStep: "MAIN_MENU" }],
+      };
+      setBotMessages((prev) => [...prev, userMessage, botMessage]);
+      setCurrentBotStep("DONATE_PLACEHOLDER");
+      return;
+    }
+
+    // Standard state transition
+    const nextStepKey = option.nextStep || "MAIN_MENU";
+    const nextStepConfig = CHATBOT_FLOW_CONFIG[nextStepKey] || CHATBOT_FLOW_CONFIG["MAIN_MENU"];
+    setCurrentBotStep(nextStepKey);
+
+    const nextBotText = typeof nextStepConfig.message === "function"
+      ? nextStepConfig.message({ ngoName, ngoLocation })
+      : nextStepConfig.message;
+
+    const botMessage: ChatMessage = {
+      id: "bot_" + (Date.now() + 1),
+      sender: "bot",
+      isOutgoing: false,
+      text: nextBotText,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      options: nextStepConfig.options,
+    };
+
+    setBotMessages((prev) => [...prev, userMessage, botMessage]);
   }
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 pb-28 relative font-sans animate-fadeIn">
-      <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoSelected} className="hidden" />
 
       {/* 1. Page Header */}
       <div className="max-w-4xl mx-auto mb-6 text-center space-y-2">
@@ -980,70 +896,99 @@ export default function CitizenConnectView({ currentUserId }: CitizenConnectView
         </div>
       )}
 
-      {/* 8. AUTOMATED CHATBOT DRAWER (Fast Decision Tree Bot) */}
+      {/* 8. AUTOMATED CHATBOT DRAWER (Deterministic Quick-Reply Rescue Bot) */}
       {selectedNgo && (
-        <div className="fixed inset-0 z-[9999] flex justify-end bg-slate-900/50 backdrop-blur-xs animate-fadeIn">
+        <div className="fixed inset-0 z-[9999] flex justify-end bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-lg bg-white h-[100dvh] flex flex-col shadow-2xl animate-slideLeft overflow-hidden z-[10000]">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-slate-150 flex items-center justify-between bg-white shrink-0">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-white shrink-0 shadow-xs">
               <div className="flex items-center gap-3 min-w-0">
                 <button
                   onClick={() => setSelectedNgo(null)}
-                  className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-600 hover:text-slate-900 cursor-pointer shrink-0"
+                  aria-label="Back"
+                  className="p-2 hover:bg-slate-100 rounded-xl transition text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 focus:ring-2 focus:ring-emerald-500"
                 >
                   <ArrowLeft size={18} />
                 </button>
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-black text-base shrink-0 border border-emerald-200 shadow-2xs">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-black text-lg shrink-0 border border-emerald-200 shadow-2xs">
                   🐾
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <h3 className="text-xs sm:text-sm font-black text-slate-900 truncate">{selectedNgo.name}</h3>
-                    <ShieldCheck size={14} className="text-sky-600 shrink-0" />
+                    <h3 className="text-sm font-black text-slate-900 truncate">
+                      {selectedNgo.name || "Greater Noida Rescuers"}
+                    </h3>
+                    <span className="text-emerald-600 text-xs font-black" title="Verified NGO">✓</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium truncate block">
-                    📍 {selectedNgo.location.split("&")[0]}
-                  </span>
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                    <span>Available</span>
+                  </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => setShowNgoModal(true)} className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-500 cursor-pointer">
+                <button
+                  onClick={handleResetToMainMenu}
+                  title="Reset to Main Menu"
+                  aria-label="Reset to Main Menu"
+                  className="px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition flex items-center gap-1 cursor-pointer border border-slate-200 focus:ring-2 focus:ring-emerald-500"
+                >
+                  <RotateCcw size={13} />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+                <button
+                  onClick={() => setShowNgoModal(true)}
+                  aria-label="Organization Info"
+                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-800 cursor-pointer focus:ring-2 focus:ring-emerald-500"
+                >
                   <Info size={17} />
                 </button>
-                <button onClick={() => setSelectedNgo(null)} className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer">
+                <button
+                  onClick={() => setSelectedNgo(null)}
+                  aria-label="Close Chat"
+                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer focus:ring-2 focus:ring-emerald-500"
+                >
                   <X size={17} />
                 </button>
               </div>
             </div>
 
             {/* Verification Channel Banner */}
-            <div className="bg-slate-50/80 border-b border-slate-100 py-1.5 px-4 text-center">
-              <span className="text-[10px] font-bold text-slate-500 flex items-center justify-center gap-1.5">
-                <ShieldCheck size={12} className="text-emerald-600" /> Verified Rescue Channel • Direct Automated Dispatch
+            <div className="bg-emerald-50/70 border-b border-emerald-100 py-1.5 px-4 text-center">
+              <span className="text-[10px] font-bold text-emerald-900 flex items-center justify-center gap-1.5">
+                <ShieldCheck size={12} className="text-emerald-600 shrink-0" />
+                Verified Rescue Channel • End-to-End Logged
               </span>
             </div>
 
-            {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/60">
-              {botMessages.map((msg) => {
-                const isUser = msg.sender === "user";
+            {/* Chat Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50">
+              {botMessages.map((msg: any) => {
+                const isUser = !!msg.isOutgoing;
                 return (
-                  <div key={msg.id} className={`flex w-full ${isUser ? "justify-end" : "justify-start"} animate-fadeIn`}>
+                  <div
+                    key={msg.id}
+                    className={`flex w-full ${isUser ? "justify-end" : "justify-start"} animate-fadeIn`}
+                  >
                     {!isUser && (
-                      <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-800 text-xs flex items-center justify-center shrink-0 mr-2 mt-0.5 border border-emerald-200 shadow-2xs font-bold">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 text-xs flex items-center justify-center shrink-0 mr-2 mt-0.5 border border-emerald-200 shadow-2xs font-bold">
                         🐾
                       </div>
                     )}
-                    <div className={`max-w-[85%] rounded-2xl p-3.5 shadow-xs text-xs sm:text-[13px] leading-relaxed space-y-2 ${
-                      isUser
-                        ? "bg-gradient-to-r from-emerald-600 to-green-700 text-white rounded-tr-xs shadow-sm"
-                        : msg.isSuccess
-                        ? "bg-emerald-50/90 border border-emerald-200 text-emerald-950 rounded-tl-xs"
-                        : "bg-white border border-slate-200 text-slate-800 rounded-tl-xs"
-                    }`}>
+                    <div
+                      className={`max-w-[85%] rounded-2xl p-3.5 shadow-xs text-xs sm:text-[13px] leading-relaxed space-y-2 ${
+                        isUser
+                          ? "bg-emerald-600 text-white rounded-tr-xs shadow-sm font-medium"
+                          : "bg-white border border-slate-200 text-slate-800 rounded-tl-xs shadow-xs"
+                      }`}
+                    >
                       <p className="whitespace-pre-wrap">{msg.text}</p>
-                      <div className={`text-[9px] font-bold text-right ${isUser ? "text-emerald-100" : "text-slate-400"}`}>
+                      <div
+                        className={`text-[9px] font-bold text-right ${
+                          isUser ? "text-emerald-100" : "text-slate-400"
+                        }`}
+                      >
                         {msg.time}
                       </div>
                     </div>
@@ -1051,87 +996,43 @@ export default function CitizenConnectView({ currentUserId }: CitizenConnectView
                 );
               })}
 
-              {locationLoading && (
-                <div className="flex justify-start animate-fadeIn">
-                  <div className="bg-white border border-emerald-200 text-emerald-950 rounded-2xl p-3 text-xs font-bold flex items-center gap-2 shadow-xs">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
-                    <span>🛰️ Acquiring GPS location & dispatching case...</span>
-                  </div>
-                </div>
-              )}
-
-              {showManualInput && (
-                <form onSubmit={handleManualLocationSubmit} className="bg-white border border-emerald-300 rounded-2xl p-3.5 shadow-md space-y-2.5 animate-fadeIn">
-                  <label className="block text-[11px] font-bold text-slate-800">📍 Enter Animal's Exact Location:</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Sector 62, Greater Noida near Metro Pillar 42"
-                    value={manualLocationText}
-                    onChange={(e) => setManualLocationText(e.target.value)}
-                    autoFocus
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <button type="button" onClick={() => setShowManualInput(false)} className="py-1.5 px-3 text-[11px] font-bold text-slate-500 rounded-lg cursor-pointer">
-                      Cancel
-                    </button>
-                    <Button type="submit" disabled={!manualLocationText.trim() || manualLocationSubmitting} className="py-1.5 px-4 text-xs font-bold bg-emerald-600 text-white rounded-xl shadow-xs">
-                      {manualLocationSubmitting ? "Submitting..." : "Send Location"}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {botError && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 flex items-center gap-2 animate-fadeIn">
-                  <AlertCircle size={15} className="text-amber-600 shrink-0" />
-                  <span>{botError}</span>
-                </div>
-              )}
-
               <div ref={messageEndRef} />
             </div>
 
             {/* Quick-Reply Options Footer */}
-            <div className="p-3.5 border-t border-slate-150/80 bg-white/95 backdrop-blur-sm space-y-2.5 shrink-0 shadow-lg">
+            <div className="p-3.5 border-t border-slate-200 bg-white space-y-2.5 shrink-0 shadow-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-slate-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   <span>Select an option:</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {currentBotStep !== "MAIN_MENU" && (
-                    <button onClick={handleGoBack} className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 py-1 px-2.5 rounded-lg bg-slate-100 border border-slate-200">
-                      <ArrowLeft size={12} /> Back
-                    </button>
-                  )}
-                  <button onClick={handleResetToMainMenu} className="text-[11px] font-semibold text-slate-500 hover:text-emerald-700 flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-emerald-50">
-                    <RotateCcw size={12} /> Reset Menu
+                {currentBotStep !== "MAIN_MENU" && (
+                  <button
+                    onClick={handleResetToMainMenu}
+                    className="text-[11px] font-bold text-slate-500 hover:text-emerald-700 flex items-center gap-1 py-1 px-2.5 rounded-lg hover:bg-emerald-50 border border-slate-200 transition cursor-pointer"
+                  >
+                    <RotateCcw size={12} /> Main Menu
                   </button>
-                </div>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-0.5">
                 {(() => {
-                  const latestBotMsg = [...botMessages].reverse().find((m) => m.sender === "bot");
-                  const rawOptions = latestBotMsg?.options !== undefined
+                  const latestBotMsg = [...botMessages].reverse().find((m: any) => !m.isOutgoing);
+                  const rawOptions: ChatOption[] = latestBotMsg?.options !== undefined
                     ? latestBotMsg.options
-                    : CHATBOT_FLOW_CONFIG[currentBotStep]?.options || [];
-                  const currentOptions = rawOptions.filter(
-                    (opt: ChatOption) => opt.action !== "go_back" && !opt.label.includes("Back")
-                  );
+                    : CHATBOT_FLOW_CONFIG[currentBotStep]?.options || CHATBOT_FLOW_CONFIG["MAIN_MENU"].options;
 
-                  return currentOptions.map((opt: ChatOption) => (
+                  return rawOptions.map((opt: ChatOption) => (
                     <button
                       key={opt.id}
                       type="button"
-                      disabled={locationLoading || photoUploading}
                       onClick={() => handleOptionSelect(opt)}
-                      className={`py-2.5 px-3.5 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
-                        opt.label.includes("Contact NGO")
-                          ? "bg-sky-600 hover:bg-sky-700 text-white border border-sky-600 shadow-sm"
-                          : opt.label.includes("Rescue") || opt.label.includes("Injured") || opt.label.includes("Danger") || opt.label.includes("Send") || opt.label.includes("Share")
+                      className={`py-2.5 px-3.5 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                        opt.label.includes("Rescue") || opt.label.includes("Injured") || opt.label.includes("Yes") || opt.label.includes("Share") || opt.label.includes("Send")
                           ? "bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-sm"
+                          : opt.label.includes("Main Menu")
+                          ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
                           : "bg-white hover:bg-emerald-50 text-slate-800 hover:text-emerald-800 border border-slate-200"
                       }`}
                     >
