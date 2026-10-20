@@ -35,10 +35,17 @@ export default function AppRouter() {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession(data?.session ?? null);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.warn("Could not retrieve session:", err);
+        setSession(null);
+        setLoading(false);
+      });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
