@@ -429,6 +429,11 @@ export default function NgoOperationsView({
               🐾
             </div>
             <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-300 text-[11px] font-bold mb-1">
+                <span>🏢 NGO Connect</span>
+                <span>•</span>
+                <span>Rescue Coordination Center</span>
+              </div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">{ngoName}</h1>
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-400 bg-sky-950/80 border border-sky-700/50 px-2.5 py-0.5 rounded-full">
