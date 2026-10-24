@@ -13,6 +13,7 @@ import messageRoutes from "./routes/message";
 import caseRoutes from "./routes/case";
 import dispatchRoutes from "./routes/dispatch";
 import syncRoutes from "./routes/sync";
+import connectRequestRoutes from "./routes/connectRequest";
 import { supabase } from "./services/supabase";
 import http from "http";
 import { Server } from "socket.io";
@@ -50,6 +51,9 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/v1/messages", messageRoutes);
 app.use("/api/conversations", messageRoutes);
 app.use("/api/v1/conversations", messageRoutes);
+
+app.use("/api/connect", connectRequestRoutes);
+app.use("/api/v1/connect", connectRequestRoutes);
 
 // Home Route
 app.get("/", (_, res) => {
