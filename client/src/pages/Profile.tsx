@@ -5,6 +5,7 @@ import { getGuardian } from "../services/guardian/getGuardian";
 
 import ProfileForm from "../features/profile/ProfileForm";
 import GuardianStatus from "../features/guardian/GuardianStatus";
+import GuardianRescueHistory from "../features/guardian/GuardianRescueHistory";
 
 interface Guardian {
   id: string;
@@ -63,10 +64,17 @@ export default function Profile() {
     <div className="min-h-screen bg-slate-100 p-5 pb-28">
 
       {!loading && (
-        <GuardianStatus
-          guardian={guardian}
-          onGuardianUpdated={setGuardian}
-        />
+        <div className="space-y-5">
+          <GuardianStatus
+            guardian={guardian}
+            onGuardianUpdated={setGuardian}
+          />
+          {guardian && guardian.is_verified && (
+            <div className="mx-auto max-w-xl">
+              <GuardianRescueHistory />
+            </div>
+          )}
+        </div>
       )}
 
       <ProfileForm />

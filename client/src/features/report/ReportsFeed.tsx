@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getReports } from "../../services/report/getReports";
 import { subscribeReports } from "../../services/report/subscribeReports";
+import { supabase } from "../../lib/supabase";
 
 interface Report {
   id: string;
@@ -10,58 +11,69 @@ interface Report {
   longitude: number;
   status: string;
   created_at: string;
-
   animal_type: string;
   severity: string;
   priority: string;
   ai_advice: string;
+  assigned_guardian_id?: string | null;
 }
 
 export default function ReportsFeed() {
   const [reports, setReports] = useState<Report[]>([]);
+  const [guardianId, setGuardianId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadGuardian() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: guardian } = await supabase
+            .from("guardians")
+            .select("id")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+          if (guardian) {
+            setGuardianId(guardian.id);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading guardian profile:", err);
+      }
+    }
+    loadGuardian();
+  }, []);
 
   function getPriorityWeight(report: Report) {
-    const status = (report.status || "").toLowerCase();
     const priority = (report.priority || "").toLowerCase();
+    const severity = (report.severity || "").toLowerCase();
 
-    // 1. Accepted/Claimed ones go to the very bottom
-    const isClaimed =
-      status === "accepted" ||
-      status === "enroute" ||
-      status === "rescued" ||
-      status === "completed";
-
-    if (isClaimed) {
-      return 100; // Large weight to push to the bottom when sorting ascending
-    }
-
-    // 2. Sorting unclaimed ones: first normal, then urgent, then emergency
-    if (priority === "normal") {
-      return 1;
-    }
-    if (priority === "urgent") {
-      return 2;
-    }
-    if (priority === "emergency") {
-      return 3;
-    }
-
-    return 4; // Default fallback
+    if (severity === "critical" || priority === "emergency") return 1;
+    if (severity === "high" || priority === "urgent") return 2;
+    if (severity === "medium") return 3;
+    return 4;
   }
 
   async function loadReports() {
     try {
       const data = await getReports();
-      const sorted = (data || []).sort((a: Report, b: Report) => {
+
+      // Only pending (unclaimed) reports: accepted rescues are removed and visible only in Lives Saved
+      const visible = (data || []).filter((report: any) => {
+        const s = (report.status || "").toLowerCase();
+        return s === "pending";
+      });
+
+      const sorted = visible.sort((a: Report, b: Report) => {
         const weightA = getPriorityWeight(a);
         const weightB = getPriorityWeight(b);
 
         if (weightA !== weightB) {
-          return weightA - weightB; // Sort ascending (1 -> 2 -> 3 -> 100)
+          return weightA - weightB;
         }
-        // Secondary sorting by created_at descending (most recent first)
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
+
       setReports(sorted);
     } catch (error) {
       console.error(error);
@@ -78,7 +90,7 @@ export default function ReportsFeed() {
     return () => {
       channel.unsubscribe();
     };
-  }, []);
+  }, [guardianId]);
 
   function severityColor(severity: string) {
     const s = (severity || "").toLowerCase();
@@ -106,6 +118,19 @@ export default function ReportsFeed() {
     }
   }
 
+  function formatAdvice(aiAdvice: string) {
+    if (!aiAdvice) return "No advice provided";
+    try {
+      if (aiAdvice.trim().startsWith("{")) {
+        const parsed = JSON.parse(aiAdvice);
+        return `Rescue: ${parsed.rescueType?.replace(/_/g, " ") || "Emergency"} • NGO: ${parsed.ngoName || "Dispatched"}`;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    return aiAdvice;
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 p-5 pb-24">
       <h1 className="mb-6 text-center text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -120,37 +145,20 @@ export default function ReportsFeed() {
         <div className="space-y-6 max-w-lg mx-auto">
           {reports.map((report) => {
             const statusLower = (report.status || "").toLowerCase();
-            const isClaimed =
-              statusLower === "accepted" ||
-              statusLower === "enroute" ||
-              statusLower === "rescued" ||
-              statusLower === "completed";
-
             return (
               <Link
                 key={report.id}
                 to={`/reports/${report.id}`}
                 className="block"
               >
-                <div
-                  className={`overflow-hidden rounded-2xl bg-white shadow-lg transition hover:shadow-xl relative ${
-                    isClaimed ? "opacity-60 bg-slate-100" : ""
-                  }`}
-                >
-                  {/* Gray translucent overlay cover for claimed requests */}
-                  {isClaimed && (
-                    <div className="absolute inset-0 bg-slate-900/10 pointer-events-none z-10 flex items-center justify-center backdrop-blur-[0.5px]">
-                      <span className="rounded-xl bg-slate-800/90 px-4.5 py-2 text-xs font-bold text-white uppercase tracking-wider shadow-md border border-slate-600 flex items-center gap-1.5">
-                        🔒 Claimed Rescue ({report.status})
-                      </span>
-                    </div>
+                <div className="overflow-hidden rounded-2xl bg-white shadow-lg transition hover:shadow-xl relative border border-slate-100">
+                  {report.image_url && (
+                    <img
+                      src={report.image_url}
+                      alt="Animal"
+                      className="h-64 w-full object-cover"
+                    />
                   )}
-
-                  <img
-                    src={report.image_url}
-                    alt="Animal"
-                    className="h-64 w-full object-cover"
-                  />
 
                   <div className="p-5">
                     <div className="mb-4 flex items-center justify-between">
@@ -181,7 +189,7 @@ export default function ReportsFeed() {
                       </p>
 
                       <p className="mt-2 text-sm text-gray-700">
-                        {report.ai_advice}
+                        {formatAdvice(report.ai_advice)}
                       </p>
                     </div>
 

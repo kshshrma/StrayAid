@@ -167,11 +167,7 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
       try {
         setLoadingConversationCheck(true);
         const inbox = await getInboxFromBackend();
-        const found = inbox.find(
-          (c: any) =>
-            c.reportId === pet.id &&
-            (c.otherParticipantId === currentUserId || c.otherParticipantId === pet.reporterId)
-        );
+        const found = inbox.find((c: any) => c.reportId === pet.id);
         setExistingConversation(found || null);
       } catch (err) {
         console.error("Failed to check conversation status:", err);
@@ -904,8 +900,10 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                     onClick={() => {
                       setShowDetails(false);
                       setActiveChat({
+                        conversationId: existingConversation ? (existingConversation.conversationId || existingConversation.id) : undefined,
                         reportId: pet.id,
-                        senderId: existingConversation ? existingConversation.otherParticipantId : pet.reporterId,
+                        senderId: existingConversation ? existingConversation.otherParticipantId : (pet.reporterId || ""),
+                        showReportDetails: false,
                       });
                     }}
                     className="w-full py-2.5 bg-green-700 hover:bg-green-800 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-green-100 border border-green-700"
@@ -926,8 +924,10 @@ export default function AnimalReportCard({ pet }: AnimalReportCardProps) {
                     onClick={() => {
                       setShowDetails(false);
                       setActiveChat({
+                        conversationId: existingConversation ? (existingConversation.conversationId || existingConversation.id) : undefined,
                         reportId: pet.id,
                         senderId: pet.reporterId || "",
+                        showReportDetails: false,
                       });
                     }}
                     className="w-full py-2.5 bg-green-700 hover:bg-green-800 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-green-100 border border-green-700"

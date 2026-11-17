@@ -4,6 +4,7 @@ import Card from "../ui/Card";
 import Button from "../ui/Button";
 import { getReports } from "../../services/report/getReports";
 import { subscribeReports } from "../../services/report/subscribeReports";
+import { supabase } from "../../lib/supabase";
 
 interface Report {
   id: string;
@@ -16,40 +17,45 @@ interface Report {
   severity: string;
   priority: string;
   ai_advice: string;
+  assigned_guardian_id?: string | null;
 }
 
 export default function AllReports() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [guardianId, setGuardianId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadGuardian() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: guardian } = await supabase
+            .from("guardians")
+            .select("id")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+          if (guardian) {
+            setGuardianId(guardian.id);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading guardian profile:", err);
+      }
+    }
+    loadGuardian();
+  }, []);
 
   function getPriorityWeight(report: Report) {
-    const status = (report.status || "").toLowerCase();
     const priority = (report.priority || "").toLowerCase();
+    const severity = (report.severity || "").toLowerCase();
 
-    // 1. Accepted/Claimed ones go to the very bottom
-    const isClaimed =
-      status === "accepted" ||
-      status === "enroute" ||
-      status === "rescued" ||
-      status === "completed";
-
-    if (isClaimed) {
-      return 100; // Large weight to push to the bottom
-    }
-
-    // 2. Sorting unclaimed ones: first normal, then urgent, then emergency
-    if (priority === "normal") {
-      return 1;
-    }
-    if (priority === "urgent") {
-      return 2;
-    }
-    if (priority === "emergency") {
-      return 3;
-    }
-
-    return 4; // Default fallback
+    if (severity === "critical" || priority === "emergency") return 1;
+    if (severity === "high" || priority === "urgent") return 2;
+    if (severity === "medium") return 3;
+    return 4;
   }
 
   async function loadReports() {
@@ -57,15 +63,23 @@ export default function AllReports() {
       setLoading(true);
       setError(null);
       const data = await getReports();
-      const sorted = (data || []).sort((a: Report, b: Report) => {
+
+      // Only pending reports (unclaimed): accepted rescues are removed and visible only in Lives Saved
+      const visible = (data || []).filter((report: any) => {
+        const s = (report.status || "").toLowerCase();
+        return s === "pending";
+      });
+
+      const sorted = visible.sort((a: Report, b: Report) => {
         const weightA = getPriorityWeight(a);
         const weightB = getPriorityWeight(b);
 
         if (weightA !== weightB) {
-          return weightA - weightB; // Sort ascending (1 -> 2 -> 3 -> 100)
+          return weightA - weightB;
         }
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
+
       setReports(sorted);
     } catch (err: any) {
       console.error(err);
@@ -85,7 +99,7 @@ export default function AllReports() {
     return () => {
       channel.unsubscribe();
     };
-  }, []);
+  }, [guardianId]);
 
   function severityColor(severity: string) {
     const s = (severity || "").toLowerCase();
@@ -111,6 +125,19 @@ export default function AllReports() {
       default:
         return "bg-blue-600";
     }
+  }
+
+  function formatAdvice(aiAdvice: string) {
+    if (!aiAdvice) return "No advice provided";
+    try {
+      if (aiAdvice.trim().startsWith("{")) {
+        const parsed = JSON.parse(aiAdvice);
+        return `Rescue: ${parsed.rescueType?.replace(/_/g, " ") || "Emergency"} • NGO: ${parsed.ngoName || "Dispatched"}`;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    return aiAdvice;
   }
 
   return (
@@ -140,29 +167,11 @@ export default function AllReports() {
       ) : (
         <div className="space-y-6">
           {reports.map((report) => {
-            const statusLower = (report.status || "").toLowerCase();
-            const isClaimed =
-              statusLower === "accepted" ||
-              statusLower === "enroute" ||
-              statusLower === "rescued" ||
-              statusLower === "completed";
-
             return (
               <div
                 key={report.id}
-                className={`overflow-hidden rounded-2xl border border-slate-100 bg-white relative transition hover:shadow-md ${
-                  isClaimed ? "opacity-50 bg-slate-100/80" : ""
-                }`}
+                className="overflow-hidden rounded-2xl border border-slate-100 bg-white relative transition hover:shadow-md"
               >
-                {/* Gray translucent overlay cover for claimed requests */}
-                {isClaimed && (
-                  <div className="absolute inset-0 bg-slate-800/20 backdrop-blur-[1px] pointer-events-none z-10 flex items-center justify-center">
-                    <span className="rounded-2xl bg-slate-900/90 px-6 py-3 text-sm font-black text-white uppercase tracking-widest shadow-xl border border-slate-700">
-                      🔒 ACCEPTED RESCUE
-                    </span>
-                  </div>
-                )}
-
                 {report.image_url && (
                   <img
                     src={report.image_url}
@@ -186,7 +195,7 @@ export default function AllReports() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 mb-4">
+                  <div className="flex items-center gap-2 mb-4 flex-wrap">
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-bold text-white ${priorityColor(
                         report.priority
@@ -202,7 +211,7 @@ export default function AllReports() {
 
                   <div className="mt-3 rounded-xl bg-slate-50 p-4 border border-slate-100">
                     <p className="font-semibold text-xs text-slate-700">🤖 AI Advice</p>
-                    <p className="mt-1.5 text-sm text-gray-600 line-clamp-2">{report.ai_advice}</p>
+                    <p className="mt-1.5 text-sm text-gray-600 line-clamp-2">{formatAdvice(report.ai_advice)}</p>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 items-center justify-between text-xs text-gray-400">

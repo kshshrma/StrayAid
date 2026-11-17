@@ -25,6 +25,165 @@ async function getReportOwnerId(reportId: string): Promise<string | null> {
   }
 }
 
+// Helper to enrich conversations with user profile, report info, and message activity
+async function enrichConversationsForUser(
+  conversations: messageService.Conversation[],
+  currentUserId: string
+) {
+  const allMessages = await messageService.readMessages();
+
+  // 1. Gather all reportIds and other participant userIds
+  const reportIds: string[] = [];
+  const otherUserIds: string[] = [];
+
+  for (const c of conversations) {
+    if (c.reportId && !reportIds.includes(c.reportId)) {
+      reportIds.push(c.reportId);
+    }
+
+    let otherId = c.participant1Id === currentUserId ? c.participant2Id : c.participant1Id;
+    if (!otherId || otherId === currentUserId) {
+      const otherP = c.participants?.find((p) => p.userId !== currentUserId);
+      otherId = otherP?.userId || c.participant2Id || c.participant1Id;
+    }
+    if (otherId && otherId !== currentUserId && !otherUserIds.includes(otherId)) {
+      otherUserIds.push(otherId);
+    }
+  }
+
+  // 2. Fetch reports from Supabase
+  const reportMap: Record<string, any> = {};
+  if (reportIds.length > 0) {
+    try {
+      const { data: reports } = await supabase
+        .from("reports")
+        .select("id, animal_type, status, image_url, ai_advice")
+        .in("id", reportIds);
+
+      if (reports) {
+        for (const r of reports) {
+          let meta: any = {};
+          try {
+            meta = JSON.parse(r.ai_advice || "{}");
+          } catch {}
+          reportMap[r.id] = {
+            id: r.id,
+            animalType: r.animal_type || "Animal",
+            status: meta.originalType || r.status || "lost",
+            name: meta.name || "",
+            breed: meta.breed || "",
+            imageUrl: r.image_url || "",
+            reporterId: meta.reporterId || "",
+          };
+        }
+      }
+    } catch (e) {
+      console.error("[MessageController] Error fetching reports for inbox enrichment:", e);
+    }
+  }
+
+  // 3. Fetch user profiles from Supabase
+  const profileMap: Record<string, { fullName: string; avatarUrl: string | null }> = {};
+  if (otherUserIds.length > 0) {
+    try {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .in("id", otherUserIds);
+
+      if (profiles) {
+        for (const p of profiles) {
+          profileMap[p.id] = {
+            fullName: p.full_name || "Pet Parent",
+            avatarUrl: p.avatar_url || null,
+          };
+        }
+      }
+    } catch (e) {
+      console.error("[MessageController] Error fetching profiles for inbox enrichment:", e);
+    }
+  }
+
+  // 4. Enrich each conversation
+  const enriched = conversations.map((c) => {
+    let otherParticipantId = c.participant1Id === currentUserId ? c.participant2Id : c.participant1Id;
+    if (!otherParticipantId || otherParticipantId === currentUserId) {
+      const otherP = c.participants?.find((p) => p.userId !== currentUserId);
+      otherParticipantId = otherP?.userId || c.participant2Id || c.participant1Id || "";
+    }
+
+    // Messages for this conversation
+    const convMsgs = allMessages.filter((m) => m.conversationId === c.id);
+    convMsgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const lastMsg = convMsgs.length > 0 ? convMsgs[convMsgs.length - 1] : null;
+
+    // Unread count: messages sent by other participants that are unread by current user
+    const unreadCount = convMsgs.filter((m) => {
+      if (m.senderId === currentUserId) return false;
+      if (m.isRead) return false;
+      if (m.readStates?.some((rs) => rs.userId === currentUserId && rs.readAt)) return false;
+      return true;
+    }).length;
+
+    // Report context
+    const rep = c.reportId ? reportMap[c.reportId] : null;
+    let reportName = "Animal Case";
+    if (rep) {
+      if (rep.name && rep.breed) {
+        reportName = `${rep.name} (${rep.breed})`;
+      } else if (rep.name) {
+        reportName = rep.name;
+      } else if (rep.breed) {
+        reportName = rep.breed;
+      } else if (rep.animalType) {
+        reportName = rep.animalType;
+      }
+    }
+
+    // Other participant identity
+    let otherParticipantName = "Pet Parent";
+    let otherParticipantAvatar: string | null = null;
+
+    const pProfile = otherParticipantId ? profileMap[otherParticipantId] : null;
+    if (c.type === "ngo" && c.organizationId) {
+      const ngo = getRegisteredNgoById(c.organizationId);
+      if (ngo) {
+        otherParticipantName = ngo.name;
+        otherParticipantAvatar = ngo.avatarUrl || null;
+      }
+    } else if (pProfile) {
+      otherParticipantName = pProfile.fullName;
+      otherParticipantAvatar = pProfile.avatarUrl;
+    } else if (c.title) {
+      otherParticipantName = c.title;
+    }
+
+    const lastMessage = lastMsg ? lastMsg.content : "No messages yet";
+    const lastMessageAt = lastMsg ? lastMsg.createdAt : c.updatedAt || c.createdAt;
+
+    return {
+      ...c,
+      id: c.id,
+      conversationId: c.id,
+      otherParticipantId,
+      otherParticipantName,
+      otherParticipantAvatar,
+      reportId: c.reportId || "",
+      reportName,
+      reportStatus: rep?.status || "lost",
+      reportImage: rep?.imageUrl || "",
+      lastMessage,
+      lastMessageAt,
+      unreadCount,
+    };
+  });
+
+  // Sort: most recent message on top
+  enriched.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+
+  return enriched;
+}
+
 // GET /api/messages/ngos
 export async function getNgosList(_req: AuthenticatedRequest, res: Response) {
   try {
@@ -49,7 +208,8 @@ export async function getInbox(req: AuthenticatedRequest, res: Response) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    const conversations = await messageService.getConversationsForUser(userId);
+    const rawConversations = await messageService.getConversationsForUser(userId);
+    const conversations = await enrichConversationsForUser(rawConversations, userId);
     const { cases, directConversations } = await messageService.getCaseGroupedInbox(userId, ngoId);
 
     return res.json({
@@ -223,7 +383,9 @@ export async function startConversation(req: AuthenticatedRequest, res: Response
       io.to(`user:${ownerId}`).emit("secure_message_received", { message });
     }
 
-    return res.status(201).json({ success: true, conversation, message });
+    const [enriched] = await enrichConversationsForUser([conversation], senderId);
+
+    return res.status(201).json({ success: true, conversation: enriched || conversation, message });
   } catch (err: any) {
     console.error("[MessageController] Error starting conversation:", err);
     return res.status(500).json({ success: false, message: err.message || "Failed to start conversation" });
@@ -255,7 +417,17 @@ export async function getConversationDetails(req: AuthenticatedRequest, res: Res
       return res.status(403).json({ success: false, message: "Forbidden: You are not a participant in this conversation" });
     }
 
+    const [enrichedConversation] = await enrichConversationsForUser([conversation], userId);
     const messages = await messageService.getMessagesByConversationId(conversationId);
+
+    // Format messages with proper sender labels
+    const formattedMessages = messages.map((m) => {
+      const isMe = m.senderId === userId;
+      return {
+        ...m,
+        senderName: isMe ? "You" : (enrichedConversation?.otherParticipantName || m.senderName || "User"),
+      };
+    });
 
     let ngoDetails = null;
     if (conversation.type === "ngo" && conversation.organizationId) {
@@ -276,7 +448,12 @@ export async function getConversationDetails(req: AuthenticatedRequest, res: Res
       }
     }
 
-    return res.json({ success: true, conversation, messages, ngoDetails });
+    return res.json({
+      success: true,
+      conversation: enrichedConversation || conversation,
+      messages: formattedMessages,
+      ngoDetails,
+    });
   } catch (err: any) {
     console.error("[MessageController] Error loading conversation details:", err);
     return res.status(500).json({ success: false, message: err.message || "Failed to load conversation" });
@@ -313,7 +490,11 @@ export async function sendReplyMessage(req: AuthenticatedRequest, res: Response)
       return res.status(403).json({ success: false, message: "Forbidden: You are not a participant in this conversation" });
     }
 
-    const recipientId = senderId === conversation.participant1Id ? conversation.participant2Id : conversation.participant1Id;
+    let recipientId = senderId === conversation.participant1Id ? conversation.participant2Id : conversation.participant1Id;
+    if (!recipientId || recipientId === senderId) {
+      const other = conversation.participants?.find((p) => p.userId !== senderId);
+      recipientId = other?.userId || conversation.participant2Id || conversation.participant1Id;
+    }
 
     const message = await messageService.createMessage({
       conversationId,
@@ -328,7 +509,7 @@ export async function sendReplyMessage(req: AuthenticatedRequest, res: Response)
     const io = req.app.get("io");
     if (io) {
       io.to(`conversation:${conversationId}`).emit("new_message", { message });
-      // Notify other participants
+      // Notify other participants via their personal user rooms
       conversation.participants?.forEach((p) => {
         if (p.userId !== senderId) {
           io.to(`user:${p.userId}`).emit("secure_message_received", { message });
@@ -375,6 +556,10 @@ export async function markConversationRead(req: AuthenticatedRequest, res: Respo
     const io = req.app.get("io");
     if (io) {
       io.to(`conversation:${conversationId}`).emit("messages_read", { conversationId, readerId: userId });
+      const otherParticipant = conversation.participant1Id === userId ? conversation.participant2Id : conversation.participant1Id;
+      if (otherParticipant) {
+        io.to(`user:${otherParticipant}`).emit("messages_read", { conversationId, readerId: userId });
+      }
     }
 
     return res.json({ success: true });

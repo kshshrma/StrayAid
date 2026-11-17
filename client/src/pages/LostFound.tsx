@@ -48,11 +48,13 @@ export default function LostFound() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConvDetails, setActiveConvDetails] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [typingUser, setTypingUser] = useState<{ userId: string; userName: string } | null>(null);
   const [typingTimeoutId, setTypingTimeoutId] = useState<any>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // My Reports States
   const [showMyReportsView, setShowMyReportsView] = useState(false);
@@ -131,20 +133,27 @@ export default function LostFound() {
   useEffect(() => {
     if (activeChat && !activeChat.showReportDetails) {
       setShowInboxView(true);
-      
+      setShowMyReportsView(false);
+
       // Attempt to find conversation matching reportId and senderId
       async function selectNotificationConversation() {
         try {
           const inbox = await getInboxFromBackend();
           setConversations(inbox);
           if (activeChat) {
-            const found = inbox.find(
-              (c: any) =>
-                c.reportId === activeChat.reportId &&
-                c.otherParticipantId === activeChat.senderId
-            );
-            if (found) {
-              setActiveConversationId(found.conversationId);
+            if (activeChat.conversationId) {
+              setActiveConversationId(activeChat.conversationId);
+            } else {
+              const found = inbox.find(
+                (c: any) =>
+                  c.reportId === activeChat.reportId &&
+                  (c.otherParticipantId === activeChat.senderId ||
+                    c.participant1Id === activeChat.senderId ||
+                    c.participant2Id === activeChat.senderId)
+              );
+              if (found) {
+                setActiveConversationId(found.conversationId || found.id);
+              }
             }
           }
         } catch (e) {
@@ -205,7 +214,7 @@ export default function LostFound() {
 
     const convId = activeConversationId;
     const socket = getSocket();
-    
+
     // Join conversation room
     socket.emit("join_conversation_room", convId);
     console.log(`🔌 Client joined conversation socket room: conversation:${convId}`);
@@ -215,10 +224,13 @@ export default function LostFound() {
         setLoadingMessages(true);
         const data = await getConversationMessagesFromBackend(convId);
         setMessages(data.messages || []);
-        
+        if (data.conversation) {
+          setActiveConvDetails(data.conversation);
+        }
+
         // Mark conversation read on backend
         await markConversationAsReadOnBackend(convId);
-        
+
         // Mark notifications read locally
         markConversationNotificationsAsRead(convId);
       } catch (err) {
@@ -237,7 +249,7 @@ export default function LostFound() {
           if (exists) return prev;
           return [...prev, data.message];
         });
-        
+
         // Mark as read locally and backend
         markConversationAsReadOnBackend(activeConversationId);
         markConversationNotificationsAsRead(activeConversationId);
@@ -282,11 +294,11 @@ export default function LostFound() {
     if (!currentUserId) return;
 
     const socket = getSocket();
-    
+
     const handleReceiveMessageGlobal = (data: any) => {
       if (data && data.message) {
         const msg = data.message;
-        
+
         // If the inbox list is open, we re-fetch to reflect preview updates
         if (showInboxView && msg.conversationId !== activeConversationId) {
           getInboxFromBackend().then((inbox) => setConversations(inbox));
@@ -347,7 +359,7 @@ export default function LostFound() {
         if (exists) return prev;
         return [...prev, newMsg];
       });
-      
+
       // Update conversations list preview
       setConversations((prev) =>
         prev.map((c) =>
@@ -379,7 +391,7 @@ export default function LostFound() {
 
       setShowInboxView(false);
       setFilter("all"); // Ensure list is unfiltered so matching card mounts in DOM
-      
+
       setActiveChat({
         reportId,
         senderId: otherParticipantId,
@@ -413,6 +425,7 @@ export default function LostFound() {
 
   function handleQuickActionReply(text: string) {
     setReplyText(text);
+    inputRef.current?.focus();
   }
 
   // Listen for real-time updates to reports to trigger re-fetching
@@ -467,12 +480,12 @@ export default function LostFound() {
             const [latStr, lonStr] = pet.location.split(",");
             const petLat = parseFloat(latStr.trim());
             const petLon = parseFloat(lonStr.trim());
-            
+
             let distanceKm = 0;
             if (!isNaN(petLat) && !isNaN(petLon)) {
               distanceKm = calculateDistance(coords.lat, coords.lon, petLat, petLon);
             }
-            
+
             return {
               ...pet,
               distanceKm: parseFloat(distanceKm.toFixed(2)),
@@ -533,11 +546,11 @@ export default function LostFound() {
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 pb-24 animate-fadeIn">
       <div className="mx-auto max-w-4xl space-y-6">
-        
+
         {/* INBOX VIEW COMPONENT PANEL */}
         {showInboxView ? (
           <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden min-h-[75vh] flex flex-col animate-slideUp font-sans">
-            
+
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <button
@@ -550,9 +563,9 @@ export default function LostFound() {
               >
                 <ArrowLeft size={16} /> Back to Lost & Found
               </button>
-              
+
               <div className="flex items-center gap-4 relative">
-                
+
                 {/* 🔔 Message Alerts Dropdown Trigger */}
                 <div className="relative">
                   <button
@@ -612,7 +625,7 @@ export default function LostFound() {
                                 <h5 className="font-extrabold text-slate-800 text-[10px] truncate">{notif.title}</h5>
                                 <p className="text-[10px] text-slate-550 truncate mt-0.5" title={notif.message}>{notif.message}</p>
                               </button>
-                              
+
                               <button
                                 onClick={() => {
                                   deleteNotification(notif.id);
@@ -637,17 +650,16 @@ export default function LostFound() {
 
             {/* Content Inbox Grid split */}
             <div className="flex-1 flex overflow-hidden h-[65vh]">
-              
+
               {/* Left Panel: Conversations List (Hidden on mobile when chat is open) */}
               <div
-                className={`w-full md:w-1/3 border-r border-slate-100 flex flex-col ${
-                  activeConversationId ? "hidden md:flex" : "flex"
-                }`}
+                className={`w-full md:w-1/3 border-r border-slate-100 flex flex-col ${activeConversationId ? "hidden md:flex" : "flex"
+                  }`}
               >
                 <div className="p-4 border-b border-slate-50">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conversations</h3>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-[58vh]">
                   {loadingInbox ? (
                     <div className="text-center py-8 text-slate-400 text-xs font-bold animate-pulse">Loading inbox...</div>
@@ -659,31 +671,36 @@ export default function LostFound() {
                     </div>
                   ) : (
                     conversations.map((conv) => {
-                      const isActive = conv.conversationId === activeConversationId;
+                      const convId = conv.conversationId || conv.id;
+                      const isActive = convId === activeConversationId;
+                      const participantName = conv.otherParticipantName || "Pet Parent";
+                      const reportName = conv.reportName || "Animal Case";
+                      const reportStatus = conv.reportStatus || "lost";
+                      const lastMessage = conv.lastMessage || "No messages yet";
+
                       return (
                         <button
-                          key={conv.conversationId}
-                          onClick={() => setActiveConversationId(conv.conversationId)}
-                          className={`w-full p-3 rounded-2xl flex items-start gap-2.5 transition text-left cursor-pointer border ${
-                            isActive
+                          key={convId}
+                          onClick={() => setActiveConversationId(convId)}
+                          className={`w-full p-3 rounded-2xl flex items-start gap-2.5 transition text-left cursor-pointer border ${isActive
                               ? "bg-green-700 text-white border-green-700 shadow-md shadow-green-100/50"
                               : conv.unreadCount > 0
-                              ? "bg-emerald-50/30 border-emerald-100"
-                              : "bg-white hover:bg-slate-50 border-slate-100/50"
-                          }`}
+                                ? "bg-emerald-50/30 border-emerald-100"
+                                : "bg-white hover:bg-slate-50 border-slate-100/50"
+                            }`}
                         >
                           {conv.otherParticipantAvatar ? (
                             <img src={conv.otherParticipantAvatar} alt="" className="w-9 h-9 rounded-full object-cover border border-slate-100 shrink-0" />
                           ) : (
                             <div className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center font-black text-xs ${isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-650"}`}>
-                              {conv.otherParticipantName.substring(0, 1).toUpperCase()}
+                              {participantName.substring(0, 1).toUpperCase()}
                             </div>
                           )}
-                          
+
                           <div className="min-w-0 flex-1">
                             <div className="flex justify-between items-start gap-1">
                               <h4 className={`text-xs font-black truncate ${isActive ? "text-white" : "text-slate-800"}`}>
-                                {conv.otherParticipantName}
+                                {participantName}
                               </h4>
                               {conv.unreadCount > 0 && !isActive && (
                                 <span className="bg-emerald-650 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shrink-0 animate-pulse">
@@ -691,13 +708,13 @@ export default function LostFound() {
                                 </span>
                               )}
                             </div>
-                            
+
                             <span className={`text-[9px] block font-bold truncate mt-0.5 ${isActive ? "text-white/80" : "text-slate-400"}`}>
-                              🐾 {conv.reportName} • <span className="capitalize">{conv.reportStatus}</span>
+                              🐾 {reportName} • <span className="capitalize">{reportStatus}</span>
                             </span>
-                            
+
                             <p className={`text-[10px] truncate mt-1 ${isActive ? "text-white/90" : "text-slate-550"}`}>
-                              {conv.lastMessage}
+                              {lastMessage}
                             </p>
                           </div>
                         </button>
@@ -709,17 +726,20 @@ export default function LostFound() {
 
               {/* Right Panel: Chat Thread (Hidden on mobile when no chat is open) */}
               <div
-                className={`w-full md:w-2/3 flex flex-col bg-slate-50/50 ${
-                  activeConversationId ? "flex" : "hidden md:flex items-center justify-center"
-                }`}
+                className={`w-full md:w-2/3 flex flex-col bg-slate-50/50 ${activeConversationId ? "flex" : "hidden md:flex items-center justify-center"
+                  }`}
               >
                 {activeConversationId ? (
                   <>
                     {/* Active Chat Header */}
                     {(() => {
-                      const activeConv = conversations.find(c => c.conversationId === activeConversationId);
+                      const activeConv = conversations.find(c => (c.conversationId || c.id) === activeConversationId) || activeConvDetails;
                       if (!activeConv) return null;
-                      
+
+                      const activeName = activeConv.otherParticipantName || "Pet Parent";
+                      const activeReportName = activeConv.reportName || "Animal Case";
+                      const activeReportStatus = activeConv.reportStatus || "lost";
+
                       return (
                         <div className="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-between shadow-sm shrink-0">
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -730,24 +750,27 @@ export default function LostFound() {
                             >
                               <ArrowLeft size={16} />
                             </button>
-                            
+
                             {activeConv.otherParticipantAvatar ? (
                               <img src={activeConv.otherParticipantAvatar} alt="" className="w-8 h-8 rounded-full object-cover border" />
                             ) : (
                               <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-650">
-                                {activeConv.otherParticipantName.substring(0, 1).toUpperCase()}
+                                {activeName.substring(0, 1).toUpperCase()}
                               </div>
                             )}
-                            
+
                             <div className="min-w-0">
-                              <h4 className="text-xs font-black text-slate-850 truncate">{activeConv.otherParticipantName}</h4>
+                              <h4 className="text-xs font-black text-slate-850 truncate">{activeName}</h4>
                               <p className="text-[9px] font-bold text-slate-400 truncate">
-                                Context: <span className="text-slate-600 font-extrabold">{activeConv.reportName}</span> ({activeConv.reportStatus})
+                                Context: <span className="text-slate-600 font-extrabold">{activeReportName}</span> ({activeReportStatus})
                               </p>
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-1.5">
+                            {activeConv.reportImage && (
+                              <img src={activeConv.reportImage} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-100 hidden sm:block shrink-0" />
+                            )}
                             {activeConv.reportId && (
                               <button
                                 onClick={() => handleContextViewReport(activeConv.reportId, activeConv.otherParticipantId)}
@@ -756,7 +779,7 @@ export default function LostFound() {
                                 View Report
                               </button>
                             )}
-                            
+
                             <button
                               onClick={() => handleBlockInbox(activeConversationId)}
                               className="p-1 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-50 transition cursor-pointer"
@@ -789,7 +812,7 @@ export default function LostFound() {
                       ) : (
                         messages.map((m, idx) => {
                           const isMe = String(m.senderId).toLowerCase() === String(currentUserId).toLowerCase();
-                          
+
                           // Custom grouping spacing
                           const prevMsg = idx > 0 ? messages[idx - 1] : null;
                           const isSameSender = prevMsg && String(prevMsg.senderId).toLowerCase() === String(m.senderId).toLowerCase();
@@ -801,11 +824,10 @@ export default function LostFound() {
                               className={`flex flex-col ${isMe ? "items-end" : "items-start"} ${mtClass} space-y-0.5`}
                             >
                               <div
-                                className={`rounded-2xl px-4 py-2.5 text-xs font-semibold max-w-[75%] md:max-w-[80%] leading-relaxed shadow-xs ${
-                                  isMe
+                                className={`rounded-2xl px-4 py-2.5 text-xs font-semibold max-w-[75%] md:max-w-[80%] leading-relaxed shadow-xs ${isMe
                                     ? "bg-green-700 text-white rounded-tr-none"
                                     : "bg-white border border-slate-200/50 text-slate-800 rounded-tl-none"
-                                }`}
+                                  }`}
                               >
                                 {m.content}
                               </div>
@@ -821,14 +843,14 @@ export default function LostFound() {
                           );
                         })
                       )}
-                      
+
                       {typingUser && (
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-450 font-bold bg-slate-100/80 px-3 py-1.5 rounded-full border border-slate-200/40 w-fit animate-pulse">
                           <span>💬</span>
                           <span>{typingUser.userName || "Participant"} is typing...</span>
                         </div>
                       )}
-                      
+
                       <div ref={messagesEndRef} />
                     </div>
 
@@ -863,6 +885,7 @@ export default function LostFound() {
                     {/* Send Input Form */}
                     <form onSubmit={handleSendReply} className="p-4 bg-white border-t border-slate-100 flex gap-2 shrink-0 items-center">
                       <input
+                        ref={inputRef}
                         type="text"
                         placeholder="Type a message..."
                         value={replyText}
@@ -922,7 +945,7 @@ export default function LostFound() {
               >
                 <PlusCircle size={16} /> Report Lost Animal
               </Button>
-              
+
               <Button
                 onClick={() => {
                   setShowMyReportsView(false);
@@ -994,9 +1017,8 @@ export default function LostFound() {
             <div className="fixed top-6 left-6 z-50 pointer-events-auto flex flex-col items-start gap-2">
               <button
                 onClick={() => setShowLeftDropdown(!showLeftDropdown)}
-                className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${
-                  newReportNotifications.length > 0 ? "animate-bounce" : ""
-                }`}
+                className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/80 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${newReportNotifications.length > 0 ? "animate-bounce" : ""
+                  }`}
               >
                 <span>🐾 Lost & Found</span>
                 {newReportNotifications.length > 0 && (
@@ -1008,7 +1030,7 @@ export default function LostFound() {
 
               {showLeftDropdown && (
                 <div className="w-80 rounded-3xl bg-white/95 border border-slate-100 shadow-2xl p-4 space-y-3.5 backdrop-blur-md animate-slideRight">
-                  
+
                   {/* Dropdown Header */}
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                     <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1">
@@ -1028,7 +1050,7 @@ export default function LostFound() {
 
                   {/* Actions Bar */}
                   <div className="flex flex-col gap-2 pt-0.5">
-                    
+
                     {/* Silence Toggle Switch */}
                     <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
                       <span className="text-[10px] font-bold text-slate-650 flex items-center gap-1.5 select-none">
@@ -1041,14 +1063,12 @@ export default function LostFound() {
                       </span>
                       <button
                         onClick={toggleSilence}
-                        className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                          isSilenced ? "bg-red-500" : "bg-slate-200"
-                        }`}
+                        className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${isSilenced ? "bg-red-500" : "bg-slate-200"
+                          }`}
                       >
                         <div
-                          className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ${
-                            isSilenced ? "translate-x-4" : "translate-x-0"
-                          }`}
+                          className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ${isSilenced ? "translate-x-4" : "translate-x-0"
+                            }`}
                         />
                       </button>
                     </div>
@@ -1061,11 +1081,10 @@ export default function LostFound() {
                             <button
                               onClick={handleDeleteSelectedNotifs}
                               disabled={selectedNotifIds.length === 0}
-                              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl transition ${
-                                selectedNotifIds.length > 0
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl transition ${selectedNotifIds.length > 0
                                   ? "bg-red-50 hover:bg-red-100 text-red-600 cursor-pointer"
                                   : "text-slate-350 bg-slate-50 cursor-not-allowed"
-                              }`}
+                                }`}
                             >
                               <Trash2 size={12} /> Delete ({selectedNotifIds.length})
                             </button>
@@ -1111,11 +1130,10 @@ export default function LostFound() {
                         return (
                           <div
                             key={notif.id}
-                            className={`p-2.5 rounded-2xl border transition flex items-center gap-2 justify-between ${
-                              isSelectMode
+                            className={`p-2.5 rounded-2xl border transition flex items-center gap-2 justify-between ${isSelectMode
                                 ? "bg-slate-50/50 hover:bg-slate-50 border-slate-100"
                                 : "bg-red-50/40 border-red-100/40"
-                            }`}
+                              }`}
                           >
                             {/* Checkbox for selection mode */}
                             {isSelectMode && (
@@ -1189,9 +1207,8 @@ export default function LostFound() {
                   setShowInboxView(true);
                   setShowMyReportsView(false);
                 }}
-                className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/85 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${
-                  inboxUnreadTotal > 0 ? "animate-pulse border-emerald-350" : ""
-                }`}
+                className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/85 shadow-lg hover:shadow-xl transition-all duration-300 font-extrabold text-slate-800 text-xs cursor-pointer select-none group ${inboxUnreadTotal > 0 ? "animate-pulse border-emerald-350" : ""
+                  }`}
               >
                 <span>📥 Inbox</span>
                 {inboxUnreadTotal > 0 && (
@@ -1210,7 +1227,7 @@ export default function LostFound() {
               >
                 <PlusCircle size={16} /> Report Lost Animal
               </Button>
-              
+
               <Button
                 onClick={() => {
                   setShowMyReportsView(true);
@@ -1244,8 +1261,8 @@ export default function LostFound() {
                       {filter === "lost"
                         ? "No lost animals reported yet."
                         : filter === "found"
-                        ? "No found animals reported yet."
-                        : "No reports posted yet."}
+                          ? "No found animals reported yet."
+                          : "No reports posted yet."}
                     </h3>
                     <p className="text-[11px] text-slate-450 font-semibold leading-relaxed">
                       New reports will appear here and may help reunite an animal with their family.

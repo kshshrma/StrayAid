@@ -6,10 +6,12 @@ import { getGuardian } from "../services/guardian/getGuardian";
 import GuardianForm from "../features/guardian/GuardianForm";
 import GuardianStatus from "../features/guardian/GuardianStatus";
 import GuardianRescueAssignments from "../features/guardian/GuardianRescueAssignments";
+import GuardianRescueHistory from "../features/guardian/GuardianRescueHistory";
 
 export default function Guardian() {
   const [guardian, setGuardian] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   async function loadGuardian() {
     try {
@@ -68,7 +70,15 @@ export default function Guardian() {
 
         {/* Rescue assignments */}
         {guardian && guardian.is_verified && (
-          <GuardianRescueAssignments />
+          <>
+            <GuardianRescueAssignments
+              onAssignmentCompleted={() => {
+                setHistoryRefreshKey((prev) => prev + 1);
+                loadGuardian();
+              }}
+            />
+            <GuardianRescueHistory refreshTrigger={historyRefreshKey} />
+          </>
         )}
 
       </div>

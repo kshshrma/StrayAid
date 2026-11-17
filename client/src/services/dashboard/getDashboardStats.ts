@@ -7,6 +7,8 @@ export interface DashboardStats {
   guardiansOnline: number;
   animalsHelped: number;
   totalReports: number;
+  isGuardian: boolean;
+  guardianLevel: string;
 }
 
 export async function getDashboardStats(
@@ -29,8 +31,50 @@ export async function getDashboardStats(
 
   const reports = reportsData ?? [];
 
+  // Check if current user is an authenticated Guardian
+  let personalLivesSaved: number | null = null;
+  let isGuardian = false;
+  let guardianLevel = "Guardian";
+
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.user) {
+      const { data: guardian } = await supabase
+        .from("guardians")
+        .select("id, total_rescues")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (guardian) {
+        isGuardian = true;
+        // Strict query: count distinct completed reports for this Guardian only
+        const { data: completedAssignments } = await supabase
+          .from("rescue_assignments")
+          .select("report_id")
+          .eq("guardian_id", guardian.id)
+          .eq("status", "completed");
+
+        const distinctReports = new Set(
+          (completedAssignments || []).map((a) => a.report_id).filter(Boolean)
+        );
+        personalLivesSaved = distinctReports.size;
+
+        if (personalLivesSaved >= 20) guardianLevel = "Master Guardian";
+        else if (personalLivesSaved >= 10) guardianLevel = "Senior Guardian";
+        else if (personalLivesSaved >= 5) guardianLevel = "Lead Rescuer";
+        else if (personalLivesSaved >= 1) guardianLevel = "Active Guardian";
+        else guardianLevel = "Apprentice Rescuer";
+      }
+    }
+  } catch (err) {
+    console.warn("[getDashboardStats] Failed to fetch personal guardian stats:", err);
+  }
+
   // Immediate Rescue Requests: Pending cases with Critical severity OR Emergency priority (within 10 km geofenced radius if coordinates are loaded)
-  const activeRescues = reports.filter(r => {
+  const activeRescues = reports.filter((r) => {
     const s = (r.status || "").toLowerCase();
     if (s !== "pending") return false;
 
@@ -55,7 +99,7 @@ export async function getDashboardStats(
   }).length;
 
   // Nearby Reports: All Pending cases (within 10 km radius if user coordinates are active)
-  const nearbyReports = reports.filter(r => {
+  const nearbyReports = reports.filter((r) => {
     const s = (r.status || "").toLowerCase();
     if (s !== "pending") return false;
 
@@ -74,10 +118,17 @@ export async function getDashboardStats(
     return true;
   }).length;
 
-  const animalsHelped = reports.filter(r => {
+  // Lives Saved calculation:
+  // If authenticated Guardian: strictly their personal completed rescues.
+  // If general citizen/guest: verified community completed rescues (status === 'completed' only).
+  const communityCompletedCount = reports.filter((r) => {
     const s = (r.status || "").toLowerCase();
-    return s === "accepted" || s === "enroute" || s === "rescued" || s === "completed";
+    return s === "completed";
   }).length;
+
+  const animalsHelped = isGuardian && personalLivesSaved !== null
+    ? personalLivesSaved
+    : communityCompletedCount;
 
   return {
     activeRescues,
@@ -85,5 +136,7 @@ export async function getDashboardStats(
     guardiansOnline: guardiansCount || 0,
     animalsHelped,
     totalReports: reports.length,
+    isGuardian,
+    guardianLevel,
   };
 }

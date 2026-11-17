@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getReportById } from "../../services/report/getReportById";
 import { acceptReport } from "../../services/report/acceptReport";
+import { subscribeReports } from "../../services/report/subscribeReports";
 import { supabase } from "../../lib/supabase";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -18,6 +19,7 @@ interface Report {
   severity: string;
   priority: string;
   ai_advice: string;
+  assigned_guardian_id?: string | null;
 }
 
 export default function ReportDetails() {
@@ -25,6 +27,8 @@ export default function ReportDetails() {
 
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accepting, setAccepting] = useState(false);
+  const [currentGuardianId, setCurrentGuardianId] = useState<string | null>(null);
 
   // Admin states
   const [isAdmin, setIsAdmin] = useState(false);
@@ -34,24 +38,36 @@ export default function ReportDetails() {
   const [updatingDispatch, setUpdatingDispatch] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  useEffect(() => {
-    async function loadReport() {
-      if (!id) return;
+  async function loadReport() {
+    if (!id) return;
 
-      try {
-        const data = await getReportById(id);
-        setReport(data);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
+    try {
+      const data = await getReportById(id);
+      setReport(data);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    async function checkRole() {
+  useEffect(() => {
+    async function loadGuardianAndRole() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
+          // Load guardian id for user
+          const { data: guardian } = await supabase
+            .from("guardians")
+            .select("id")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+          if (guardian) {
+            setCurrentGuardianId(guardian.id);
+          }
+
+          // Check admin/ngo role
           const { data: profile } = await supabase
             .from("profiles")
             .select("role")
@@ -70,24 +86,39 @@ export default function ReportDetails() {
           }
         }
       } catch (err) {
-        console.error("Failed to check admin status:", err);
+        console.error("Failed to check guardian/role status:", err);
       }
     }
 
     loadReport();
-    checkRole();
+    loadGuardianAndRole();
+
+    // Subscribe to live status changes
+    const channel = subscribeReports(() => {
+      loadReport();
+    });
+
+    return () => {
+      channel.unsubscribe();
+    };
   }, [id]);
 
   async function handleAccept() {
     if (!report) return;
 
     try {
+      setAccepting(true);
       const updated = await acceptReport(report.id);
       setReport(updated);
-      alert("Rescue accepted successfully!");
-    } catch (error) {
+      if (updated.assigned_guardian_id) {
+        setCurrentGuardianId(updated.assigned_guardian_id);
+      }
+      alert("✅ Rescue accepted successfully! It is now assigned to your account.");
+    } catch (error: any) {
       console.error(error);
-      alert("Failed to accept rescue.");
+      alert(error.message || "Failed to accept rescue.");
+    } finally {
+      setAccepting(false);
     }
   }
 
@@ -204,15 +235,35 @@ export default function ReportDetails() {
       ? "bg-orange-50 text-orange-700 border-orange-200"
       : "bg-blue-50 text-blue-700 border-blue-200";
 
+  const statusLower = (report.status || "").toLowerCase();
+  const isPending = statusLower === "pending";
+  const isAccepted = statusLower === "accepted" || statusLower === "enroute" || statusLower === "rescued";
+  const isAcceptedByMe = isAccepted && currentGuardianId && report.assigned_guardian_id === currentGuardianId;
+  const isCompleted = statusLower === "completed";
+
+  // Check if ai_advice is JSON metadata from connect chatbot
+  let parsedMetadata: any = null;
+  if (report.ai_advice) {
+    try {
+      if (report.ai_advice.trim().startsWith("{")) {
+        parsedMetadata = JSON.parse(report.ai_advice);
+      }
+    } catch (e) {
+      parsedMetadata = null;
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 pb-28 md:p-8">
       <div className="mx-auto max-w-lg space-y-6">
         <div className="overflow-hidden rounded-3xl bg-white border border-slate-100 shadow-md">
-          <img
-            src={report.image_url}
-            alt="Reported animal"
-            className="h-80 w-full object-cover"
-          />
+          {report.image_url && (
+            <img
+              src={report.image_url}
+              alt="Reported animal"
+              className="h-80 w-full object-cover"
+            />
+          )}
 
           <div className="p-6 space-y-6">
             <div>
@@ -250,11 +301,21 @@ export default function ReportDetails() {
                 </span>
               </div>
 
-              {report.ai_advice && (
+              {parsedMetadata ? (
+                <div className="mt-3 bg-white/80 p-3 rounded-xl text-xs text-slate-700 space-y-1 border border-blue-100/60">
+                  <p><strong>Rescue Type:</strong> <span className="capitalize">{parsedMetadata.rescueType?.replace(/_/g, " ") || "Rescue"}</span> {parsedMetadata.subType ? `(${parsedMetadata.subType})` : ""}</p>
+                  {parsedMetadata.ngoName && (
+                    <p><strong>Assigned NGO:</strong> {parsedMetadata.ngoName}</p>
+                  )}
+                  {parsedMetadata.notes && (
+                    <p className="italic text-slate-500">"{parsedMetadata.notes}"</p>
+                  )}
+                </div>
+              ) : report.ai_advice ? (
                 <div className="mt-3 bg-white/70 p-3 rounded-xl text-xs text-slate-600 italic">
                   "{report.ai_advice}"
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Incident Coordinates */}
@@ -271,14 +332,37 @@ export default function ReportDetails() {
               Reported on {new Date(report.created_at).toLocaleString()}
             </p>
 
-            {/* Accept Action for general Rescue Guardians */}
-            {report.status === "Pending" ? (
+            {/* Rescue Accept Action / Claimed Status Display */}
+            {isPending ? (
               <button
                 onClick={handleAccept}
-                className="w-full rounded-2xl bg-green-600 py-3.5 font-bold text-white hover:bg-green-700 shadow-md shadow-green-200 transition"
+                disabled={accepting}
+                className="w-full rounded-2xl bg-green-600 py-3.5 font-bold text-white hover:bg-green-700 shadow-md shadow-green-200 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                ✅ Accept Rescue Assignment
+                {accepting ? (
+                  <>
+                    <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>Accepting Rescue...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>✅ Accept Rescue Assignment</span>
+                  </>
+                )}
               </button>
+            ) : isAcceptedByMe ? (
+              <div className="w-full rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-center space-y-1">
+                <div className="flex items-center justify-center gap-2 text-emerald-800 font-extrabold text-sm">
+                  <span>🛡️ You Have Accepted This Rescue</span>
+                </div>
+                <p className="text-xs text-emerald-600 font-medium">
+                  Status: <span className="capitalize font-bold">{report.status}</span> • Assignment locked to your account
+                </p>
+              </div>
+            ) : isCompleted ? (
+              <div className="w-full rounded-2xl bg-slate-100 border border-slate-200 p-3.5 text-center text-slate-600 font-bold text-sm">
+                🏁 Rescue Completed
+              </div>
             ) : (
               <button
                 disabled

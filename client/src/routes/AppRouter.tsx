@@ -25,6 +25,7 @@ import AdminDashboard from "../pages/AdminDashboard";
 
 import ImmediateRescuesPage from "../pages/ImmediateRescuesPage";
 import NearbyReportsPage from "../pages/NearbyReportsPage";
+import LivesSavedPage from "../pages/LivesSavedPage";
 import LostFound from "../pages/LostFound";
 import Connect from "../pages/Connect";
 import Rewards from "../pages/Rewards";
@@ -122,6 +123,21 @@ export default function AppRouter() {
           <Route
             path="/reports/nearby"
             element={<ProtectedRoute><NearbyReportsPage /></ProtectedRoute>}
+          />
+
+          <Route
+            path="/rescues/saved"
+            element={<ProtectedRoute><LivesSavedPage /></ProtectedRoute>}
+          />
+
+          <Route
+            path="/lives-saved"
+            element={<ProtectedRoute><LivesSavedPage /></ProtectedRoute>}
+          />
+
+          <Route
+            path="/reports/saved"
+            element={<ProtectedRoute><LivesSavedPage /></ProtectedRoute>}
           />
 
           <Route

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getImmediateRescues, getNearbyReports } from "../controllers/reportController";
+import { getImmediateRescues, getNearbyReports, acceptReportHandler } from "../controllers/reportController";
 import {
   createLostFoundReport,
   submitSighting,
@@ -16,6 +16,7 @@ const router = Router();
 router.get("/immediate", requireAuth, getImmediateRescues);
 router.get("/nearby", requireAuth, getNearbyReports);
 router.get("/my", requireAuth, getMyReports);
+router.post("/:id/accept", requireAuth, acceptReportHandler);
 
 router.post("/lost-found", requireAuth, createLostFoundReport);
 router.post("/:reportId/sightings", requireAuth, submitSighting);

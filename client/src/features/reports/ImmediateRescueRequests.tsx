@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import { getImmediateRescues } from "../../services/report/getImmediateRescues";
+import { subscribeReports } from "../../services/report/subscribeReports";
+import { supabase } from "../../lib/supabase";
 
 interface Report {
   id: string;
@@ -22,13 +24,48 @@ export default function ImmediateRescueRequests() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [guardianId, setGuardianId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadGuardian() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: guardian } = await supabase
+            .from("guardians")
+            .select("id")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+          if (guardian) {
+            setGuardianId(guardian.id);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading guardian profile:", err);
+      }
+    }
+    loadGuardian();
+  }, []);
 
   async function loadImmediateReports() {
     try {
       setLoading(true);
       setError(null);
       const data = await getImmediateRescues();
-      setReports(data);
+
+      // Filter: only pending reports OR reports accepted by this user
+      const visible = (data || []).filter((r: any) => {
+        const s = (r.status || "").toLowerCase();
+        const isPending = s === "pending";
+        const isAccepted = s === "accepted" || s === "enroute" || s === "rescued";
+        if (isAccepted) {
+          return guardianId && r.assigned_guardian_id === guardianId;
+        }
+        return isPending;
+      });
+
+      setReports(visible);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to load immediate rescue requests");
@@ -39,7 +76,15 @@ export default function ImmediateRescueRequests() {
 
   useEffect(() => {
     loadImmediateReports();
-  }, []);
+
+    const channel = subscribeReports(() => {
+      loadImmediateReports();
+    });
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [guardianId]);
 
   function severityColor(severity: string) {
     const s = (severity || "").toLowerCase();
@@ -65,6 +110,19 @@ export default function ImmediateRescueRequests() {
       default:
         return "bg-blue-600 text-white";
     }
+  }
+
+  function formatAdvice(aiAdvice: string) {
+    if (!aiAdvice) return "No advice provided";
+    try {
+      if (aiAdvice.trim().startsWith("{")) {
+        const parsed = JSON.parse(aiAdvice);
+        return `Rescue: ${parsed.rescueType?.replace(/_/g, " ") || "Emergency"} • NGO: ${parsed.ngoName || "Dispatched"}`;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    return aiAdvice;
   }
 
   return (
@@ -110,68 +168,81 @@ export default function ImmediateRescueRequests() {
         </div>
       ) : (
         <div className="space-y-5">
-          {reports.map((report) => (
-            <div
-              key={report.id}
-              className="flex flex-col md:flex-row gap-4 p-4 rounded-2xl border border-slate-100 hover:border-slate-200/80 bg-white hover:bg-slate-50/50 transition-all shadow-sm"
-            >
-              {report.image_url && (
-                <img
-                  src={report.image_url}
-                  alt="Animal"
-                  className="w-full md:w-32 h-32 object-cover rounded-xl shadow-inner"
-                />
-              )}
-              
-              <div className="flex-1 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-                    <h4 className="font-bold text-slate-900 text-lg">
-                      🐾 {report.animal_type || "Unknown Animal"}
-                    </h4>
-                    <span className="text-xs text-slate-500">
-                      Reported {new Date(report.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+          {reports.map((report) => {
+            const isClaimedByMe = (report.status || "").toLowerCase() !== "pending";
+
+            return (
+              <div
+                key={report.id}
+                className={`flex flex-col md:flex-row gap-4 p-4 rounded-2xl border transition-all shadow-sm ${
+                  isClaimedByMe
+                    ? "border-emerald-200 bg-emerald-50/30 hover:border-emerald-300"
+                    : "border-slate-100 hover:border-slate-200/80 bg-white hover:bg-slate-50/50"
+                }`}
+              >
+                {report.image_url && (
+                  <img
+                    src={report.image_url}
+                    alt="Animal"
+                    className="w-full md:w-32 h-32 object-cover rounded-xl shadow-inner"
+                  />
+                )}
+                
+                <div className="flex-1 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                      <h4 className="font-bold text-slate-900 text-lg">
+                        🐾 {report.animal_type || "Unknown Animal"}
+                      </h4>
+                      <span className="text-xs text-slate-500">
+                        Reported {new Date(report.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <span className={`border px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${severityColor(report.severity)}`}>
+                        Severity: {report.severity}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${priorityColor(report.priority)}`}>
+                        Priority: {report.priority}
+                      </span>
+                      <span className="bg-slate-100 text-slate-600 text-xs font-semibold px-2 py-0.5 rounded-full capitalize">
+                        {report.status}
+                      </span>
+                      {isClaimedByMe && (
+                        <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-300">
+                          ✅ Accepted by You
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-slate-600 line-clamp-2 italic bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      "{formatAdvice(report.ai_advice)}"
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={`border px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${severityColor(report.severity)}`}>
-                      Severity: {report.severity}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${priorityColor(report.priority)}`}>
-                      Priority: {report.priority}
-                    </span>
-                    <span className="bg-slate-100 text-slate-600 text-xs font-semibold px-2 py-0.5 rounded-full capitalize">
-                      {report.status}
-                    </span>
-                  </div>
-
-                  <p className="text-sm text-slate-600 line-clamp-2 italic bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    "{report.ai_advice || "No advice provided"}"
-                  </p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-50 flex flex-wrap gap-3 items-center justify-between">
-                  <div className="text-xs text-gray-500 font-medium">
-                    📍 Lat: {report.latitude.toFixed(4)}, Lng: {report.longitude.toFixed(4)}
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Link to={`/reports/${report.id}`}>
-                      <Button className="py-1 px-3.5 text-xs bg-slate-900 hover:bg-slate-800 text-white rounded-lg">
-                        View Report
-                      </Button>
-                    </Link>
-                    <Link to={`/map?lat=${report.latitude}&lng=${report.longitude}`}>
-                      <Button className="py-1 px-3.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">
-                        View Location
-                      </Button>
-                    </Link>
+                  <div className="mt-4 pt-3 border-t border-slate-50 flex flex-wrap gap-3 items-center justify-between">
+                    <div className="text-xs text-gray-500 font-medium">
+                      📍 Lat: {report.latitude.toFixed(4)}, Lng: {report.longitude.toFixed(4)}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Link to={`/reports/${report.id}`}>
+                        <Button className="py-1 px-3.5 text-xs bg-slate-900 hover:bg-slate-800 text-white rounded-lg">
+                          View Report
+                        </Button>
+                      </Link>
+                      <Link to={`/map?lat=${report.latitude}&lng=${report.longitude}`}>
+                        <Button className="py-1 px-3.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">
+                          View Location
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Card>

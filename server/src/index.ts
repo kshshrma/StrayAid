@@ -30,7 +30,9 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/v1/ai", aiRoutes);
 
 app.use("/api/rescue", rescueRoutes);
+app.use("/api/rescues", rescueRoutes);
 app.use("/api/v1/rescue", rescueRoutes);
+app.use("/api/v1/rescues", rescueRoutes);
 
 app.use("/api/cases", caseRoutes);
 app.use("/api/v1/cases", caseRoutes);

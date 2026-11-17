@@ -5,7 +5,7 @@ export async function getRecentReports() {
     .from("reports")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(5);
+    .limit(30);
 
   if (error) throw error;
 

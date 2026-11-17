@@ -16,6 +16,7 @@ import {
 import { calculateDistance } from "../../utils/distance";
 import { supabase } from "../../lib/supabase";
 import type { Report } from "../../types/report";
+import { Heart } from "lucide-react";
 
 type AssignmentStatus =
   | "pending"
@@ -41,12 +42,23 @@ interface RescueAssignment {
   updated_at: string;
 }
 
-export default function GuardianRescueAssignments() {
+interface GuardianRescueAssignmentsProps {
+  onAssignmentCompleted?: () => void;
+}
+
+export default function GuardianRescueAssignments({
+  onAssignmentCompleted,
+}: GuardianRescueAssignmentsProps = {}) {
   const [assignments, setAssignments] = useState<RescueAssignment[]>([]);
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [completionModal, setCompletionModal] = useState<{
+    isOpen: boolean;
+    livesSaved: number;
+    reportId?: string;
+  } | null>(null);
 
   const [nearbyAlerts, setNearbyAlerts] = useState<any[]>([]);
   const [guardianCoords, setGuardianCoords] = useState<[number, number] | null>(null);
@@ -194,6 +206,15 @@ export default function GuardianRescueAssignments() {
         ...prev,
         [updatedAssignment.report_id]: report,
       }));
+
+      if (status === "completed") {
+        setCompletionModal({
+          isOpen: true,
+          livesSaved: updatedAssignment.livesSaved ?? updatedAssignment.totalRescues ?? 1,
+          reportId: updatedAssignment.report_id,
+        });
+        onAssignmentCompleted?.();
+      }
     } catch (err) {
       console.error(err);
       setError(
@@ -481,6 +502,37 @@ export default function GuardianRescueAssignments() {
               ))}
             </div>
           )}
+        </div>
+      )}
+      {/* Rescue Completion Success Modal */}
+      {completionModal?.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 text-center space-y-4 animate-scaleIn">
+            <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm">
+              <span className="text-3xl">🎉</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900 leading-tight">
+                Rescue Completed Successfully!
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                Your rescue history has been updated.
+              </p>
+            </div>
+            <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-center gap-2">
+              <Heart className="fill-emerald-600 text-emerald-600" size={18} />
+              <span className="text-sm font-black text-emerald-900">
+                Lives Saved: {completionModal.livesSaved}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCompletionModal(null)}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 rounded-xl transition text-xs shadow-md shadow-emerald-200 cursor-pointer"
+            >
+              Continue
+            </button>
+          </div>
         </div>
       )}
     </section>

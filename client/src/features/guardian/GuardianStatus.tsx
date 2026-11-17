@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { supabase } from "../../lib/supabase";
 import { updateGuardian } from "../../services/guardian/updateGuardian";
+import { getMyGuardianStats, type GuardianIndividualStats } from "../../services/rescue/getMyGuardianStats";
+import { Heart, Trophy, Activity } from "lucide-react";
 
 interface GuardianStatusProps {
   guardian: {
@@ -29,6 +31,19 @@ export default function GuardianStatus({
   const [updating, setUpdating] = useState(false);
   const [locationLoading, setLocationLoading] =
     useState(false);
+  const [stats, setStats] = useState<GuardianIndividualStats | null>(null);
+
+  useEffect(() => {
+    async function loadStats() {
+      if (guardian) {
+        const data = await getMyGuardianStats();
+        if (data) {
+          setStats(data);
+        }
+      }
+    }
+    loadStats();
+  }, [guardian?.id, guardian?.total_rescues]);
 
   if (!guardian) {
     return (
@@ -201,46 +216,70 @@ export default function GuardianStatus({
         </div>
       </div>
 
-      {/* Status cards */}
-      <div className="mt-5 grid grid-cols-2 gap-3">
-
-        {/* Guardian Mode */}
-        <div className="rounded-2xl bg-gray-50 p-4">
-          <p className="text-xs text-gray-500">
-            Guardian Mode
+      {/* Status cards - Individual Guardian Achievements */}
+      <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Lives Saved */}
+        <div className="rounded-2xl bg-emerald-50/70 border border-emerald-100 p-3.5 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-emerald-600 mb-1">
+            <span className="text-[11px] font-bold text-emerald-900 uppercase tracking-wider">Lives Saved</span>
+            <Heart size={14} className="fill-emerald-500 text-emerald-500" />
+          </div>
+          <p className="text-xl font-black text-emerald-950">
+            {stats?.livesSaved ?? guardian.total_rescues ?? 0}
           </p>
-
-          <p
-            className={`mt-1 text-sm font-extrabold ${
-              guardian.available
-                ? "text-green-600"
-                : "text-gray-500"
-            }`}
-          >
-            {guardian.available
-              ? "ON"
-              : "OFF"}
-          </p>
+          <span className="text-[9px] text-emerald-600 font-semibold mt-0.5">
+            Confirmed rescues
+          </span>
         </div>
 
-        {/* Rescues */}
-        <div className="rounded-2xl bg-gray-50 p-4">
-          <p className="text-xs text-gray-500">
-            Rescues Completed
+        {/* Rescues Completed */}
+        <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3.5 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Rescues</span>
+            <span className="text-sm">🚑</span>
+          </div>
+          <p className="text-xl font-black text-slate-900">
+            {stats?.totalRescues ?? guardian.total_rescues ?? 0}
           </p>
+          <span className="text-[9px] text-slate-400 font-semibold mt-0.5">
+            Total verified
+          </span>
+        </div>
 
-          <p className="mt-1 text-sm font-extrabold text-gray-900">
-            {guardian.total_rescues}
+        {/* Active Assignments */}
+        <div className="rounded-2xl bg-blue-50/70 border border-blue-100 p-3.5 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-blue-600 mb-1">
+            <span className="text-[11px] font-bold text-blue-900 uppercase tracking-wider">Active</span>
+            <Activity size={14} />
+          </div>
+          <p className="text-xl font-black text-blue-950">
+            {stats?.activeAssignments ?? 0}
           </p>
+          <span className="text-[9px] text-blue-600 font-semibold mt-0.5">
+            In progress
+          </span>
+        </div>
+
+        {/* Guardian Level */}
+        <div className="rounded-2xl bg-amber-50/70 border border-amber-100 p-3.5 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-amber-600 mb-1">
+            <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">Rank</span>
+            <Trophy size={14} />
+          </div>
+          <p className="text-xs font-black text-amber-950 truncate mt-1">
+            {stats?.guardianLevel ?? "Guardian"}
+          </p>
+          <span className="text-[9px] text-amber-600 font-semibold mt-0.5">
+            Based on completed
+          </span>
         </div>
 
         {/* Experience */}
-        <div className="rounded-2xl bg-gray-50 p-4 col-span-2">
-          <p className="text-xs text-gray-500">
+        <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3.5 col-span-2 sm:col-span-4">
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
             Rescue Experience
           </p>
-
-          <p className="mt-1 text-sm font-semibold text-gray-900 leading-relaxed">
+          <p className="mt-1 text-xs font-semibold text-slate-800 leading-relaxed">
             {guardian.experience || "No rescue experience listed"}
           </p>
         </div>

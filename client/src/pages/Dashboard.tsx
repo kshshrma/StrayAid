@@ -22,6 +22,8 @@ export default function Dashboard() {
     guardiansOnline: 0,
     animalsHelped: 0,
     totalReports: 0,
+    isGuardian: false,
+    guardianLevel: "Street Guardian",
   });
 
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
@@ -96,7 +98,12 @@ export default function Dashboard() {
 
           <DashboardHeader />
 
-          <HeroCard animalsHelped={stats.animalsHelped} />
+          <HeroCard
+            animalsHelped={stats.animalsHelped}
+            isGuardian={stats.isGuardian}
+            guardianLevel={stats.guardianLevel}
+            onLivesSavedClick={() => navigate("/rescues/saved")}
+          />
 
           <section className="grid grid-cols-3 gap-4">
             <StatCard

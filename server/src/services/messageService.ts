@@ -261,11 +261,12 @@ export async function getOrCreateReportConversation(
 
   let conv = conversations.find(
     (c) =>
-      c.type === "report" &&
+      (c.type === "report" || !c.type) &&
       c.reportId === reportId &&
       ((c.participant1Id === citizenUserId && c.participant2Id === reportOwnerId) ||
         (c.participant1Id === reportOwnerId && c.participant2Id === citizenUserId) ||
-        c.participants.some((p) => p.userId === citizenUserId))
+        (c.participants?.some((p) => p.userId === citizenUserId) &&
+         c.participants?.some((p) => p.userId === reportOwnerId)))
   );
 
   if (!conv) {
@@ -283,8 +284,13 @@ export async function getOrCreateReportConversation(
       createdAt: now,
       updatedAt: now,
     };
-    conversations.push(conv);
+    conversations.unshift(conv);
     await writeConversations(conversations);
+  } else {
+    if (!conv.type) {
+      conv.type = "report";
+      await writeConversations(conversations);
+    }
   }
 
   return conv;

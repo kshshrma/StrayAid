@@ -51,6 +51,7 @@ interface Report {
   severity: string;
   priority: string;
   ai_advice: string;
+  assigned_guardian_id?: string | null;
 
   created_at: string;
 }
@@ -76,6 +77,7 @@ export default function RescueMap() {
 
   const [reports, setReports] = useState<Report[]>([]);
   const [myLocation, setMyLocation] = useState<[number, number] | null>(null);
+  const [myGuardianId, setMyGuardianId] = useState<string | null>(null);
   const [onlineGuardians, setOnlineGuardians] = useState<any[]>([]);
   const [activeRoute, setActiveRoute] = useState<[number, number][] | null>(null);
 
@@ -143,6 +145,21 @@ export default function RescueMap() {
   }
 
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        supabase
+          .from("guardians")
+          .select("id")
+          .eq("user_id", session.user.id)
+          .maybeSingle()
+          .then(({ data: guardian }) => {
+            if (guardian) {
+              setMyGuardianId(guardian.id);
+            }
+          });
+      }
+    });
+
     loadReports();
     loadOnlineGuardians();
 
@@ -240,7 +257,18 @@ export default function RescueMap() {
   }, [myLocation, reports, paramLat, paramLng]);
 
   const markers = useMemo(() => {
-    return reports.map((report) => {
+    // Only show pending reports, OR reports accepted by this specific guardian
+    const visibleReports = reports.filter((report) => {
+      const s = (report.status || "").toLowerCase();
+      const isPending = s === "pending";
+      const isAccepted = s === "accepted" || s === "enroute" || s === "rescued";
+      if (isAccepted) {
+        return myGuardianId && report.assigned_guardian_id === myGuardianId;
+      }
+      return isPending;
+    });
+
+    return visibleReports.map((report) => {
       let icon = lowMarker;
       if (report.severity === "Critical") icon = criticalMarker;
       else if (report.severity === "High") icon = highMarker;
@@ -248,7 +276,7 @@ export default function RescueMap() {
 
       return { report, icon };
     });
-  }, [reports]);
+  }, [reports, myGuardianId]);
 
   function severityBadge(severity: string) {
     switch (severity) {

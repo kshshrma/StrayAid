@@ -6,6 +6,7 @@ import Button from "../ui/Button";
 import RescueRequestCard from "./RescueRequestCard";
 
 import { getRecentReports } from "../../services/report/getRecentReports";
+import { subscribeReports } from "../../services/report/subscribeReports";
 import { supabase } from "../../lib/supabase";
 
 interface Report {
@@ -56,31 +57,16 @@ export default function RescueRequests() {
     try {
       const data = await getRecentReports();
       
-      // Filter reports: pending or assigned to this specific Guardian
+      // Filter reports: only pending rescue requests (accepted ones go to Lives Saved)
       const filtered = (data || []).filter((report: any) => {
         const s = (report.status || "").toLowerCase();
-        if (s === "pending") return true;
-        if (s === "accepted" || s === "enroute" || s === "rescued") {
-          return guardianId && report.assigned_guardian_id === guardianId;
-        }
-        return false;
+        return s === "pending";
       });
 
-      // Sort reports: pending first (priority wise), accepted reports last
+      // Sort reports: priority wise, then newest first
       const sorted = filtered.sort((a: any, b: any) => {
-        const sA = (a.status || "").toLowerCase();
-        const sB = (b.status || "").toLowerCase();
-
-        const isAssignedA = sA === "accepted" || sA === "enroute" || sA === "rescued";
-        const isAssignedB = sB === "accepted" || sB === "enroute" || sB === "rescued";
-
-        // Keep assigned/accepted rescues at the very end (display last)
-        if (isAssignedA && !isAssignedB) return 1;
-        if (!isAssignedA && isAssignedB) return -1;
-
-        // Sort pending reports priority-wise
         const weightA = getSeverityWeight(a.severity);
-        const weightB = getSeverityWeight(b.severity);
+        const weightB = getSeverityWeight(b);
 
         if (weightA !== weightB) {
           return weightB - weightA;
@@ -94,9 +80,17 @@ export default function RescueRequests() {
     }
   }
 
-  // Reload reports when guardianId is set or loaded
+  // Reload reports when guardianId is set or loaded, and listen for live updates
   useEffect(() => {
     loadReports();
+
+    const channel = subscribeReports(() => {
+      loadReports();
+    });
+
+    return () => {
+      channel.unsubscribe();
+    };
   }, [guardianId]);
 
   return (
@@ -113,16 +107,13 @@ export default function RescueRequests() {
           </p>
         ) : (
           reports.map((report) => (
-            <RescueRequestCard
-              key={report.id}
-              animal={report.animal_type}
-              severity={report.severity}
-              time={`${new Date(report.created_at).toLocaleString()}${
-                report.assigned_guardian_id === guardianId && report.status !== "pending"
-                  ? " (Your Accepted Rescue)"
-                  : ""
-              }`}
-            />
+            <Link key={report.id} to={`/reports/${report.id}`} className="block">
+              <RescueRequestCard
+                animal={report.animal_type}
+                severity={report.severity}
+                time={new Date(report.created_at).toLocaleString()}
+              />
+            </Link>
           ))
         )}
 

@@ -4,6 +4,8 @@ type AssignmentStatus =
   | "pending"
   | "accepted"
   | "rejected"
+  | "enroute"
+  | "rescued"
   | "expired"
   | "cancelled"
   | "completed";
@@ -15,10 +17,16 @@ interface UpdateAssignmentInput {
 const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+export interface UpdateAssignmentResult {
+  assignment: any;
+  totalRescues?: number;
+  livesSaved?: number;
+}
+
 export async function updateAssignment(
   assignmentId: string,
   updates: UpdateAssignmentInput
-) {
+): Promise<any> {
   const {
     data: { session },
     error: sessionError,
@@ -54,5 +62,14 @@ export async function updateAssignment(
     );
   }
 
-  return result.assignment;
+  // Attach livesSaved and totalRescues to the assignment object for convenience
+  const returnedAssignment = result.assignment || {};
+  if (result.totalRescues !== undefined) {
+    returnedAssignment.totalRescues = result.totalRescues;
+  }
+  if (result.livesSaved !== undefined) {
+    returnedAssignment.livesSaved = result.livesSaved;
+  }
+
+  return returnedAssignment;
 }

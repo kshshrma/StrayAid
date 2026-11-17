@@ -19,6 +19,15 @@ export async function getImmediateRescues(
       });
     }
 
+    // Fetch Guardian profile to identify user's guardian ID
+    const { data: guardian } = await supabase
+      .from("guardians")
+      .select("id")
+      .eq("user_id", req.userId)
+      .maybeSingle();
+
+    const userGuardianId = guardian?.id || null;
+
     const { data: reports, error } = await supabase
       .from("reports")
       .select("id, image_url, latitude, longitude, animal_type, severity, priority, ai_advice, status, created_at, assigned_guardian_id");
@@ -37,13 +46,17 @@ export async function getImmediateRescues(
       const severity = (r.severity || "").toLowerCase();
       const priority = (r.priority || "").toLowerCase();
 
-      // Only include active/unresolved reports
-      const isActive =
-        status === "pending" ||
-        status === "accepted" ||
-        status === "enroute";
+      const isPending = status === "pending";
+      const isAccepted = status === "accepted" || status === "enroute" || status === "rescued";
 
-      if (!isActive) return false;
+      // If accepted: only visible to the specific user who accepted the report
+      if (isAccepted) {
+        if (!userGuardianId || r.assigned_guardian_id !== userGuardianId) {
+          return false;
+        }
+      } else if (!isPending) {
+        return false;
+      }
 
       // Immediate Rescue Condition
       return priority === "emergency" || severity === "critical";
@@ -109,13 +122,15 @@ export async function getNearbyReports(
     // 1. Fetch Guardian profile to check if user is a Guardian
     const { data: guardian, error: guardianError } = await supabase
       .from("guardians")
-      .select("latitude, longitude")
+      .select("id, latitude, longitude")
       .eq("user_id", req.userId)
       .maybeSingle();
 
     if (guardianError) {
       console.error("[ReportDiscovery] Error checking Guardian profile:", guardianError);
     }
+
+    const userGuardianId = guardian?.id || null;
 
     let latitude: number | null = null;
     let longitude: number | null = null;
@@ -179,12 +194,19 @@ export async function getNearbyReports(
     const activeNearby = (reports || [])
       .filter((r: any) => {
         const status = (r.status || "").toLowerCase();
-        const isActive =
-          status === "pending" ||
-          status === "accepted" ||
-          status === "enroute";
+        const isPending = status === "pending";
+        const isAccepted = status === "accepted" || status === "enroute" || status === "rescued";
 
-        return isActive && r.latitude !== null && r.longitude !== null;
+        // If accepted: only visible to the user who accepted it
+        if (isAccepted) {
+          if (!userGuardianId || r.assigned_guardian_id !== userGuardianId) {
+            return false;
+          }
+        } else if (!isPending) {
+          return false;
+        }
+
+        return r.latitude !== null && r.longitude !== null;
       })
       .map((r: any) => {
         const dist = calculateDistanceKm(
@@ -246,6 +268,168 @@ export async function getNearbyReports(
     return res.status(500).json({
       success: false,
       message: err.message || "Failed to load nearby reports",
+    });
+  }
+}
+
+/**
+ * POST /api/reports/:id/accept
+ * Accept a rescue report by the authenticated user
+ */
+export async function acceptReportHandler(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Report ID is required",
+      });
+    }
+
+    // 1. Verify report exists
+    const { data: report, error: reportErr } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (reportErr || !report) {
+      return res.status(404).json({
+        success: false,
+        message: "Report not found",
+      });
+    }
+
+    // 2. Fetch or auto-create Guardian record for this user
+    let { data: guardian } = await supabase
+      .from("guardians")
+      .select("id")
+      .eq("user_id", req.userId)
+      .maybeSingle();
+
+    if (!guardian) {
+      const { data: newGuardian, error: createGuardianErr } = await supabase
+        .from("guardians")
+        .insert({
+          user_id: req.userId,
+          available: true,
+          is_verified: true,
+        })
+        .select("id")
+        .single();
+
+      if (createGuardianErr) {
+        console.error("[ReportAccept] Failed to auto-create guardian:", createGuardianErr);
+      } else {
+        guardian = newGuardian;
+      }
+    }
+
+    const guardianId = guardian?.id || null;
+    if (!guardianId) {
+      return res.status(403).json({
+        success: false,
+        message: "Unable to verify Guardian profile for authenticated user",
+      });
+    }
+
+    // 3. Exclusivity Verification: Check if this rescue is already claimed by someone else
+    const currentStatus = (report.status || "").toLowerCase();
+    if (
+      report.assigned_guardian_id &&
+      report.assigned_guardian_id !== guardianId
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: "This rescue has already been claimed by another Guardian",
+      });
+    }
+
+    if (currentStatus === "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "This rescue is already completed",
+      });
+    }
+
+    if (currentStatus === "accepted" && report.assigned_guardian_id !== guardianId) {
+      return res.status(409).json({
+        success: false,
+        message: "This rescue has already been claimed by another Guardian",
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // 4. Update report status to accepted and lock to this Guardian
+    const updatePayload: any = {
+      status: "accepted",
+      assigned_guardian_id: guardianId,
+      accepted_at: report.accepted_at || nowIso,
+      updated_at: nowIso,
+    };
+
+    const { data: updatedReport, error: updateError } = await supabase
+      .from("reports")
+      .update(updatePayload)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error("[ReportAccept] Error updating report:", updateError);
+      return res.status(500).json({
+        success: false,
+        message: updateError.message || "Failed to update report",
+      });
+    }
+
+    // 5. Ensure authoritative rescue_assignment for this Guardian
+    try {
+      await supabase
+        .from("rescue_assignments")
+        .upsert(
+          {
+            report_id: id,
+            guardian_id: guardianId,
+            status: "accepted",
+            responded_at: nowIso,
+            updated_at: nowIso,
+          },
+          { onConflict: "report_id,guardian_id" }
+        );
+
+      // Cancel any other pending assignments for this report to other Guardians
+      await supabase
+        .from("rescue_assignments")
+        .update({ status: "cancelled", updated_at: nowIso })
+        .eq("report_id", id)
+        .neq("guardian_id", guardianId)
+        .eq("status", "pending");
+    } catch (assignErr) {
+      console.warn("[ReportAccept] Rescue assignment upsert warning:", assignErr);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Rescue accepted successfully",
+      report: updatedReport,
+    });
+  } catch (err: any) {
+    console.error("[ReportAccept] Exception in acceptReportHandler:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to accept rescue report",
     });
   }
 }

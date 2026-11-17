@@ -213,6 +213,46 @@ export async function updateAssignment(
       });
     }
 
+    // Idempotency: If this assignment is already completed, do not re-process or re-increment
+    if (assignment.status === "completed") {
+      const { data: completedList } = await supabase
+        .from("rescue_assignments")
+        .select("report_id")
+        .eq("guardian_id", guardian.id)
+        .eq("status", "completed");
+
+      const uniqueReportIds = new Set((completedList || []).map((a) => a.report_id));
+      const totalCompleted = uniqueReportIds.size;
+
+      return res.status(200).json({
+        success: true,
+        message: "Rescue assignment is already completed",
+        assignment,
+        totalRescues: totalCompleted,
+        livesSaved: totalCompleted,
+      });
+    }
+
+    // Verify report exclusivity before accepting
+    if (status === "accepted") {
+      const { data: reportRecord } = await supabase
+        .from("reports")
+        .select("assigned_guardian_id, status")
+        .eq("id", assignment.report_id)
+        .single();
+
+      if (
+        reportRecord &&
+        reportRecord.assigned_guardian_id &&
+        reportRecord.assigned_guardian_id !== guardian.id
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: "This rescue has already been claimed by another Guardian",
+        });
+      }
+    }
+
     // Validate valid state transitions
     const currentStatus = assignment.status;
     let isValidTransition = false;
@@ -235,13 +275,14 @@ export async function updateAssignment(
     }
 
     // Update assignment
+    const nowIso = new Date().toISOString();
     const updateData: any = {
       status,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     };
 
     if (status === "accepted" || status === "rejected") {
-      updateData.responded_at = new Date().toISOString();
+      updateData.responded_at = nowIso;
     }
 
     const {
@@ -268,7 +309,6 @@ export async function updateAssignment(
 
     // Handle Report status updates and other side-effects
     try {
-      const nowIso = new Date().toISOString();
       if (status === "accepted") {
         await supabase
           .from("reports")
@@ -276,9 +316,30 @@ export async function updateAssignment(
             status: "accepted",
             assigned_guardian_id: guardian.id,
             accepted_at: nowIso,
+            updated_at: nowIso,
           })
           .eq("id", assignment.report_id);
+
+        // Cancel any other pending assignments for this report to other guardians
+        await supabase
+          .from("rescue_assignments")
+          .update({ status: "cancelled", updated_at: nowIso })
+          .eq("report_id", assignment.report_id)
+          .neq("guardian_id", guardian.id)
+          .eq("status", "pending");
       } else if (status === "rejected") {
+        // If this report was assigned to this guardian, clear it
+        await supabase
+          .from("reports")
+          .update({
+            status: "pending",
+            assigned_guardian_id: null,
+            accepted_at: null,
+            updated_at: nowIso,
+          })
+          .eq("id", assignment.report_id)
+          .eq("assigned_guardian_id", guardian.id);
+
         // Trigger fallback dispatch to next Guardian
         const { data: report } = await supabase
           .from("reports")
@@ -303,6 +364,7 @@ export async function updateAssignment(
           .update({
             status: "enroute",
             enroute_at: nowIso,
+            updated_at: nowIso,
           })
           .eq("id", assignment.report_id);
       } else if (status === "rescued") {
@@ -311,6 +373,7 @@ export async function updateAssignment(
           .update({
             status: "rescued",
             rescued_at: nowIso,
+            updated_at: nowIso,
           })
           .eq("id", assignment.report_id);
       } else if (status === "completed") {
@@ -320,21 +383,25 @@ export async function updateAssignment(
           .update({
             status: "completed",
             completed_at: nowIso,
+            updated_at: nowIso,
           })
           .eq("id", assignment.report_id);
 
-        // Fetch current rescues total
-        const { data: gProfile } = await supabase
-          .from("guardians")
-          .select("total_rescues")
-          .eq("id", guardian.id)
-          .single();
+        // Calculate exact, distinct completed rescues for this Guardian only
+        const { data: completedList } = await supabase
+          .from("rescue_assignments")
+          .select("report_id")
+          .eq("guardian_id", guardian.id)
+          .eq("status", "completed");
 
-        // Increment total rescues
+        const uniqueReportIds = new Set((completedList || []).map((a) => a.report_id));
+        const totalCompleted = uniqueReportIds.size;
+
+        // Synchronize total_rescues in guardians table
         await supabase
           .from("guardians")
           .update({
-            total_rescues: (gProfile?.total_rescues ?? 0) + 1,
+            total_rescues: totalCompleted,
             updated_at: nowIso,
           })
           .eq("id", guardian.id);
@@ -342,9 +409,22 @@ export async function updateAssignment(
     } catch (err) {
       console.error("Failed handling side effects for assignment status transition:", status, err);
     }
+
+    // Query this guardian's verified total completed rescues
+    const { data: completedList } = await supabase
+      .from("rescue_assignments")
+      .select("report_id")
+      .eq("guardian_id", guardian.id)
+      .eq("status", "completed");
+
+    const uniqueReportIds = new Set((completedList || []).map((a) => a.report_id));
+    const totalCompleted = uniqueReportIds.size;
+
     return res.status(200).json({
       success: true,
       assignment: updatedAssignment,
+      totalRescues: totalCompleted,
+      livesSaved: totalCompleted,
     });
   } catch (error) {
     console.error(
@@ -579,6 +659,298 @@ export async function createBotRescueRequest(req: AuthenticatedRequest, res: Res
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to process rescue request",
+    });
+  }
+}
+
+/**
+ * GET /api/rescue/my-history
+ * Returns completed rescue assignments and associated report details
+ * strictly belonging to the authenticated Guardian.
+ */
+export async function getMyRescueHistory(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+    }
+
+    const { data: guardian, error: guardianError } = await supabase
+      .from("guardians")
+      .select("id")
+      .eq("user_id", req.userId)
+      .maybeSingle();
+
+    if (guardianError || !guardian) {
+      return res.status(403).json({
+        success: false,
+        message: "Guardian profile not found",
+      });
+    }
+
+    // 1. Fetch completed assignments for THIS guardian only
+    const { data: assignments, error: assignErr } = await supabase
+      .from("rescue_assignments")
+      .select("*")
+      .eq("guardian_id", guardian.id)
+      .eq("status", "completed")
+      .order("updated_at", { ascending: false });
+
+    if (assignErr) {
+      console.error("[RescueController] Error loading history:", assignErr);
+      return res.status(500).json({
+        success: false,
+        message: assignErr.message,
+      });
+    }
+
+    if (!assignments || assignments.length === 0) {
+      return res.status(200).json({
+        success: true,
+        history: [],
+        totalRescues: 0,
+        livesSaved: 0,
+      });
+    }
+
+    // 2. Fetch associated reports
+    const reportIds = Array.from(new Set(assignments.map((a) => a.report_id).filter(Boolean)));
+    const { data: reports, error: reportsErr } = await supabase
+      .from("reports")
+      .select("id, animal_type, image_url, latitude, longitude, severity, priority, status, created_at, accepted_at, completed_at, ai_advice")
+      .in("id", reportIds);
+
+    if (reportsErr) {
+      console.error("[RescueController] Error loading report details for history:", reportsErr);
+    }
+
+    const reportMap = new Map((reports || []).map((r) => [r.id, r]));
+
+    // 3. Assemble history entries
+    const history = assignments.map((assignment) => {
+      const report = reportMap.get(assignment.report_id) || null;
+      let notes = "";
+      try {
+        const parsed = JSON.parse(report?.ai_advice || "{}");
+        notes = parsed.description || parsed.notes || "";
+      } catch {}
+
+      return {
+        assignmentId: assignment.id,
+        reportId: assignment.report_id,
+        guardianId: assignment.guardian_id,
+        status: assignment.status,
+        assignedAt: assignment.created_at || assignment.assigned_at,
+        acceptedAt: report?.accepted_at || assignment.responded_at,
+        completedAt: report?.completed_at || assignment.updated_at,
+        distanceKm: assignment.distance_km,
+        animalType: report?.animal_type || "Animal",
+        imageUrl: report?.image_url || null,
+        latitude: report?.latitude ?? null,
+        longitude: report?.longitude ?? null,
+        severity: report?.severity || "Normal",
+        priority: report?.priority || "Normal",
+        notes,
+      };
+    });
+
+    const uniqueReportsCount = new Set(assignments.map((a) => a.report_id)).size;
+
+    return res.status(200).json({
+      success: true,
+      history,
+      totalRescues: uniqueReportsCount,
+      livesSaved: uniqueReportsCount,
+    });
+  } catch (err: any) {
+    console.error("[RescueController] Exception in getMyRescueHistory:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to load rescue history",
+    });
+  }
+}
+
+/**
+ * GET /api/rescue/my-stats
+ * Returns verified individual statistics for the authenticated Guardian.
+ */
+export async function getMyGuardianStats(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+    }
+
+    const { data: guardian, error: guardianError } = await supabase
+      .from("guardians")
+      .select("id, available, is_verified, total_rescues, experience, bio")
+      .eq("user_id", req.userId)
+      .maybeSingle();
+
+    if (guardianError || !guardian) {
+      return res.status(403).json({
+        success: false,
+        message: "Guardian profile not found",
+      });
+    }
+
+    // Query assignments for this Guardian
+    const { data: assignments, error: assignErr } = await supabase
+      .from("rescue_assignments")
+      .select("report_id, status")
+      .eq("guardian_id", guardian.id);
+
+    if (assignErr) {
+      return res.status(500).json({
+        success: false,
+        message: assignErr.message,
+      });
+    }
+
+    const all = assignments || [];
+    const completedAssignments = all.filter((a) => a.status === "completed");
+    const activeAssignments = all.filter((a) => ["accepted", "enroute", "rescued"].includes(a.status));
+    const pendingAssignments = all.filter((a) => a.status === "pending");
+
+    const uniqueCompletedReports = new Set(completedAssignments.map((a) => a.report_id));
+    const livesSaved = uniqueCompletedReports.size;
+
+    // Determine level
+    let guardianLevel = "Rookie Guardian";
+    if (livesSaved >= 10) {
+      guardianLevel = "Master Guardian";
+    } else if (livesSaved >= 5) {
+      guardianLevel = "Senior Guardian";
+    } else if (livesSaved >= 1) {
+      guardianLevel = "Junior Guardian";
+    }
+
+    // Sync total_rescues in database if out of date
+    if (guardian.total_rescues !== livesSaved) {
+      await supabase
+        .from("guardians")
+        .update({ total_rescues: livesSaved })
+        .eq("id", guardian.id);
+    }
+
+    return res.status(200).json({
+      success: true,
+      stats: {
+        guardianId: guardian.id,
+        totalRescues: livesSaved,
+        livesSaved,
+        activeAssignments: activeAssignments.length,
+        pendingAssignments: pendingAssignments.length,
+        available: guardian.available,
+        isVerified: guardian.is_verified,
+        guardianLevel,
+      },
+    });
+  } catch (err: any) {
+    console.error("[RescueController] Exception in getMyGuardianStats:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to load Guardian statistics",
+    });
+  }
+}
+
+/**
+ * GET /api/rescue/my-rescues
+ * Returns all active & completed reports claimed by the authenticated Guardian
+ * (For the Lives Saved view & Guardian personal tracking)
+ */
+export async function getMyAcceptedRescues(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const { data: guardian } = await supabase
+      .from("guardians")
+      .select("id")
+      .eq("user_id", req.userId)
+      .maybeSingle();
+
+    if (!guardian) {
+      return res.status(200).json({
+        success: true,
+        rescues: [],
+        livesSavedCount: 0,
+        activeCount: 0,
+      });
+    }
+
+    // Query assignments for this guardian
+    const { data: assignments } = await supabase
+      .from("rescue_assignments")
+      .select("id, report_id, status, distance_km, dispatch_score, created_at, updated_at, responded_at")
+      .eq("guardian_id", guardian.id)
+      .in("status", ["accepted", "enroute", "rescued", "completed"])
+      .order("updated_at", { ascending: false });
+
+    if (!assignments || assignments.length === 0) {
+      return res.status(200).json({
+        success: true,
+        rescues: [],
+        livesSavedCount: 0,
+        activeCount: 0,
+      });
+    }
+
+    const reportIds = Array.from(new Set(assignments.map((a) => a.report_id)));
+    const { data: reports } = await supabase
+      .from("reports")
+      .select("*")
+      .in("id", reportIds);
+
+    const reportMap = new Map((reports || []).map((r) => [r.id, r]));
+
+    const combined = assignments.map((assign) => {
+      const rep = reportMap.get(assign.report_id);
+      return {
+        assignmentId: assign.id,
+        assignmentStatus: assign.status,
+        distanceKm: assign.distance_km,
+        report: rep || null,
+        acceptedAt: rep?.accepted_at || assign.responded_at,
+        completedAt: rep?.completed_at || (assign.status === "completed" ? assign.updated_at : null),
+      };
+    });
+
+    const completedDistinct = new Set(
+      assignments.filter((a) => a.status === "completed").map((a) => a.report_id)
+    ).size;
+    const activeCount = assignments.filter((a) => ["accepted", "enroute", "rescued"].includes(a.status)).length;
+
+    return res.status(200).json({
+      success: true,
+      rescues: combined,
+      livesSavedCount: completedDistinct,
+      activeCount,
+    });
+  } catch (err: any) {
+    console.error("[RescueController] Exception in getMyAcceptedRescues:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to load rescues",
     });
   }
 }
