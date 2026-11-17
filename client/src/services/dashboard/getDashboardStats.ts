@@ -50,16 +50,25 @@ export async function getDashboardStats(
 
       if (guardian) {
         isGuardian = true;
-        // Strict query: count distinct completed reports for this Guardian only
-        const { data: completedAssignments } = await supabase
+
+        // Query both reports assigned to this guardian AND rescue assignments
+        const { data: assignedReports } = await supabase
+          .from("reports")
+          .select("id")
+          .eq("assigned_guardian_id", guardian.id)
+          .in("status", ["accepted", "enroute", "rescued", "completed", "Accepted", "Enroute", "Rescued", "Completed"]);
+
+        const { data: assignments } = await supabase
           .from("rescue_assignments")
           .select("report_id")
           .eq("guardian_id", guardian.id)
-          .eq("status", "completed");
+          .in("status", ["accepted", "enroute", "rescued", "completed", "Accepted", "Enroute", "Rescued", "Completed"]);
 
-        const distinctReports = new Set(
-          (completedAssignments || []).map((a) => a.report_id).filter(Boolean)
-        );
+        const distinctReports = new Set([
+          ...(assignedReports || []).map((r) => r.id),
+          ...(assignments || []).map((a) => a.report_id),
+        ].filter(Boolean));
+
         personalLivesSaved = distinctReports.size;
 
         if (personalLivesSaved >= 20) guardianLevel = "Master Guardian";
@@ -119,11 +128,11 @@ export async function getDashboardStats(
   }).length;
 
   // Lives Saved calculation:
-  // If authenticated Guardian: strictly their personal completed rescues.
-  // If general citizen/guest: verified community completed rescues (status === 'completed' only).
+  // If authenticated Guardian: strictly their personal accepted & saved rescues.
+  // If general citizen/guest: community accepted & completed rescues.
   const communityCompletedCount = reports.filter((r) => {
     const s = (r.status || "").toLowerCase();
-    return s === "completed";
+    return s === "accepted" || s === "enroute" || s === "rescued" || s === "completed";
   }).length;
 
   const animalsHelped = isGuardian && personalLivesSaved !== null

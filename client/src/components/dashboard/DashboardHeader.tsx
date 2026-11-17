@@ -1,4 +1,4 @@
-import { Bell, BarChart3 } from "lucide-react";
+import { Bell } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import Avatar from "../ui/Avatar";
@@ -30,11 +30,7 @@ export default function DashboardHeader() {
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <Link to="/admin" className="rounded-xl bg-white p-3 shadow hover:bg-slate-50 transition active:scale-95">
-          <BarChart3 size={20} className="text-slate-700" />
-        </Link>
-
+      <div className="flex items-center">
         <button
           onClick={openDrawer}
           className="relative rounded-xl bg-white p-3 shadow hover:bg-slate-50 transition active:scale-95 cursor-pointer group"

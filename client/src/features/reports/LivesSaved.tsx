@@ -6,13 +6,11 @@ import { subscribeReports } from "../../services/report/subscribeReports";
 import { getMyAcceptedRescues } from "../../services/rescue/getMyAcceptedRescues";
 import { supabase } from "../../lib/supabase";
 import {
-  Heart,
   MapPin,
   ExternalLink,
   Copy,
   Check,
   Clock,
-  ShieldCheck,
   AlertCircle,
   X,
   Compass,
@@ -70,7 +68,7 @@ export default function LivesSaved() {
       if (currentGuardianId) {
         // Fetch strictly the authenticated Guardian's own rescues
         const myData = await getMyAcceptedRescues();
-        const mappedReports: Report[] = (myData.rescues || [])
+        let mappedReports: Report[] = (myData.rescues || [])
           .filter((item) => Boolean(item.report))
           .map((item) => ({
             ...item.report,
@@ -84,10 +82,47 @@ export default function LivesSaved() {
             assigned_guardian_id: item.report.assigned_guardian_id || currentGuardianId,
           }));
 
+        // Secondary fallback directly against reports table to ensure immediate visibility
+        if (mappedReports.length === 0) {
+          const { data: directReports } = await supabase
+            .from("reports")
+            .select("*")
+            .eq("assigned_guardian_id", currentGuardianId)
+            .in("status", [
+              "accepted",
+              "enroute",
+              "rescued",
+              "completed",
+              "Accepted",
+              "Enroute",
+              "Rescued",
+              "Completed",
+            ]);
+
+          if (directReports && directReports.length > 0) {
+            mappedReports = directReports.map((r: any) => ({
+              ...r,
+              status: (r.status || "accepted").toLowerCase(),
+              assigned_guardian_id: r.assigned_guardian_id || currentGuardianId,
+            }));
+          }
+        }
+
+        // Sort newest first
+        mappedReports.sort((a: any, b: any) => {
+          const timeA = new Date(a.accepted_at || a.created_at).getTime();
+          const timeB = new Date(b.accepted_at || b.created_at).getTime();
+          return timeB - timeA;
+        });
+
         setReports(mappedReports);
         setStats({
-          livesSaved: myData.livesSavedCount,
-          active: myData.activeCount,
+          livesSaved: Math.max(myData.livesSavedCount, mappedReports.length),
+          active:
+            myData.activeCount ||
+            mappedReports.filter((r) =>
+              ["accepted", "enroute", "rescued"].includes((r.status || "").toLowerCase())
+            ).length,
         });
       } else {
         // Fallback for general public: show community accepted missions
@@ -132,8 +167,20 @@ export default function LivesSaved() {
       loadAcceptedReports();
     });
 
+    const assignmentsChannel = supabase
+      .channel("public:rescue_assignments:lives_saved")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "rescue_assignments" },
+        () => {
+          loadAcceptedReports();
+        }
+      )
+      .subscribe();
+
     return () => {
       channel.unsubscribe();
+      assignmentsChannel.unsubscribe();
     };
   }, []);
 
@@ -247,52 +294,29 @@ export default function LivesSaved() {
       <Card className="border border-emerald-100/70 bg-white shadow-lg rounded-3xl p-5 space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 pb-4 border-b border-slate-100 flex-wrap">
-          <div className="flex items-center gap-2.5">
-            <span className="flex items-center justify-center w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 text-xl shadow-sm shrink-0">
-              <Heart className="fill-emerald-600 text-emerald-600" size={20} />
-            </span>
-            <div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none">
-                {guardianId ? "My Rescue Missions" : "Lives Saved"}
-              </h1>
-              <p className="text-xs text-slate-500 mt-1">
-                {guardianId
-                  ? "Your accepted and confirmed rescue operations"
-                  : "Community rescue cases locked to active responders"}
-              </p>
-            </div>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none">
+              Lives Saved
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Accepted rescue cases locked to active responders
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200/80 px-3 py-1.5 rounded-2xl shadow-sm shrink-0">
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200/80 px-3.5 py-1.5 rounded-2xl shadow-sm shrink-0">
               <span className="text-xl font-black text-emerald-700">
                 {stats.livesSaved}
               </span>
               <div className="text-left leading-tight">
-                <p className="text-[11px] font-bold text-emerald-900">
+                <p className="text-[12px] font-bold text-emerald-900">
                   Lives Saved
                 </p>
                 <p className="text-[9px] text-emerald-600 font-medium">
-                  Confirmed
+                  Accepted Rescues
                 </p>
               </div>
             </div>
-
-            {stats.active > 0 && (
-              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200/80 px-3 py-1.5 rounded-2xl shadow-sm shrink-0">
-                <span className="text-xl font-black text-blue-700">
-                  {stats.active}
-                </span>
-                <div className="text-left leading-tight">
-                  <p className="text-[11px] font-bold text-blue-900">
-                    Active
-                  </p>
-                  <p className="text-[9px] text-blue-600 font-medium">
-                    In Progress
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -367,27 +391,14 @@ export default function LivesSaved() {
                     {/* Gradient scrim for badge readability */}
                     <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
 
-                    {/* Overlaid Badges */}
-                    <div className="absolute top-3 inset-x-3 flex items-center justify-between gap-2 pointer-events-none">
-                      {/* Status Badge */}
+                    {/* Overlaid Status Badge */}
+                    <div className="absolute top-3 left-3 flex items-center pointer-events-none">
                       <span
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md ${statusInfo.bg}`}
                       >
                         <span className={`w-2 h-2 rounded-full ${statusInfo.dot}`} />
                         {statusInfo.label}
                       </span>
-
-                      {/* Rescuer Badge */}
-                      {isMine ? (
-                        <span className="inline-flex items-center gap-1 bg-emerald-600 text-white text-[11px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-md backdrop-blur-md">
-                          <ShieldCheck size={12} />
-                          Assigned to You
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm backdrop-blur-md">
-                          Rescuer Claimed
-                        </span>
-                      )}
                     </div>
                   </div>
 

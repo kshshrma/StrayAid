@@ -60,45 +60,73 @@ export async function getMyAcceptedRescues(): Promise<{
       return { rescues: [], livesSavedCount: 0, activeCount: 0 };
     }
 
+    // 1. Query reports directly assigned to this guardian
+    const { data: assignedReports } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("assigned_guardian_id", guardian.id)
+      .in("status", ["accepted", "enroute", "rescued", "completed", "Accepted", "Enroute", "Rescued", "Completed"]);
+
+    // 2. Query assignments for this guardian
     const { data: assignments } = await supabase
       .from("rescue_assignments")
       .select("id, report_id, status, distance_km, created_at, updated_at, responded_at")
       .eq("guardian_id", guardian.id)
-      .in("status", ["accepted", "enroute", "rescued", "completed"])
+      .in("status", ["accepted", "enroute", "rescued", "completed", "Accepted", "Enroute", "Rescued", "Completed"])
       .order("updated_at", { ascending: false });
 
-    if (!assignments || assignments.length === 0) {
+    const reportMap = new Map<string, any>();
+    (assignedReports || []).forEach((r) => reportMap.set(r.id, r));
+
+    const assignmentMap = new Map<string, any>();
+    (assignments || []).forEach((a) => {
+      if (a.report_id) assignmentMap.set(a.report_id, a);
+    });
+
+    const missingIds = (assignments || [])
+      .map((a) => a.report_id)
+      .filter((id) => id && !reportMap.has(id));
+
+    if (missingIds.length > 0) {
+      const { data: extraReports } = await supabase
+        .from("reports")
+        .select("*")
+        .in("id", missingIds);
+      (extraReports || []).forEach((r) => reportMap.set(r.id, r));
+    }
+
+    const allReportIds = Array.from(reportMap.keys());
+    if (allReportIds.length === 0) {
       return { rescues: [], livesSavedCount: 0, activeCount: 0 };
     }
 
-    const reportIds = Array.from(new Set(assignments.map((a) => a.report_id).filter(Boolean)));
-    const { data: reports } = await supabase
-      .from("reports")
-      .select("*")
-      .in("id", reportIds);
-
-    const reportMap = new Map((reports || []).map((r) => [r.id, r]));
-
-    const combined: ClaimedRescueItem[] = assignments.map((assign) => {
-      const rep = reportMap.get(assign.report_id);
+    const combined: ClaimedRescueItem[] = allReportIds.map((repId) => {
+      const rep = reportMap.get(repId);
+      const assign = assignmentMap.get(repId);
+      const rawStatus = (assign?.status || rep?.status || "accepted").toLowerCase();
       return {
-        assignmentId: assign.id,
-        assignmentStatus: assign.status,
-        distanceKm: assign.distance_km,
-        report: rep || null,
-        acceptedAt: rep?.accepted_at || assign.responded_at,
-        completedAt: rep?.completed_at || (assign.status === "completed" ? assign.updated_at : null),
+        assignmentId: assign?.id || `rep-${rep.id}`,
+        assignmentStatus: rawStatus,
+        distanceKm: assign?.distance_km ?? null,
+        report: rep,
+        acceptedAt: rep?.accepted_at || assign?.responded_at || rep?.created_at,
+        completedAt: rep?.completed_at || (rawStatus === "completed" ? assign?.updated_at || rep?.updated_at : null),
       };
     });
 
-    const completedDistinct = new Set(
-      assignments.filter((a) => a.status === "completed").map((a) => a.report_id)
-    ).size;
-    const activeCount = assignments.filter((a) => ["accepted", "enroute", "rescued"].includes(a.status)).length;
+    combined.sort((a, b) => {
+      const timeA = new Date(a.acceptedAt || a.report?.created_at || 0).getTime();
+      const timeB = new Date(b.acceptedAt || b.report?.created_at || 0).getTime();
+      return timeB - timeA;
+    });
+
+    const activeCount = combined.filter((c) =>
+      ["accepted", "enroute", "rescued"].includes(c.assignmentStatus)
+    ).length;
 
     return {
       rescues: combined,
-      livesSavedCount: completedDistinct,
+      livesSavedCount: combined.length,
       activeCount,
     };
   } catch (err) {

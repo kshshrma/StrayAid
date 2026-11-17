@@ -79,18 +79,33 @@ export async function acceptReport(id: string) {
   // Also record rescue assignment if guardian profile exists
   if (guardianId) {
     try {
-      await supabase
+      const { data: existingAssignment } = await supabase
         .from("rescue_assignments")
-        .upsert(
-          {
+        .select("id")
+        .eq("report_id", id)
+        .eq("guardian_id", guardianId)
+        .maybeSingle();
+
+      if (existingAssignment) {
+        await supabase
+          .from("rescue_assignments")
+          .update({
+            status: "accepted",
+            responded_at: nowIso,
+            updated_at: nowIso,
+          })
+          .eq("id", existingAssignment.id);
+      } else {
+        await supabase
+          .from("rescue_assignments")
+          .insert({
             report_id: id,
             guardian_id: guardianId,
             status: "accepted",
             responded_at: nowIso,
             updated_at: nowIso,
-          },
-          { onConflict: "report_id,guardian_id" }
-        );
+          });
+      }
     } catch (assignErr) {
       console.warn("Could not insert rescue assignment:", assignErr);
     }

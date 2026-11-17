@@ -74,9 +74,18 @@ export default function Dashboard() {
       })
       .subscribe();
 
+    // Subscribe to changes in rescue assignments
+    const assignmentsChannel = supabase
+      .channel("public:rescue_assignments:dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "rescue_assignments" }, () => {
+        loadDashboardStats();
+      })
+      .subscribe();
+
     return () => {
       reportsChannel.unsubscribe();
       guardiansChannel.unsubscribe();
+      assignmentsChannel.unsubscribe();
     };
   }, []);
 

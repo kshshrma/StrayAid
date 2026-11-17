@@ -396,18 +396,33 @@ export async function acceptReportHandler(
 
     // 5. Ensure authoritative rescue_assignment for this Guardian
     try {
-      await supabase
+      const { data: existingAssignment } = await supabase
         .from("rescue_assignments")
-        .upsert(
-          {
+        .select("id")
+        .eq("report_id", id)
+        .eq("guardian_id", guardianId)
+        .maybeSingle();
+
+      if (existingAssignment) {
+        await supabase
+          .from("rescue_assignments")
+          .update({
+            status: "accepted",
+            responded_at: nowIso,
+            updated_at: nowIso,
+          })
+          .eq("id", existingAssignment.id);
+      } else {
+        await supabase
+          .from("rescue_assignments")
+          .insert({
             report_id: id,
             guardian_id: guardianId,
             status: "accepted",
             responded_at: nowIso,
             updated_at: nowIso,
-          },
-          { onConflict: "report_id,guardian_id" }
-        );
+          });
+      }
 
       // Cancel any other pending assignments for this report to other Guardians
       await supabase
@@ -417,7 +432,7 @@ export async function acceptReportHandler(
         .neq("guardian_id", guardianId)
         .eq("status", "pending");
     } catch (assignErr) {
-      console.warn("[ReportAccept] Rescue assignment upsert warning:", assignErr);
+      console.warn("[ReportAccept] Rescue assignment check/insert warning:", assignErr);
     }
 
     return res.status(200).json({
