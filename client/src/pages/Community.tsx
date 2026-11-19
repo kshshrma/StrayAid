@@ -7,6 +7,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { getProfile } from "../services/profile/getProfile";
 import { getGuardian } from "../services/guardian/getGuardian";
+import { getDashboardStats } from "../services/dashboard/getDashboardStats";
 import {
   getCommunityPosts,
   toggleLikePost,
@@ -72,6 +73,13 @@ export default function Community() {
         role = `${profile.city} Guardian`;
       }
 
+      // Fetch accurate real-time lives saved count identical to dashboard
+      const dashboardStats = await getDashboardStats().catch(() => null);
+      const livesSaved =
+        dashboardStats && typeof dashboardStats.animalsHelped === "number"
+          ? dashboardStats.animalsHelped
+          : guardian?.total_rescues || 0;
+
       setCurrentUser({
         id: userId,
         name: profile?.full_name || session.user.email?.split("@")[0] || "Community Member",
@@ -79,7 +87,7 @@ export default function Community() {
           profile?.avatar_url ||
           "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200",
         role,
-        livesSavedCount: guardian?.total_rescues || 0,
+        livesSavedCount: livesSaved,
         storiesCount: 0,
       });
     } catch (err) {
@@ -113,20 +121,35 @@ export default function Community() {
     loadUser();
     loadPosts();
 
-    // Real-time Postgres subscription to reports table
-    const channel = supabase
+    // Real-time Postgres subscription to reports table (new stories, status changes)
+    const reportsChannel = supabase
       .channel("public:reports:community")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "reports" },
         () => {
+          loadUser();
+          loadPosts(true);
+        }
+      )
+      .subscribe();
+
+    // Real-time Postgres subscription to rescue_assignments table (lives saved real-time sync)
+    const assignmentsChannel = supabase
+      .channel("public:rescue_assignments:community")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "rescue_assignments" },
+        () => {
+          loadUser();
           loadPosts(true);
         }
       )
       .subscribe();
 
     return () => {
-      channel.unsubscribe();
+      reportsChannel.unsubscribe();
+      assignmentsChannel.unsubscribe();
     };
   }, []);
 

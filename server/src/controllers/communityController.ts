@@ -301,7 +301,6 @@ export async function createCommunityPost(req: AuthenticatedRequest, res: Respon
           longitude: 77.391,
           ai_advice: JSON.stringify(metadata),
           created_at: nowIso,
-          updated_at: nowIso,
         },
       ])
       .select()
@@ -417,6 +416,75 @@ export async function toggleLikePost(req: AuthenticatedRequest, res: Response) {
     return res.status(500).json({
       success: false,
       message: err.message || "Failed to toggle like",
+    });
+  }
+}
+
+/**
+ * POST /api/community/posts/:id/save
+ * Toggle bookmark / save story for authenticated user
+ */
+export async function toggleSavePost(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const id = String(req.params.id || "");
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Post ID is required" });
+    }
+
+    if (id.startsWith("seed-")) {
+      return res.status(200).json({
+        success: true,
+        saved: true,
+      });
+    }
+
+    const { data: report, error } = await supabase
+      .from("reports")
+      .select("id, ai_advice")
+      .eq("id", id)
+      .single();
+
+    if (error || !report) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+
+    let meta: any = {};
+    try {
+      meta = JSON.parse(report.ai_advice || "{}");
+    } catch {
+      meta = {};
+    }
+
+    const savedBy: string[] = Array.isArray(meta.savedBy) ? meta.savedBy : [];
+    let isSaved = false;
+
+    if (savedBy.includes(userId)) {
+      meta.savedBy = savedBy.filter((uid) => uid !== userId);
+      isSaved = false;
+    } else {
+      meta.savedBy = [...savedBy, userId];
+      isSaved = true;
+    }
+
+    await supabase
+      .from("reports")
+      .update({ ai_advice: JSON.stringify(meta) })
+      .eq("id", id);
+
+    return res.status(200).json({
+      success: true,
+      saved: isSaved,
+    });
+  } catch (err: any) {
+    console.error("[CommunityController] Exception in toggleSavePost:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to toggle save",
     });
   }
 }

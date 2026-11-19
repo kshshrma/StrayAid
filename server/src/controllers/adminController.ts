@@ -293,7 +293,6 @@ export async function overrideDispatch(
         status: "accepted",
         assigned_guardian_id: guardianId,
         accepted_at: nowIso,
-        updated_at: nowIso,
       })
       .eq("id", reportId);
 
@@ -378,7 +377,6 @@ export async function updateReportStatusManually(
     // 4. Update Report fields
     const updateData: any = {
       status,
-      updated_at: nowIso,
     };
 
     if (status === "accepted") {

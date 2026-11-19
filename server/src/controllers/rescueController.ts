@@ -335,7 +335,6 @@ export async function updateAssignment(
             status: "pending",
             assigned_guardian_id: null,
             accepted_at: null,
-            updated_at: nowIso,
           })
           .eq("id", assignment.report_id)
           .eq("assigned_guardian_id", guardian.id);
@@ -364,7 +363,6 @@ export async function updateAssignment(
           .update({
             status: "enroute",
             enroute_at: nowIso,
-            updated_at: nowIso,
           })
           .eq("id", assignment.report_id);
       } else if (status === "rescued") {
@@ -373,7 +371,6 @@ export async function updateAssignment(
           .update({
             status: "rescued",
             rescued_at: nowIso,
-            updated_at: nowIso,
           })
           .eq("id", assignment.report_id);
       } else if (status === "completed") {
@@ -383,7 +380,6 @@ export async function updateAssignment(
           .update({
             status: "completed",
             completed_at: nowIso,
-            updated_at: nowIso,
           })
           .eq("id", assignment.report_id);
 

@@ -332,7 +332,6 @@ export async function createCommunityPost(input: {
         longitude: 77.391,
         ai_advice: JSON.stringify(metadata),
         created_at: nowIso,
-        updated_at: nowIso,
       },
     ])
     .select()

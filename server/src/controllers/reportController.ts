@@ -376,7 +376,6 @@ export async function acceptReportHandler(
       status: "accepted",
       assigned_guardian_id: guardianId,
       accepted_at: report.accepted_at || nowIso,
-      updated_at: nowIso,
     };
 
     const { data: updatedReport, error: updateError } = await supabase
