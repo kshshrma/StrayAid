@@ -1,414 +1,448 @@
-import { useState } from "react";
-import Card from "../components/ui/Card";
-import Button from "../components/ui/Button";
-import { MessageSquare, Heart, Share2, Send, ShieldCheck, HeartHandshake } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import {
+  HeartHandshake,
+  RefreshCw,
+  Search,
+} from "lucide-react";
+import { supabase } from "../lib/supabase";
+import { getProfile } from "../services/profile/getProfile";
+import { getGuardian } from "../services/guardian/getGuardian";
+import {
+  getCommunityPosts,
+  toggleLikePost,
+  addCommentToPost,
+  deleteCommunityPost,
+  type CommunityPost,
+} from "../services/community/communityService";
 
-interface Comment {
-  author: string;
-  content: string;
-  time: string;
-}
-
-interface Post {
-  id: string;
-  author: string;
-  avatar: string;
-  role: string;
-  isVerified: boolean;
-  category: "Success Story" | "Adoption" | "Advice" | "Alert";
-  content: string;
-  image?: string;
-  likes: number;
-  liked: boolean;
-  comments: Comment[];
-  time: string;
-}
+import CommunityLeftSidebar from "../features/community/CommunityLeftSidebar";
+import CommunityRightSidebar from "../features/community/CommunityRightSidebar";
+import CommunityStoryComposer from "../features/community/CommunityStoryComposer";
+import CommunityFeedCard from "../features/community/CommunityFeedCard";
+import CommunitySkeleton from "../features/community/CommunitySkeleton";
+import CommunityGuidelinesModal from "../features/community/CommunityGuidelinesModal";
 
 export default function Community() {
-  const [filter, setFilter] = useState<"All" | "Success Story" | "Adoption" | "Advice" | "Alert">("All");
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+  const [isGuidelinesOpen, setIsGuidelinesOpen] = useState(false);
 
-  const [posts, setPosts] = useState<Post[]>([
-    {
-      id: "1",
-      author: "Sneha Sharma",
-      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150",
-      role: "Verified Rescuer",
-      isVerified: true,
-      category: "Success Story",
-      content: "Meet Sheru! Found him shivering near a metro station with a leg injury. After two weeks of foster care and veterinary help from VetCare Noida, he is fully healed and running around! Thanks everyone who coordinated.",
-      image: "https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?auto=format&fit=crop&q=80&w=600",
-      likes: 42,
-      liked: false,
-      comments: [
-        { author: "Amit Verma", content: "This is amazing! Sheru looks so happy.", time: "2h ago" },
-        { author: "Dr. K. Patel", content: "Great post-op care, Sneha. The leg looks perfectly aligned.", time: "1h ago" }
-      ],
-      time: "3 hours ago"
-    },
-    {
-      id: "2",
-      author: "Paws & Claws NGO",
-      avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=150",
-      role: "NGO Partner",
-      isVerified: true,
-      category: "Adoption",
-      content: "URGENT ADOPTION: Three sibling kittens found abandoned near Sector 15. They are about 6 weeks old, litter-trained, vaccinated for their age, and extremely playful. We would love to adopt them out together or in pairs. Please reach out!",
-      image: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=600",
-      likes: 28,
-      liked: false,
-      comments: [],
-      time: "5 hours ago"
-    },
-    {
-      id: "3",
-      author: "Rohan Das",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150",
-      role: "Street Guardian",
-      isVerified: false,
-      category: "Advice",
-      content: "Quick tip for local feeders: With temperatures rising in Noida/NCR, please place shallow earthen bowls filled with clean drinking water outside your houses or local parks. Change the water twice daily to keep it fresh and prevent mosquitoes.",
-      likes: 67,
-      liked: true,
-      comments: [
-        { author: "Kriti Sen", content: "Already doing this! The local birds and dogs visit every afternoon.", time: "4h ago" }
-      ],
-      time: "8 hours ago"
+  // Authenticated user state
+  const [currentUser, setCurrentUser] = useState<{
+    id: string;
+    name: string;
+    avatarUrl: string;
+    role: string;
+    livesSavedCount: number;
+    storiesCount: number;
+  }>({
+    id: "",
+    name: "Guest Rescuer",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200",
+    role: "Community Member",
+    livesSavedCount: 0,
+    storiesCount: 0,
+  });
+
+  // 1. Load User Session and Profile
+  async function loadUser() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) return;
+
+      const userId = session.user.id;
+      const profile = await getProfile(userId);
+      const guardian = await getGuardian(userId);
+
+      const isVerified = Boolean(guardian?.is_verified);
+      let role = "Street Guardian";
+      if (isVerified) {
+        role = "Verified Rescuer";
+      } else if (profile?.role === "ngo") {
+        role = "NGO Partner";
+      } else if (profile?.city) {
+        role = `${profile.city} Guardian`;
+      }
+
+      setCurrentUser({
+        id: userId,
+        name: profile?.full_name || session.user.email?.split("@")[0] || "Community Member",
+        avatarUrl:
+          profile?.avatar_url ||
+          "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200",
+        role,
+        livesSavedCount: guardian?.total_rescues || 0,
+        storiesCount: 0,
+      });
+    } catch (err) {
+      console.warn("[Community] Error loading user details:", err);
     }
-  ]);
+  }
 
-  // Form states
-  const [newContent, setNewContent] = useState("");
-  const [newCategory, setNewCategory] = useState<"Success Story" | "Adoption" | "Advice" | "Alert">("Success Story");
-  const [newImageUrl, setNewImageUrl] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
+  // 2. Load Community Posts
+  async function loadPosts(isManualRefresh = false) {
+    try {
+      if (isManualRefresh) setRefreshing(true);
+      else setLoading(true);
 
-  // Active commenting post state
-  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
-  const [commentInput, setCommentInput] = useState("");
+      const fetchedPosts = await getCommunityPosts();
+      setPosts(fetchedPosts);
 
-  const filteredPosts = filter === "All" ? posts : posts.filter(p => p.category === filter);
+      // Count stories authored by current user
+      if (currentUser.id) {
+        const myCount = fetchedPosts.filter((p) => p.authorId === currentUser.id).length;
+        setCurrentUser((prev) => ({ ...prev, storiesCount: myCount }));
+      }
+    } catch (err) {
+      console.error("[Community] Error loading posts:", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
 
-  function handleCreatePost(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newContent.trim()) return;
+  useEffect(() => {
+    loadUser();
+    loadPosts();
 
-    const newPost: Post = {
-      id: Date.now().toString(),
-      author: "Guest Guardian",
-      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150",
-      role: "Street Guardian",
-      isVerified: false,
-      category: newCategory,
-      content: newContent,
-      image: newImageUrl.trim() ? newImageUrl.trim() : undefined,
-      likes: 0,
-      liked: false,
-      comments: [],
-      time: "Just now"
+    // Real-time Postgres subscription to reports table
+    const channel = supabase
+      .channel("public:reports:community")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "reports" },
+        () => {
+          loadPosts(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
     };
+  }, []);
 
-    setPosts(prev => [newPost, ...prev]);
-    setNewContent("");
-    setNewImageUrl("");
-    setIsCreating(false);
+  // Recount user stories when posts or user changes
+  useEffect(() => {
+    if (currentUser.id && posts.length > 0) {
+      const myCount = posts.filter((p) => p.authorId === currentUser.id).length;
+      setCurrentUser((prev) => ({ ...prev, storiesCount: myCount }));
+    }
+  }, [posts, currentUser.id]);
+
+  // Handlers
+  function handlePostCreated(newPost: CommunityPost) {
+    setPosts((prev) => [newPost, ...prev]);
+    setCurrentUser((prev) => ({ ...prev, storiesCount: prev.storiesCount + 1 }));
   }
 
-  function handleLike(postId: string) {
-    setPosts(prev =>
-      prev.map(p => {
+  async function handleLike(postId: string) {
+    // Optimistic UI update
+    setPosts((prev) =>
+      prev.map((p) => {
         if (p.id === postId) {
+          const newLiked = !p.liked;
           return {
             ...p,
-            liked: !p.liked,
-            likes: p.liked ? p.likes - 1 : p.likes + 1
+            liked: newLiked,
+            likes: newLiked ? p.likes + 1 : Math.max(0, p.likes - 1),
           };
+        }
+        return p;
+      })
+    );
+
+    try {
+      await toggleLikePost(postId);
+    } catch (err) {
+      console.error("[Community] Failed to toggle like:", err);
+    }
+  }
+
+  async function handleComment(postId: string, text: string) {
+    try {
+      const newComment = await addCommentToPost(postId, text);
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              comments: [...p.comments, newComment],
+            };
+          }
+          return p;
+        })
+      );
+    } catch (err) {
+      console.error("[Community] Failed to add comment:", err);
+    }
+  }
+
+  function handleSave(postId: string) {
+    setSavedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) {
+        next.delete(postId);
+      } else {
+        next.add(postId);
+      }
+      return next;
+    });
+
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id === postId) {
+          return { ...p, saved: !p.saved };
         }
         return p;
       })
     );
   }
 
-  function handleAddComment(postId: string) {
-    if (!commentInput.trim()) return;
-    setPosts(prev =>
-      prev.map(p => {
-        if (p.id === postId) {
-          return {
-            ...p,
-            comments: [
-              ...p.comments,
-              { author: "Guest Guardian", content: commentInput, time: "Just now" }
-            ]
-          };
-        }
-        return p;
-      })
-    );
-    setCommentInput("");
+  async function handleDelete(postId: string) {
+    if (!window.confirm("Are you sure you want to delete this story?")) return;
+
+    try {
+      await deleteCommunityPost(postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setCurrentUser((prev) => ({
+        ...prev,
+        storiesCount: Math.max(0, prev.storiesCount - 1),
+      }));
+    } catch (err: any) {
+      alert(err.message || "Failed to delete story");
+    }
   }
 
-  const categories: ("All" | "Success Story" | "Adoption" | "Advice" | "Alert")[] = [
-    "All",
-    "Success Story",
-    "Adoption",
-    "Advice",
-    "Alert"
+  // Filter & Search Logic
+  const filteredPosts = useMemo(() => {
+    let result = posts;
+
+    // Filter tabs
+    if (activeFilter === "my-stories") {
+      result = result.filter((p) => p.authorId === currentUser.id);
+    } else if (activeFilter === "saved") {
+      result = result.filter((p) => p.saved || savedPostIds.has(p.id));
+    } else if (activeFilter === "Latest") {
+      result = [...result].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    } else if (activeFilter !== "all" && activeFilter !== "For You") {
+      result = result.filter(
+        (p) => p.category.toLowerCase() === activeFilter.toLowerCase()
+      );
+    }
+
+    // Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.content.toLowerCase().includes(q) ||
+          p.author.toLowerCase().includes(q) ||
+          p.category.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [posts, activeFilter, searchQuery, currentUser.id, savedPostIds]);
+
+  const filterTabs = [
+    { id: "all", label: "For You" },
+    { id: "Latest", label: "Latest" },
+    { id: "Success Story", label: "💚 Success Stories" },
+    { id: "Adoption", label: "🐾 Adoptions" },
+    { id: "Advice", label: "💡 Care Advice" },
+    { id: "Alert", label: "🚨 Alerts" },
+    { id: "Rescue Update", label: "🚑 Rescue Updates" },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 p-5 pb-28">
-      <h1 className="mb-6 text-center text-4xl font-extrabold text-slate-900 tracking-tight flex items-center justify-center gap-2">
-        <HeartHandshake className="text-green-600" size={32} /> Community Hub
-      </h1>
+    <div className="min-h-screen bg-[#F8F9FA] pb-28 text-slate-800">
+      {/* Community Guidelines Modal */}
+      <CommunityGuidelinesModal
+        isOpen={isGuidelinesOpen}
+        onClose={() => setIsGuidelinesOpen(false)}
+      />
 
-      <div className="max-w-md mx-auto space-y-6">
-        
-        {/* CREATE POST BOX */}
-        <Card className="p-5 bg-white border border-slate-100 rounded-3xl shadow-sm">
-          {!isCreating ? (
-            <div className="flex gap-3 items-center">
-              <img
-                src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150"
-                alt="Avatar"
-                className="w-10 h-10 rounded-full object-cover"
+      {/* Top Sticky Header */}
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-2xl bg-emerald-100/80 text-emerald-700 flex items-center justify-center text-xl shadow-xs shrink-0">
+              <HeartHandshake size={22} className="text-emerald-600" />
+            </span>
+            <div>
+              <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">
+                StrayAid Community
+              </h1>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Stories, Adoptions & Field Rescue Updates
+              </p>
+            </div>
+          </div>
+
+          {/* Search Input & Refresh Button */}
+          <div className="flex items-center gap-2">
+            <div className="relative hidden sm:block w-64">
+              <input
+                type="text"
+                placeholder="Search stories, tips, rescuers..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-full bg-slate-100 hover:bg-slate-100/90 focus:bg-white border border-transparent focus:border-emerald-500 py-1.5 pl-9 pr-3 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition"
               />
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
+            </div>
+
+            <button
+              onClick={() => loadPosts(true)}
+              disabled={refreshing}
+              className="p-2.5 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition active:scale-95 disabled:opacity-50"
+              title="Refresh stories"
+            >
+              <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main 3-Column Responsive Container */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex items-start justify-center gap-6 lg:gap-8">
+          
+          {/* LEFT SIDEBAR (Desktop) */}
+          <div className="hidden lg:block w-64 xl:w-72 shrink-0 sticky top-22 self-start">
+            <CommunityLeftSidebar
+              currentUser={currentUser}
+              activeFilter={activeFilter}
+              onSelectFilter={setActiveFilter}
+              onOpenGuidelines={() => setIsGuidelinesOpen(true)}
+            />
+          </div>
+
+          {/* CENTER FEED (Primary Focus) */}
+          <section className="flex-1 min-w-0 max-w-2xl space-y-5">
+            {/* Story Composer */}
+            <CommunityStoryComposer
+              currentUser={currentUser}
+              onPostCreated={handlePostCreated}
+            />
+
+            {/* Feed Filter Strip */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              {filterTabs.map((tab) => {
+                const isActive = activeFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveFilter(tab.id)}
+                    className={`shrink-0 py-1.5 px-3.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+                      isActive
+                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                        : "bg-white border-slate-200/90 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+
+              {/* Mobile-only My Stories & Saved buttons */}
               <button
-                onClick={() => setIsCreating(true)}
-                className="flex-1 text-left bg-slate-50 border border-slate-200 hover:bg-slate-100 transition rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-400 cursor-pointer"
+                onClick={() => setActiveFilter("my-stories")}
+                className={`lg:hidden shrink-0 py-1.5 px-3.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+                  activeFilter === "my-stories"
+                    ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
               >
-                Share a story, adoption alert, or advisory...
+                ✍️ My Stories
+              </button>
+
+              <button
+                onClick={() => setActiveFilter("saved")}
+                className={`lg:hidden shrink-0 py-1.5 px-3.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+                  activeFilter === "saved"
+                    ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                🔖 Saved
               </button>
             </div>
-          ) : (
-            <form onSubmit={handleCreatePost} className="space-y-4">
-              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                <span className="text-xs font-bold text-slate-700">Create New Post</span>
-                <button
-                  type="button"
-                  onClick={() => setIsCreating(false)}
-                  className="text-slate-400 hover:text-slate-600 text-xs font-bold transition"
-                >
-                  Cancel
-                </button>
-              </div>
 
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Category</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {(["Success Story", "Adoption", "Advice", "Alert"] as const).map(cat => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setNewCategory(cat)}
-                      className={`text-[10px] px-2.5 py-1 font-bold rounded-lg border transition ${
-                        newCategory === cat
-                          ? "bg-green-50 border-green-200 text-green-700"
-                          : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
+            {/* Stories Feed List */}
+            {loading ? (
+              <CommunitySkeleton />
+            ) : filteredPosts.length === 0 ? (
+              <div className="rounded-3xl bg-white border border-slate-200/80 p-12 text-center space-y-3 shadow-xs">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center text-3xl">
+                  🐾
                 </div>
+                <h3 className="text-base font-black text-slate-900">
+                  {searchQuery
+                    ? "No stories match your search"
+                    : activeFilter === "my-stories"
+                    ? "You haven't shared a story yet"
+                    : activeFilter === "saved"
+                    ? "No saved stories yet"
+                    : "No stories in this category yet"}
+                </h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                  {searchQuery
+                    ? "Try adjusting your keywords or clearing filters to see more community moments."
+                    : "Share a heartwarming rescue, pet adoption alert, or street feeding advice to inspire fellow rescuers."}
+                </p>
+
+                {searchQuery && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery("");
+                      setActiveFilter("all");
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-slate-800 transition"
+                  >
+                    Clear Search
+                  </button>
+                )}
               </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Post Content</label>
-                <textarea
-                  placeholder="Tell the community what is on your mind..."
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500 h-24 resize-none"
-                  required
-                />
+            ) : (
+              <div className="space-y-5">
+                {filteredPosts.map((post) => (
+                  <CommunityFeedCard
+                    key={post.id}
+                    post={post}
+                    currentUserId={currentUser.id || null}
+                    currentUserAvatar={currentUser.avatarUrl}
+                    onLike={handleLike}
+                    onComment={handleComment}
+                    onSave={handleSave}
+                    onDelete={handleDelete}
+                  />
+                ))}
               </div>
+            )}
+          </section>
 
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Image URL (Optional)</label>
-                <input
-                  type="url"
-                  placeholder="Paste a photo link (Unsplash or web address)"
-                  value={newImageUrl}
-                  onChange={(e) => setNewImageUrl(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
+          {/* RIGHT SIDEBAR (Desktop) */}
+          <div className="hidden xl:block w-72 xl:w-80 shrink-0 sticky top-22 self-start">
+            <CommunityRightSidebar />
+          </div>
 
-              <Button
-                type="submit"
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition text-xs shadow-md shadow-green-100"
-              >
-                Publish Post
-              </Button>
-            </form>
-          )}
-        </Card>
-
-        {/* CATEGORY FILTER TABS */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setFilter(cat)}
-              className={`shrink-0 py-1.5 px-3 rounded-full text-xs font-bold transition border cursor-pointer ${
-                filter === cat
-                  ? "bg-slate-900 border-slate-900 text-white"
-                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
         </div>
-
-        {/* FEED POSTS */}
-        <div className="space-y-5">
-          {filteredPosts.length === 0 ? (
-            <div className="text-center py-10 bg-white border border-slate-100 rounded-3xl text-slate-400 text-xs">
-              No posts found in this category.
-            </div>
-          ) : (
-            filteredPosts.map(post => {
-              const catColors = {
-                "Success Story": "bg-green-50 text-green-700 border-green-200",
-                "Adoption": "bg-blue-50 text-blue-700 border-blue-200",
-                "Advice": "bg-purple-50 text-purple-700 border-purple-200",
-                "Alert": "bg-red-50 text-red-700 border-red-200"
-              };
-
-              return (
-                <Card key={post.id} className="p-0 overflow-hidden bg-white border border-slate-100 rounded-3xl shadow-sm hover:shadow transition-all">
-                  
-                  {/* Post Header */}
-                  <div className="p-5 flex gap-3 items-center">
-                    <img
-                      src={post.avatar}
-                      alt={post.author}
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-bold text-slate-950">{post.author}</span>
-                        {post.isVerified && (
-                          <ShieldCheck size={14} className="text-blue-500 fill-blue-500/10" />
-                        )}
-                      </div>
-                      <div className="flex gap-2 items-center text-[10px] text-slate-400 font-semibold mt-0.5">
-                        <span>{post.role}</span>
-                        <span>•</span>
-                        <span>{post.time}</span>
-                      </div>
-                    </div>
-                    <span className={`rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${catColors[post.category]}`}>
-                      {post.category}
-                    </span>
-                  </div>
-
-                  {/* Post Body */}
-                  <div className="px-5 pb-4 space-y-3">
-                    <p className="text-xs text-slate-800 leading-relaxed font-medium">
-                      {post.content}
-                    </p>
-                    {post.image && (
-                      <div className="overflow-hidden rounded-2xl border border-slate-50">
-                        <img
-                          src={post.image}
-                          alt="Post attachment"
-                          className="w-full max-h-72 object-cover hover:scale-102 transition duration-500"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Post Actions Bar */}
-                  <div className="px-5 py-3.5 border-t border-slate-50 bg-slate-50/50 flex items-center justify-between text-slate-500 text-xs">
-                    <button
-                      onClick={() => handleLike(post.id)}
-                      className={`flex items-center gap-1.5 font-bold transition hover:text-red-500 cursor-pointer ${
-                        post.liked ? "text-red-500 font-extrabold" : ""
-                      }`}
-                    >
-                      <Heart size={16} className={post.liked ? "fill-red-500 text-red-500" : ""} />
-                      <span>{post.likes} Likes</span>
-                    </button>
-
-                    <button
-                      onClick={() => setActiveCommentPostId(activeCommentPostId === post.id ? null : post.id)}
-                      className={`flex items-center gap-1.5 font-bold transition hover:text-blue-500 cursor-pointer ${
-                        activeCommentPostId === post.id ? "text-blue-500 font-extrabold" : ""
-                      }`}
-                    >
-                      <MessageSquare size={16} />
-                      <span>{post.comments.length} Comments</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(`Check out this post from StrayAid by ${post.author}!`);
-                        alert("Link copied to clipboard!");
-                      }}
-                      className="flex items-center gap-1.5 font-bold transition hover:text-green-500 cursor-pointer"
-                    >
-                      <Share2 size={16} />
-                      <span>Share</span>
-                    </button>
-                  </div>
-
-                  {/* Comments Section (Toggled) */}
-                  {activeCommentPostId === post.id && (
-                    <div className="p-5 border-t border-slate-100 bg-slate-50/20 space-y-4">
-                      {/* Comments Feed */}
-                      {post.comments.length > 0 && (
-                        <div className="space-y-3">
-                          {post.comments.map((comment, i) => (
-                            <div key={i} className="flex gap-2 items-start text-xs text-slate-700 bg-white p-3 rounded-xl border border-slate-100">
-                              <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold shrink-0">
-                                {comment.author[0]}
-                              </div>
-                              <div className="flex-1 space-y-0.5">
-                                <div className="flex justify-between items-center">
-                                  <span className="font-bold text-slate-900">{comment.author}</span>
-                                  <span className="text-[9px] text-slate-400">{comment.time}</span>
-                                </div>
-                                <p className="text-slate-600 text-xs font-medium leading-relaxed">
-                                  {comment.content}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Add Comment Input */}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Write a comment..."
-                          value={commentInput}
-                          onChange={(e) => setCommentInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleAddComment(post.id);
-                            }
-                          }}
-                          className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                        <button
-                          onClick={() => handleAddComment(post.id)}
-                          className="p-2 bg-green-600 hover:bg-green-700 text-white rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer"
-                        >
-                          <Send size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                </Card>
-              );
-            })
-          )}
-        </div>
-      </div>
+      </main>
     </div>
   );
-}
+}
