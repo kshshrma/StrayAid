@@ -166,7 +166,16 @@ export async function getCommunityPosts(): Promise<CommunityPost[]> {
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.posts)) {
-        return data.posts;
+        let localSavedSet = new Set<string>();
+        try {
+          const raw = localStorage.getItem("strayaid_saved_stories");
+          if (raw) localSavedSet = new Set(JSON.parse(raw));
+        } catch {}
+
+        return data.posts.map((p: CommunityPost) => ({
+          ...p,
+          saved: Boolean(p.saved || localSavedSet.has(p.id)),
+        }));
       }
     }
   } catch (apiErr) {
@@ -181,9 +190,18 @@ export async function getCommunityPosts(): Promise<CommunityPost[]> {
       .eq("status", "community_story")
       .order("created_at", { ascending: false });
 
+    let localSavedSet = new Set<string>();
+    try {
+      const raw = localStorage.getItem("strayaid_saved_stories");
+      if (raw) localSavedSet = new Set(JSON.parse(raw));
+    } catch {}
+
     if (error) {
       console.error("[CommunityService] Direct Supabase query error:", error);
-      return FALLBACK_SEED_STORIES;
+      return FALLBACK_SEED_STORIES.map((s) => ({
+        ...s,
+        saved: localSavedSet.has(s.id),
+      }));
     }
 
     const dbPosts: CommunityPost[] = (reports || []).map((row) => {
@@ -197,6 +215,10 @@ export async function getCommunityPosts(): Promise<CommunityPost[]> {
       const likedBy: string[] = Array.isArray(meta.likedBy) ? meta.likedBy : [];
       const savedBy: string[] = Array.isArray(meta.savedBy) ? meta.savedBy : [];
       const comments: any[] = Array.isArray(meta.comments) ? meta.comments : [];
+
+      const isSaved = Boolean(
+        (currentUserId && savedBy.includes(currentUserId)) || localSavedSet.has(row.id)
+      );
 
       return {
         id: row.id,
@@ -212,7 +234,7 @@ export async function getCommunityPosts(): Promise<CommunityPost[]> {
         image: row.image_url || meta.imageUrl || undefined,
         likes: typeof meta.likes === "number" ? meta.likes : likedBy.length,
         liked: currentUserId ? likedBy.includes(currentUserId) : false,
-        saved: currentUserId ? savedBy.includes(currentUserId) : false,
+        saved: isSaved,
         comments: comments.map((c: any) => ({
           id: c.id || Math.random().toString(),
           authorId: c.authorId || "",
@@ -227,7 +249,13 @@ export async function getCommunityPosts(): Promise<CommunityPost[]> {
       };
     });
 
-    const combined = [...dbPosts, ...FALLBACK_SEED_STORIES];
+    const combined = [
+      ...dbPosts,
+      ...FALLBACK_SEED_STORIES.map((s) => ({
+        ...s,
+        saved: localSavedSet.has(s.id),
+      })),
+    ];
     combined.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -429,6 +457,100 @@ export async function toggleLikePost(postId: string): Promise<{ liked: boolean; 
     .eq("id", postId);
 
   return { liked: isLiked, likes: meta.likes };
+}
+
+/**
+ * Toggle bookmark / save story for user
+ */
+export async function toggleSavePost(postId: string): Promise<{ saved: boolean }> {
+  // Update localStorage immediately for offline/instant persistence
+  let localSaved: string[] = [];
+  try {
+    const raw = localStorage.getItem("strayaid_saved_stories");
+    localSaved = raw ? JSON.parse(raw) : [];
+  } catch {
+    localSaved = [];
+  }
+
+  const alreadySavedLocally = localSaved.includes(postId);
+  const nextLocalSaved = alreadySavedLocally
+    ? localSaved.filter((id) => id !== postId)
+    : [...localSaved, postId];
+
+  try {
+    localStorage.setItem("strayaid_saved_stories", JSON.stringify(nextLocalSaved));
+  } catch (err) {
+    console.warn("Could not save to localStorage:", err);
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // If user is not authenticated or this is a seed post, localStorage is our source of truth
+  if (postId.startsWith("seed-") || !session?.user) {
+    return { saved: !alreadySavedLocally };
+  }
+
+  const userId = session.user.id;
+
+  // 1. Try Backend API
+  try {
+    const res = await fetch(`${API_URL}/api/community/posts/${postId}/save`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return { saved: Boolean(data.saved) };
+    }
+  } catch (apiErr) {
+    console.warn("[CommunityService] Backend save toggle failed, falling back to direct Supabase:", apiErr);
+  }
+
+  // 2. Direct Supabase Fallback
+  try {
+    const { data: report, error } = await supabase
+      .from("reports")
+      .select("ai_advice")
+      .eq("id", postId)
+      .single();
+
+    if (error || !report) {
+      return { saved: !alreadySavedLocally };
+    }
+
+    let meta: any = {};
+    try {
+      meta = JSON.parse(report.ai_advice || "{}");
+    } catch {
+      meta = {};
+    }
+
+    const savedBy: string[] = Array.isArray(meta.savedBy) ? meta.savedBy : [];
+    let isSaved = false;
+
+    if (savedBy.includes(userId)) {
+      meta.savedBy = savedBy.filter((uid) => uid !== userId);
+      isSaved = false;
+    } else {
+      meta.savedBy = [...savedBy, userId];
+      isSaved = true;
+    }
+
+    await supabase
+      .from("reports")
+      .update({ ai_advice: JSON.stringify(meta) })
+      .eq("id", postId);
+
+    return { saved: isSaved };
+  } catch (err) {
+    console.error("[CommunityService] Supabase save toggle error:", err);
+    return { saved: !alreadySavedLocally };
+  }
 }
 
 /**

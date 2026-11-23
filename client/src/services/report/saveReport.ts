@@ -1,5 +1,7 @@
 import { supabase } from "../../lib/supabase";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 interface ReportData {
   image_url: string;
   latitude: number;
@@ -25,7 +27,7 @@ export async function saveReport(report: ReportData) {
 
   console.log("Calling AI Backend...");
 
-  const response = await fetch("http://localhost:5000/api/ai/analyze", {
+  const response = await fetch(`${API_URL}/api/ai/analyze`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

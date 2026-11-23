@@ -8,9 +8,11 @@ import { supabase } from "../lib/supabase";
 import { getProfile } from "../services/profile/getProfile";
 import { getGuardian } from "../services/guardian/getGuardian";
 import { getDashboardStats } from "../services/dashboard/getDashboardStats";
+import { getMyAcceptedRescues } from "../services/rescue/getMyAcceptedRescues";
 import {
   getCommunityPosts,
   toggleLikePost,
+  toggleSavePost,
   addCommentToPost,
   deleteCommunityPost,
   type CommunityPost,
@@ -29,7 +31,14 @@ export default function Community() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem("strayaid_saved_stories");
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [isGuidelinesOpen, setIsGuidelinesOpen] = useState(false);
 
   // Authenticated user state
@@ -73,12 +82,23 @@ export default function Community() {
         role = `${profile.city} Guardian`;
       }
 
-      // Fetch accurate real-time lives saved count identical to dashboard
-      const dashboardStats = await getDashboardStats().catch(() => null);
-      const livesSaved =
-        dashboardStats && typeof dashboardStats.animalsHelped === "number"
-          ? dashboardStats.animalsHelped
-          : guardian?.total_rescues || 0;
+      // Fetch accurate real-time lives saved count identical to home page rescue tracking
+      let livesSaved = 0;
+      try {
+        const myRescues = await getMyAcceptedRescues();
+        livesSaved = myRescues.livesSavedCount || (myRescues.rescues?.length ?? 0);
+      } catch {
+        livesSaved = guardian?.total_rescues || 0;
+      }
+
+      if (livesSaved === 0) {
+        const dashboardStats = await getDashboardStats().catch(() => null);
+        if (dashboardStats && typeof dashboardStats.animalsHelped === "number") {
+          livesSaved = dashboardStats.animalsHelped;
+        } else if (guardian?.total_rescues) {
+          livesSaved = guardian.total_rescues;
+        }
+      }
 
       setCurrentUser({
         id: userId,
@@ -102,11 +122,33 @@ export default function Community() {
       else setLoading(true);
 
       const fetchedPosts = await getCommunityPosts();
-      setPosts(fetchedPosts);
+
+      // Retrieve locally saved story IDs and merge with server-persisted saved flags
+      let localSaved: string[] = [];
+      try {
+        const raw = localStorage.getItem("strayaid_saved_stories");
+        if (raw) localSaved = JSON.parse(raw);
+      } catch {}
+
+      const allSavedIds = new Set([
+        ...localSaved,
+        ...fetchedPosts.filter((p) => p.saved).map((p) => p.id),
+      ]);
+      setSavedPostIds(allSavedIds);
+      try {
+        localStorage.setItem("strayaid_saved_stories", JSON.stringify(Array.from(allSavedIds)));
+      } catch {}
+
+      const mappedPosts = fetchedPosts.map((p) => ({
+        ...p,
+        saved: Boolean(p.saved || allSavedIds.has(p.id)),
+      }));
+
+      setPosts(mappedPosts);
 
       // Count stories authored by current user
       if (currentUser.id) {
-        const myCount = fetchedPosts.filter((p) => p.authorId === currentUser.id).length;
+        const myCount = mappedPosts.filter((p) => p.authorId === currentUser.id).length;
         setCurrentUser((prev) => ({ ...prev, storiesCount: myCount }));
       }
     } catch (err) {
@@ -209,13 +251,21 @@ export default function Community() {
     }
   }
 
-  function handleSave(postId: string) {
+  async function handleSave(postId: string) {
+    let willBeSaved = false;
     setSavedPostIds((prev) => {
       const next = new Set(prev);
       if (next.has(postId)) {
         next.delete(postId);
+        willBeSaved = false;
       } else {
         next.add(postId);
+        willBeSaved = true;
+      }
+      try {
+        localStorage.setItem("strayaid_saved_stories", JSON.stringify(Array.from(next)));
+      } catch (err) {
+        console.warn("Could not save to localStorage:", err);
       }
       return next;
     });
@@ -223,11 +273,17 @@ export default function Community() {
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
-          return { ...p, saved: !p.saved };
+          return { ...p, saved: willBeSaved };
         }
         return p;
       })
     );
+
+    try {
+      await toggleSavePost(postId);
+    } catch (err) {
+      console.error("[Community] Failed to toggle save post:", err);
+    }
   }
 
   async function handleDelete(postId: string) {
