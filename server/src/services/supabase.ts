@@ -29,4 +29,25 @@ if (supabaseUrl) {
   console.log("Supabase project host:", parsed.host);
   console.log("Supabase URL path:", parsed.pathname);
 }
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  global: {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const response = await fetch(request);
+
+      if (!response.ok) {
+        console.error("[Supabase HTTP Status]:", response.status);
+        console.error(
+          "[Supabase Request Path]:",
+          new URL(request.url).pathname
+        );
+        console.error(
+          "[Supabase Response]:",
+          await response.clone().text()
+        );
+      }
+
+      return response;
+    },
+  },
+});
