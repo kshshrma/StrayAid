@@ -24,5 +24,9 @@ console.log("Supabase key exists:", !!supabaseKey);
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Missing Supabase environment variables");
 }
-
+if (supabaseUrl) {
+  const parsed = new URL(supabaseUrl);
+  console.log("Supabase project host:", parsed.host);
+  console.log("Supabase URL path:", parsed.pathname);
+}
 export const supabase = createClient(supabaseUrl, supabaseKey);
