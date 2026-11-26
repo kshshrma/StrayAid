@@ -215,7 +215,7 @@ export default function ReportsFeed() {
                         {report.status}
                       </span>
 
-                      <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                      <button className="rounded-2xl glass-button-primary px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-700/20 active:scale-95 transition-all">
                         View Details →
                       </button>
                     </div>

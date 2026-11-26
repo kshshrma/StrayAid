@@ -64,9 +64,9 @@ export default function GuardianStatus({
 
             <button
               onClick={() => navigate("/guardian")}
-              className="mt-4 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-700"
+              className="mt-4 rounded-2xl glass-button-primary px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-700/25 active:scale-95 transition-all cursor-pointer"
             >
-              Become a Guardian
+              Become a Guardian 🛡️
             </button>
           </div>
         </div>
@@ -310,17 +310,17 @@ export default function GuardianStatus({
               type="button"
               onClick={toggleAvailability}
               disabled={updating}
-              className={`text-xs font-bold px-3 py-2 rounded-xl border transition cursor-pointer font-sans shadow-sm ${
+              className={`text-xs font-bold px-3.5 py-2.5 rounded-2xl border transition-all duration-200 cursor-pointer font-sans shadow-sm active:scale-95 ${
                 guardian.available
-                  ? "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                  ? "border-rose-300/80 bg-rose-500/15 text-rose-700 hover:bg-rose-500/25"
+                  : "glass-button-primary shadow-emerald-700/20"
               } ${updating ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {updating 
                 ? "Updating..." 
                 : guardian.available 
-                  ? "Turn Off Guardian Mode" 
-                  : "Turn On Guardian Mode"}
+                  ? "Turn Off Mode" 
+                  : "Turn On Mode"}
             </button>
           </div>
         </div>
@@ -357,11 +357,11 @@ export default function GuardianStatus({
           type="button"
           onClick={updateLocation}
           disabled={locationLoading}
-          className="mt-4 w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+          className="mt-4 w-full rounded-2xl glass-button-secondary py-3.5 text-xs font-bold text-slate-800 transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
         >
           {locationLoading
             ? "Updating Location..."
-            : "📍 Update My Location"}
+            : "📍 Update My Live GPS Location"}
         </button>
       </div>
 

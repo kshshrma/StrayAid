@@ -120,10 +120,12 @@ export default function ImageUploader({
         <button
           type="button"
           onClick={triggerCamera}
-          className="flex-1 flex flex-col items-center justify-center gap-2 p-4 border border-slate-200 hover:border-green-500 hover:bg-green-50/20 rounded-2xl transition cursor-pointer group"
+          className="flex-1 flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl glass-button-secondary border border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-all duration-200 cursor-pointer active:scale-95 group"
         >
-          <Camera size={24} className="text-slate-400 group-hover:text-green-600 transition" />
-          <span className="text-xs font-bold text-slate-700 group-hover:text-green-700 transition">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-200 shadow-xs">
+            <Camera size={22} className="transition-transform group-hover:scale-110" />
+          </div>
+          <span className="text-xs font-black text-slate-800 tracking-tight group-hover:text-emerald-700 transition">
             Take Photo
           </span>
         </button>
@@ -131,10 +133,12 @@ export default function ImageUploader({
         <button
           type="button"
           onClick={triggerGallery}
-          className="flex-1 flex flex-col items-center justify-center gap-2 p-4 border border-slate-200 hover:border-blue-500 hover:bg-blue-50/20 rounded-2xl transition cursor-pointer group"
+          className="flex-1 flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl glass-button-secondary border border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/10 transition-all duration-200 cursor-pointer active:scale-95 group"
         >
-          <ImageIcon size={24} className="text-slate-400 group-hover:text-blue-600 transition" />
-          <span className="text-xs font-bold text-slate-700 group-hover:text-blue-700 transition">
+          <div className="w-11 h-11 rounded-2xl bg-blue-500/15 text-blue-700 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors duration-200 shadow-xs">
+            <ImageIcon size={22} className="transition-transform group-hover:scale-110" />
+          </div>
+          <span className="text-xs font-black text-slate-800 tracking-tight group-hover:text-blue-700 transition">
             Upload Photo
           </span>
         </button>

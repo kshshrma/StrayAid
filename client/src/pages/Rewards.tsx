@@ -1,5 +1,4 @@
 import { useState } from "react";
-import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import { Award, Trophy, Gift } from "lucide-react";
 
@@ -88,22 +87,30 @@ export default function Rewards() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-5 pb-28">
-      <h1 className="mb-6 text-center text-4xl font-extrabold text-slate-900 tracking-tight flex items-center justify-center gap-2">
-        <Gift className="text-green-600 animate-bounce" size={32} /> Rewards
-      </h1>
+    <div className="min-h-screen bg-[#F4F6F8] p-5 pb-32">
+      <div className="max-w-md mx-auto mb-6 text-center">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-800 text-xs font-black uppercase tracking-wider mb-2">
+          <Gift size={13} className="text-emerald-600" /> StrayAid Karma
+        </span>
+        <h1 className="text-3xl font-black text-slate-900 tracking-tight">
+          Rewards & Impact
+        </h1>
+      </div>
 
-      {/* Points Summary */}
-      <Card className="max-w-md mx-auto mb-6 bg-gradient-to-br from-green-700 to-emerald-500 text-white border-none p-6 text-center">
-        <p className="text-xs uppercase tracking-widest opacity-90">Your Karma Balance</p>
-        <h2 className="text-5xl font-black mt-2">{points}</h2>
-        <p className="text-sm opacity-90 mt-1">Karma Points</p>
-        <p className="text-xs opacity-75 mt-3">Earn more points by submitting reports and completing rescues!</p>
-      </Card>
+      {/* Points Summary Glass Card */}
+      <div className="relative overflow-hidden max-w-md mx-auto mb-6 rounded-3xl p-6 bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white border border-white/25 shadow-xl shadow-emerald-900/15 text-center">
+        <div className="pointer-events-none absolute -top-10 -right-10 h-36 w-36 rounded-full bg-white/10 blur-xl" />
+        <p className="text-xs uppercase tracking-widest text-emerald-100 font-extrabold">Your Karma Balance</p>
+        <h2 className="text-5xl font-black mt-2 text-white drop-shadow-xs">{points}</h2>
+        <p className="text-xs font-semibold text-emerald-100 mt-1">Karma Points Available</p>
+        <p className="text-[11px] text-emerald-100/80 mt-3 bg-white/10 backdrop-blur-md p-2 rounded-2xl border border-white/15">
+          ✨ Earn more points by submitting reports and completing rescues!
+        </p>
+      </div>
 
       {/* Badges Feed */}
       <div className="max-w-md mx-auto mb-8">
-        <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <h2 className="text-lg font-black text-slate-900 mb-3.5 flex items-center gap-2 tracking-tight">
           🏆 Achievement Badges
         </h2>
         <div className="space-y-3">
@@ -112,23 +119,25 @@ export default function Rewards() {
             return (
               <div
                 key={badge.id}
-                className={`flex gap-4 items-center p-4 rounded-xl border bg-white shadow-sm transition-all ${
-                  badge.unlocked ? "border-green-100" : "border-slate-100 opacity-60"
+                className={`flex gap-3.5 items-center p-4 rounded-3xl glass-card transition-all duration-200 ${
+                  badge.unlocked ? "border-emerald-500/20" : "opacity-60"
                 }`}
               >
-                <div className={`p-2.5 rounded-lg ${badge.unlocked ? "bg-green-50 text-green-700" : "bg-slate-50 text-slate-400"}`}>
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-xs ${
+                  badge.unlocked ? "glass-button-primary" : "bg-slate-100 text-slate-400"
+                }`}>
                   <IconComp size={20} />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-slate-900">{badge.title}</h3>
+                    <h3 className="text-sm font-extrabold text-slate-900">{badge.title}</h3>
                     {badge.unlocked && (
-                      <span className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded-full uppercase">
+                      <span className="text-[10px] font-black bg-emerald-500/15 text-emerald-700 px-2.5 py-0.5 rounded-full uppercase border border-emerald-500/25">
                         Unlocked
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">{badge.description}</p>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">{badge.description}</p>
                 </div>
               </div>
             );
@@ -138,44 +147,42 @@ export default function Rewards() {
 
       {/* Partner Coupons */}
       <div className="max-w-md mx-auto">
-        <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <h2 className="text-lg font-black text-slate-900 mb-3.5 flex items-center gap-2 tracking-tight">
           🎁 Claim Partner Coupons
         </h2>
         <div className="space-y-4">
           {coupons.map(coupon => {
             const code = claimedCodes[coupon.id];
             return (
-              <Card key={coupon.id} className="p-5 rounded-2xl border border-slate-100 bg-white">
+              <div key={coupon.id} className="p-5 rounded-3xl glass-card border border-white/80 shadow-md">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <span className="text-xs font-semibold text-gray-400 uppercase">{coupon.partner}</span>
-                    <h3 className="text-base font-bold text-slate-900">{coupon.offer}</h3>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{coupon.partner}</span>
+                    <h3 className="text-base font-extrabold text-slate-900 leading-tight mt-0.5">{coupon.offer}</h3>
                   </div>
-                  <span className="bg-green-50 text-green-700 text-xs font-extrabold px-2.5 py-1 rounded-lg">
+                  <span className="bg-emerald-500/15 text-emerald-800 text-xs font-black px-3 py-1 rounded-full border border-emerald-500/25">
                     {coupon.pointsCost} pts
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">{coupon.description}</p>
+                <p className="text-xs text-slate-500 font-medium mb-4">{coupon.description}</p>
 
                 {code ? (
-                  <div className="bg-green-50/50 border border-dashed border-green-200 rounded-xl p-3 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500">Coupon Claimed! Code:</span>
-                    <span className="text-sm font-extrabold text-green-700 font-mono tracking-wider">{code}</span>
+                  <div className="bg-emerald-500/10 border border-dashed border-emerald-500/30 rounded-2xl p-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600">Coupon Code:</span>
+                    <span className="text-sm font-black text-emerald-800 font-mono tracking-wider">{code}</span>
                   </div>
                 ) : (
                   <Button
                     onClick={() => handleClaim(coupon)}
                     disabled={points < coupon.pointsCost}
-                    className={`w-full py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 ${
-                      points >= coupon.pointsCost
-                        ? "bg-green-600 hover:bg-green-700 text-white"
-                        : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    }`}
+                    variant={points >= coupon.pointsCost ? "primary" : "outline"}
+                    size="md"
+                    className="w-full text-xs font-black shadow-md shadow-emerald-700/20"
                   >
                     Claim Reward
                   </Button>
                 )}
-              </Card>
+              </div>
             );
           })}
         </div>

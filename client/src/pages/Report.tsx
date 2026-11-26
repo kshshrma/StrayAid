@@ -69,23 +69,23 @@ export default function Report() {
         </div>
 
         {/* STEP PROGRESS TRACKER */}
-        <div className="flex items-center justify-center gap-4 max-w-xs mx-auto mb-6 bg-white border border-slate-100 p-2.5 rounded-2xl shadow-xs">
+        <div className="flex items-center justify-center gap-4 max-w-xs mx-auto mb-6 glass border border-white/80 p-2.5 rounded-2xl shadow-xs">
           <div className="flex items-center gap-2">
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-              step === 1 ? "bg-green-600 text-white" : "bg-green-50 text-green-700"
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all ${
+              step === 1 ? "glass-button-primary shadow-xs" : "bg-emerald-50 text-emerald-700"
             }`}>
               1
             </span>
-            <span className={`text-xs font-bold ${step === 1 ? "text-slate-800" : "text-slate-400"}`}>Capture</span>
+            <span className={`text-xs font-bold ${step === 1 ? "text-slate-900" : "text-slate-400"}`}>Capture</span>
           </div>
           <div className="w-8 h-0.5 bg-slate-200" />
           <div className="flex items-center gap-2">
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-              step === 2 ? "bg-green-600 text-white" : "bg-slate-100 text-slate-400"
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all ${
+              step === 2 ? "glass-button-primary shadow-xs" : "bg-slate-100 text-slate-400"
             }`}>
               2
             </span>
-            <span className={`text-xs font-bold ${step === 2 ? "text-slate-800" : "text-slate-400"}`}>Submit</span>
+            <span className={`text-xs font-bold ${step === 2 ? "text-slate-900" : "text-slate-400"}`}>Submit</span>
           </div>
         </div>
 
@@ -156,7 +156,7 @@ export default function Report() {
                   <button
                     type="button"
                     onClick={handleRetake}
-                    className="flex-1 py-3 text-xs font-bold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition flex items-center justify-center gap-1.5 cursor-pointer bg-white"
+                    className="flex-1 py-3.5 text-xs font-bold rounded-2xl glass-button-secondary flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all shadow-xs"
                   >
                     <RefreshCw size={14} /> Retake Photo
                   </button>
@@ -164,7 +164,7 @@ export default function Report() {
                   <button
                     type="button"
                     onClick={handleUsePhotoAndGetLocation}
-                    className="flex-1 py-3 text-xs font-bold rounded-xl bg-green-600 text-white hover:bg-green-700 transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-green-100 border border-green-600"
+                    className="flex-1 py-3.5 text-xs font-bold rounded-2xl glass-button-primary flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all shadow-lg shadow-emerald-700/25"
                   >
                     <Check size={14} /> Use This Photo
                   </button>
@@ -181,7 +181,7 @@ export default function Report() {
                     <button
                       type="button"
                       onClick={handleRetake}
-                      className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl transition text-xs font-bold bg-white cursor-pointer"
+                      className="w-full py-3 glass-button-secondary text-slate-500 rounded-2xl transition-all text-xs font-bold cursor-pointer active:scale-95"
                     >
                       ← Discard & Start Over
                     </button>

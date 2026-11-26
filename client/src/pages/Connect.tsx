@@ -174,11 +174,11 @@ export default function Connect() {
             <button
               type="button"
               onClick={() => setShowChangeRoleModal(true)}
-              className="px-3 py-1.5 rounded-xl text-[11px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700/80 border border-slate-700/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="px-3.5 py-1.5 rounded-2xl text-[11px] font-bold text-slate-200 hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 backdrop-blur-md transition-all duration-200 flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
               title="Change Connect Role"
             >
-              <Settings size={12} className="text-slate-400" />
-              <span>⚙ Change Connect Role</span>
+              <Settings size={12} className="text-slate-300" />
+              <span>Change Role</span>
             </button>
           </div>
         </div>

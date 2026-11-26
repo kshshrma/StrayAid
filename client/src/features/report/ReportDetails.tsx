@@ -337,11 +337,11 @@ export default function ReportDetails() {
               <button
                 onClick={handleAccept}
                 disabled={accepting}
-                className="w-full rounded-2xl bg-green-600 py-3.5 font-bold text-white hover:bg-green-700 shadow-md shadow-green-200 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full rounded-2xl glass-button-primary py-4 font-extrabold text-white text-base shadow-lg shadow-emerald-700/25 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
               >
                 {accepting ? (
                   <>
-                    <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <div className="w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
                     <span>Accepting Rescue...</span>
                   </>
                 ) : (
@@ -351,22 +351,22 @@ export default function ReportDetails() {
                 )}
               </button>
             ) : isAcceptedByMe ? (
-              <div className="w-full rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-center space-y-1">
+              <div className="w-full rounded-2xl glass bg-emerald-500/10 border border-emerald-500/25 p-4 text-center space-y-1 shadow-xs">
                 <div className="flex items-center justify-center gap-2 text-emerald-800 font-extrabold text-sm">
                   <span>🛡️ You Have Accepted This Rescue</span>
                 </div>
-                <p className="text-xs text-emerald-600 font-medium">
+                <p className="text-xs text-emerald-700 font-medium">
                   Status: <span className="capitalize font-bold">{report.status}</span> • Assignment locked to your account
                 </p>
               </div>
             ) : isCompleted ? (
-              <div className="w-full rounded-2xl bg-slate-100 border border-slate-200 p-3.5 text-center text-slate-600 font-bold text-sm">
+              <div className="w-full rounded-2xl glass bg-slate-100/80 border border-slate-200/80 p-3.5 text-center text-slate-700 font-bold text-sm shadow-xs">
                 🏁 Rescue Completed
               </div>
             ) : (
               <button
                 disabled
-                className="w-full rounded-2xl bg-slate-200 py-3.5 font-bold text-slate-400 cursor-not-allowed"
+                className="w-full rounded-2xl glass-button-secondary py-3.5 font-bold text-slate-400 cursor-not-allowed opacity-70"
               >
                 Rescue Assignment Claimed
               </button>

@@ -776,7 +776,7 @@ export default function ProfileForm() {
           <button
             type="button"
             onClick={handleSignOut}
-            className="w-full rounded-xl border border-rose-200 bg-rose-50/50 py-3 text-sm font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full rounded-2xl glass-button-secondary border border-rose-300/70 py-3.5 text-xs font-bold text-rose-600 hover:bg-rose-500/10 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-xs"
           >
             <LogOut size={16} /> Sign Out
           </button>
@@ -785,17 +785,17 @@ export default function ProfileForm() {
       </div>
 
       {showSuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-slate-100 text-center space-y-6 animate-scaleIn">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-3xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-md glass-card rounded-3xl p-8 shadow-2xl border border-white/80 text-center space-y-6 animate-scaleIn">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl glass-button-primary text-3xl shadow-lg shadow-emerald-700/25">
               🐾
             </div>
             
-            <h2 className="text-2xl font-extrabold text-slate-900 font-sans">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight font-sans">
               You're now a Guardian
             </h2>
             
-            <p className="text-sm text-slate-600 leading-relaxed font-sans">
+            <p className="text-xs text-slate-600 leading-relaxed font-sans font-medium">
               You've chosen to help animals in need around you. When a rescue request is reported nearby, we'll let you know. You can decide whether you're available to help.
             </p>
             
@@ -804,7 +804,7 @@ export default function ProfileForm() {
               onClick={() => {
                 setShowSuccessModal(false);
               }}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition text-sm shadow-md shadow-emerald-100 border border-emerald-600 cursor-pointer font-sans"
+              className="w-full py-3.5 glass-button-primary font-bold rounded-2xl transition-all text-sm shadow-lg shadow-emerald-700/25 cursor-pointer font-sans active:scale-95"
             >
               Continue
             </button>

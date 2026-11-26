@@ -136,55 +136,64 @@ export default function SubmitReport({
       <button
         onClick={handleSubmit}
         disabled={submitting}
-        className={`w-full rounded-2xl py-4 text-lg font-semibold text-white shadow transition cursor-pointer ${
+        className={`w-full rounded-2xl py-4 px-6 text-base font-extrabold text-white shadow-xl transition-all duration-200 cursor-pointer select-none flex items-center justify-center gap-2.5 active:scale-95 ${
           isOffline
-            ? "bg-slate-600 hover:bg-slate-700"
-            : "bg-green-600 hover:bg-green-700 shadow-green-100"
-        } ${submitting ? "cursor-not-allowed opacity-50" : ""}`}
+            ? "glass-button-secondary text-slate-800"
+            : "glass-button-primary shadow-emerald-700/30"
+        } ${submitting ? "cursor-not-allowed opacity-60" : ""}`}
       >
-        {submitting
-          ? "Submitting..."
-          : isOffline
-          ? "💾 Save Offline Report"
-          : "Submit Report"}
+        {submitting ? (
+          <>
+            <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            <span>Submitting Rescue Alert...</span>
+          </>
+        ) : isOffline ? (
+          <>
+            <span>💾 Save Offline Report</span>
+          </>
+        ) : (
+          <>
+            <span>Submit Emergency Report 🚀</span>
+          </>
+        )}
       </button>
 
-      {/* CUSTOM SUCCESS POPUP MODAL */}
+      {/* CUSTOM SUCCESS POPUP MODAL (FROSTED GLASS) */}
       {showSuccess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 animate-scaleIn text-center space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-sm glass-card rounded-3xl p-7 border border-white/80 shadow-2xl animate-scaleIn text-center space-y-5">
             
             {/* Heart Emblem */}
-            <div className="mx-auto w-16 h-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center animate-pulse">
-              <Heart size={32} className="fill-red-500" />
+            <div className="mx-auto w-16 h-16 rounded-3xl glass-button-secondary text-rose-500 flex items-center justify-center border border-rose-200 shadow-md">
+              <Heart size={32} className="fill-rose-500 animate-pulse" />
             </div>
 
             {/* Custom Messaging */}
             <div className="space-y-2">
-              <h2 className="text-xl font-black text-slate-900 leading-tight">
+              <h2 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
                 Report Submitted! 🐾
               </h2>
               
               {isOfflineQueueMsg ? (
-                <div className="text-slate-500 text-xs font-semibold space-y-1.5 leading-relaxed">
+                <div className="text-slate-600 text-xs font-semibold space-y-1.5 leading-relaxed">
                   <p>You showed up. A life got a chance.</p>
                   <p>Thank you for caring.</p>
-                  <p className="text-[10px] text-orange-600 bg-orange-50/50 p-1.5 rounded-xl border border-orange-100 mt-2">
-                    💾 Saved offline. Auto-uploading when online!
+                  <p className="text-[11px] text-amber-700 bg-amber-500/10 p-2 rounded-2xl border border-amber-500/20 mt-2 font-bold">
+                    💾 Saved offline. Auto-uploading when back online!
                   </p>
                 </div>
               ) : (
-                <div className="text-slate-500 text-xs font-semibold space-y-1.5 leading-relaxed">
+                <div className="text-slate-600 text-xs font-semibold space-y-1.5 leading-relaxed">
                   <p>You showed up. A life got a chance.</p>
                   <p>Thank you for caring.</p>
                 </div>
               )}
             </div>
 
-            {/* Acknowledge Button */}
+            {/* Acknowledge Glass Button */}
             <button
               onClick={handleCloseModal}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-2xl transition text-xs shadow-md shadow-green-100 cursor-pointer border border-green-600"
+              className="w-full glass-button-primary font-bold py-3.5 rounded-2xl transition-all duration-200 text-sm shadow-lg shadow-emerald-700/25 cursor-pointer active:scale-95"
             >
               Done
             </button>

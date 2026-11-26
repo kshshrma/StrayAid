@@ -228,12 +228,12 @@ export default function ImmediateRescueRequests() {
                     
                     <div className="flex gap-2">
                       <Link to={`/reports/${report.id}`}>
-                        <Button className="py-1 px-3.5 text-xs bg-slate-900 hover:bg-slate-800 text-white rounded-lg">
+                        <Button variant="primary" size="sm" className="font-bold">
                           View Report
                         </Button>
                       </Link>
                       <Link to={`/map?lat=${report.latitude}&lng=${report.longitude}`}>
-                        <Button className="py-1 px-3.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">
+                        <Button variant="secondary" size="sm" className="font-bold">
                           View Location
                         </Button>
                       </Link>

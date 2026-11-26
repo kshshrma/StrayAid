@@ -536,7 +536,7 @@ export default function LivesSaved() {
                     <div className="pt-1 flex flex-col sm:flex-row gap-2">
                       <Link
                         to={`/reports/${report.id}`}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl text-xs transition shadow-md hover:shadow-lg active:scale-[0.99]"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-3 px-4 glass-button-primary font-bold rounded-2xl text-xs transition shadow-md shadow-emerald-700/20 active:scale-95"
                       >
                         <span>Open Full Rescue Details</span>
                         <ExternalLink size={13} />
@@ -544,7 +544,7 @@ export default function LivesSaved() {
 
                       <Link
                         to={`/map?lat=${report.latitude}&lng=${report.longitude}`}
-                        className="sm:w-auto inline-flex items-center justify-center gap-1.5 py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 font-bold rounded-2xl text-xs transition active:scale-[0.99]"
+                        className="sm:w-auto inline-flex items-center justify-center gap-1.5 py-2.5 px-4 glass-button-secondary text-emerald-800 border border-emerald-500/25 font-bold rounded-2xl text-xs transition active:scale-95 shadow-xs"
                       >
                         <Compass size={14} className="text-emerald-600" />
                         <span>View on Live Map</span>
