@@ -1,0 +1,25 @@
+{
+  "name": "StrayAid — Stray Animal Rescue",
+  "short_name": "StrayAid",
+  "description": "Real-time AI-powered emergency stray animal rescue and reporting network.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#059669",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["social", "utilities", "lifestyle"]
+}

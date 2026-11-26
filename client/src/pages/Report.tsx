@@ -9,7 +9,7 @@ export default function Report() {
   const [step, setStep] = useState(1); // 1: Capture, 2: Preview & Submit
   const [image, setImage] = useState<File | null>(null);
   const [uploadSource, setUploadSource] = useState<"camera" | "gallery" | null>(null);
-  
+
   // Location states
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
@@ -71,18 +71,16 @@ export default function Report() {
         {/* STEP PROGRESS TRACKER */}
         <div className="flex items-center justify-center gap-4 max-w-xs mx-auto mb-6 glass border border-white/80 p-2.5 rounded-2xl shadow-xs">
           <div className="flex items-center gap-2">
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all ${
-              step === 1 ? "glass-button-primary shadow-xs" : "bg-emerald-50 text-emerald-700"
-            }`}>
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all ${step === 1 ? "glass-button-primary shadow-xs" : "bg-emerald-50 text-emerald-700"
+              }`}>
               1
             </span>
             <span className={`text-xs font-bold ${step === 1 ? "text-slate-900" : "text-slate-400"}`}>Capture</span>
           </div>
           <div className="w-8 h-0.5 bg-slate-200" />
           <div className="flex items-center gap-2">
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all ${
-              step === 2 ? "glass-button-primary shadow-xs" : "bg-slate-100 text-slate-400"
-            }`}>
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all ${step === 2 ? "glass-button-primary shadow-xs" : "bg-slate-100 text-slate-400"
+              }`}>
               2
             </span>
             <span className={`text-xs font-bold ${step === 2 ? "text-slate-900" : "text-slate-400"}`}>Submit</span>
@@ -105,7 +103,7 @@ export default function Report() {
           {step === 2 && (
             <div className="space-y-4 animate-slideUp">
               <ImagePreview image={image} />
-              
+
               {/* Geolocation Loading State */}
               {locating && (
                 <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center gap-2.5 text-blue-700 font-bold text-xs">
@@ -160,7 +158,7 @@ export default function Report() {
                   >
                     <RefreshCw size={14} /> Retake Photo
                   </button>
-                  
+
                   <button
                     type="button"
                     onClick={handleUsePhotoAndGetLocation}
