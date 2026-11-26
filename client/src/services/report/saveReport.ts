@@ -25,25 +25,36 @@ export async function saveReport(report: ReportData) {
 
   if (error) throw error;
 
-  console.log("Calling AI Backend...");
+  console.log("Calling AI Backend...", `${API_URL}/api/ai/analyze`);
 
-  const response = await fetch(`${API_URL}/api/ai/analyze`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      reportId: data.id,
-      imageUrl: data.image_url,
-    }),
-  });
+  let aiResult: any = null;
+  try {
+    const response = await fetch(`${API_URL}/api/ai/analyze`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        reportId: data.id,
+        imageUrl: data.image_url,
+      }),
+    });
 
-  const aiResult = await response.json();
-
-  console.log("AI Result:", aiResult);
+    if (response.ok) {
+      aiResult = await response.json();
+      console.log("AI Result:", aiResult);
+    } else {
+      console.warn("AI backend returned status:", response.status);
+    }
+  } catch (backendError) {
+    console.warn(
+      "[saveReport] AI backend call failed (report is safely saved in Supabase):",
+      backendError
+    );
+  }
 
   return {
     report: data,
-    ai: aiResult.ai,
+    ai: aiResult?.ai || null,
   };
 }
