@@ -13,7 +13,7 @@ export default function Card({
   return (
     <div
       className={cn(
-        "rounded-3xl bg-white border border-gray-100 shadow-sm p-6 transition-all duration-300 hover:shadow-md",
+        "rounded-3xl glass-card p-6 transition-all duration-300 hover:shadow-lg hover:border-white/90",
         className
       )}
       {...props}
