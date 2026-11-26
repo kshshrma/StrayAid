@@ -7,63 +7,69 @@ export default function MapPreview() {
   const navigate = useNavigate();
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">
-          Live Rescue Map
-        </h2>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+            <MapPin size={18} />
+          </div>
+          <h2 className="text-lg font-black text-slate-900 tracking-tight">
+            Live Rescue Map
+          </h2>
+        </div>
 
-        <MapPin className="text-green-700" />
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-800 text-[11px] font-extrabold">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+          Realtime
+        </span>
       </div>
 
-      <div className="relative mt-5 h-52 overflow-hidden rounded-2xl bg-green-50">
-
+      <div className="relative mt-4 h-48 overflow-hidden rounded-2xl bg-emerald-50/60 border border-emerald-100/80">
         {/* Grid Background */}
-        <div className="absolute inset-0 bg-[linear-gradient(#d1fae5_1px,transparent_1px),linear-gradient(90deg,#d1fae5_1px,transparent_1px)] bg-[size:32px_32px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(#a7f3d0_1px,transparent_1px),linear-gradient(90deg,#a7f3d0_1px,transparent_1px)] bg-[size:28px_28px] opacity-40" />
 
         {/* Rescue Markers */}
-        <MapPin
-          className="absolute left-10 top-12 text-red-500"
-          fill="currentColor"
-        />
+        <div className="absolute left-10 top-10 p-2 rounded-full glass border border-rose-300 shadow-md">
+          <MapPin size={18} className="text-rose-500" fill="currentColor" />
+        </div>
 
-        <Ambulance
-          className="absolute right-16 top-20 text-green-700"
-        />
+        <div className="absolute right-14 top-16 p-2 rounded-full glass border border-emerald-300 shadow-md">
+          <Ambulance size={18} className="text-emerald-700" />
+        </div>
 
-        <MapPin
-          className="absolute left-32 bottom-12 text-red-500"
-          fill="currentColor"
-        />
+        <div className="absolute left-28 bottom-8 p-1.5 rounded-full glass border border-rose-300 shadow-md">
+          <MapPin size={16} className="text-rose-500" fill="currentColor" />
+        </div>
 
-        <MapPin
-          className="absolute right-24 bottom-8 text-red-500"
-          fill="currentColor"
-        />
+        <div className="absolute right-20 bottom-6 p-1.5 rounded-full glass border border-rose-300 shadow-md">
+          <MapPin size={16} className="text-rose-500" fill="currentColor" />
+        </div>
 
-        {/* Live Badge */}
-        <div className="absolute left-4 top-4 rounded-full bg-green-700 px-3 py-1 text-xs font-semibold text-white">
-          ● LIVE
+        {/* Live Glass Badge */}
+        <div className="absolute left-3 top-3 rounded-full glass px-3 py-1 text-[11px] font-extrabold text-emerald-800 border border-white/80 shadow-xs flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+          ACTIVE PATROL
         </div>
       </div>
 
-      <div className="mt-5 flex items-center justify-between">
+      <div className="mt-4 flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold">
-            8 Active Rescues
+          <h3 className="text-base font-extrabold text-slate-900">
+            Active Rescues Nearby
           </h3>
 
-          <p className="text-sm text-gray-500">
-            Updated a few seconds ago
+          <p className="text-xs font-semibold text-slate-400">
+            Tap to open interactive live radar
           </p>
         </div>
 
         <Button
           onClick={() => navigate("/map")}
-          className="flex items-center gap-2 font-semibold"
+          size="sm"
+          className="flex items-center gap-1.5 font-bold shadow-md shadow-emerald-700/20"
         >
           Open Map
-          <ArrowRight size={18} />
+          <ArrowRight size={15} />
         </Button>
       </div>
     </Card>
